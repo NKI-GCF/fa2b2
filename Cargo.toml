@@ -1,0 +1,13 @@
+[package]
+name = "fa2b2"
+version = "0.1.0"
+authors = ["Roel Kluin <r.kluin@nki.nl>"]
+
+[dependencies]
+bio = "*"
+flate2 = "0.2"
+csv = "0.14"
+arrayvec = "0.3.12"
+rustc-serialize = "0.3"
+bincode = "0.6.0"
+clap = "2.19.1"

@@ -17,7 +17,7 @@ use bio::io::fasta::IndexedReader;
 use clap::{App,Arg};
 
 mod kmer;
-use kmer::marker::KmerMarker;
+use kmer::marker::KmerIter;
 
 fn main() {
     let matches = App::new("fa2b2")
@@ -42,19 +42,7 @@ fn main() {
                 .get_matches();
 
         let fa_name =  matches.value_of("ref").unwrap();
-        /*let faidx_name = fa_name.to_string() + "fai";
 
-        let fa_file = File::open(fa_name).expect("cannot open fasta");
-        let faidx_file = File::open(faidx_name).expect("cannot open fasta index");
-
-        let fa_stream = BufReader::new(fa_file);
-        let faidx_stream = BufReader::new(faidx_file);
-
-        let mut gz = MultiGzDecoder::new(fa_stream).expect("cannot open fasta.gz");
-        let idxr = IndexedReader::new(gz, faidx_stream).unwrap_or_else(|_| panic!("Error opening reference genome"));
-
-        // Problem: the trait `std::io::Seek` is not implemented for `flate2::bufread::MultiGzDecoder<BufReader<File>>`
-        */
 
         let mut idxr = IndexedReader::from_file(&fa_name).unwrap_or_else(|_| panic!("Error opening reference genome"));
         let chrs = idxr.index.sequences();
@@ -65,11 +53,14 @@ fn main() {
         // bit width, required to store all (cumulative) genomic positions, is used as len
         println!("Genome size: {}", genomesize);
         println!("power: {}", genomesize.next_power_of_two());
-        let bitlen = genomesize.next_power_of_two().trailing_zeros();
+
+        let bitlen = genomesize.next_power_of_two().trailing_zeros() as usize;
         println!("bitlen: {}", bitlen);
         println!("Using a kmerlength of {}", bitlen / 2);
 
-        let mut kmermarker = KmerMarker::new(bitlen);
+        let readlen = 64;
+
+        let mut kmi = KmerIter::new(readlen, bitlen);
 
         println!("Chromosome\trunning unique count");
         for chr in &chrs {
@@ -77,13 +68,13 @@ fn main() {
             idxr.fetch_all(&chr.name).expect(&format!("Error fetching {}.", &chr.name));
             idxr.read(&mut seq).expect(&format!("Error reading {}.", &chr.name));
 
-            let p = kmermarker.markcontig(&seq);
-            println!("{}\t{}", &chr.name, p);
+            kmi.markcontig(&seq);
+            println!("{}\t{}", &chr.name, kmi.p);
         }
         let mut dup: u64 = 0;
         let mut uniq: u64 = 0;
         let mut unset: u64 = 0;
-        for k in kmermarker.kmp {
+        for k in kmi.ks.kmp {
             if k == 0 {
                 unset += 1;
             } else if (k & (1 << 63)) == 0 {
@@ -95,7 +86,7 @@ fn main() {
         println!("dup: {}\tuniq: {}\tunset: {}", dup, uniq, unset);
 
         println!("Writing first occurances per kmer to disk");
-        //kmermarker.write(outfile).unwrap();
+        //kmi.ks.write(outfile).unwrap();
 }
 
 

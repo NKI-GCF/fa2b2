@@ -18,32 +18,39 @@ use bincode::rustc_serialize::{decode_from,encode_into};
 
 use std::collections::VecDeque;
 
+use std::cmp::Ordering::*;
+
 #[derive(RustcEncodable, RustcDecodable)]
 pub struct Contig {
     twobit: u64,
     genomic: u64,    // if 0: next contig
 }
 
+
 #[derive(Copy, Clone)]
 struct Kmer {
     dna: u64,
     rc: u64,
+    pow2: u64,
+    mask: u64,
 } //^-^\\
 
 // determine orientation reduced kmer (ork) for maximum deviant rot 8 within 64bp.
 // only store pos for this.
 
 impl Kmer {
-    pub fn new() -> Self {
+    pub fn new(pow2: u64) -> Self {
 	    Kmer {
             dna: 0,
             rc: 0,
+            pow2,
+            mask: pow2 - 1,
         }
     }
-    fn add_to_seq(&mut self, b2: u64, pow2: u64) -> u64 {
+    fn add_to_seq(&mut self, b2: u64) -> u64 {
         // Add a nucleotide to the sequence. A Nt is added to template(0) in the top two bits.
-        self.dna = (self.dna >> 2) | (b2 * pow2);
-        self.rc = ((self.rc & (pow2-1)) << 2) ^ 2 ^ b2;
+        self.dna = (self.dna >> 2) | (b2 * self.pow2);
+        self.rc = ((self.rc & self.mask) << 2) ^ 2 ^ b2;
 
         // 2 is added for next pos; orientation is set in first bit.
         if self.get_ori() {3} else {2}
@@ -56,7 +63,9 @@ impl Kmer {
         let devbit = if deviant != 0 {deviant & deviant.wrapping_neg()} else {1};
         (self.dna & devbit) != 0
     }
-    fn get_strand(&self) -> u64 { if self.get_ori() {self.dna} else {self.rc} }
+    fn get_strand(&self, is_template: bool) -> u64 {
+        if self.get_ori() == is_template {self.dna} else {self.rc}
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -71,6 +80,9 @@ impl KmerLoc {
     fn copy(&self) -> KmerLoc {
         KmerLoc { idx: self.idx, p: self.p}
     }
+    fn next(&mut self, step_and_strand: u64) {
+        self.p += step_and_strand ^ (self.p & 1);
+    }
 }
 
 pub struct ExtQueue {
@@ -78,51 +90,70 @@ pub struct ExtQueue {
     i: usize,
     kmer: Kmer,
     d: Vec<KmerLoc>,
-    ol: Vec<VecDeque<KmerLoc>>,
+    outlier: Vec<VecDeque<KmerLoc>>,
 }
 
 impl ExtQueue {
-    pub fn new(p: u64, max_no_kmers: usize) -> Self {
-        let mut ol = vec![VecDeque::with_capacity(max_no_kmers)];
+    pub fn new(p: u64, max_no_kmers: usize, pow2: u64) -> Self {
+        let mut outlier = vec![VecDeque::with_capacity(max_no_kmers)];
         for x in 1..6 {
-            ol.push(VecDeque::with_capacity(max_no_kmers - (1 << x)));
+            outlier.push(VecDeque::with_capacity(max_no_kmers - (1 << x)));
         }
         ExtQueue {
             loc: KmerLoc::new(0, p),
             i: 0,
-            kmer: Kmer::new(),
+            kmer: Kmer::new(pow2),
             d: Vec::with_capacity(max_no_kmers),
-            ol, // outlier; either min or max, dependent on extension (resp. 0 or 1+)
+            outlier, // outlier; either min or max, dependent on extension (resp. 0 or 1+)
         }
     }
-    fn add_to_seq(&mut self, b2: u8, pow2: u64) -> u8 {
-        let b2_shft = self.loc.p & 6;
-        self.loc.p += self.kmer.add_to_seq(b2 as u64, pow2) ^ (self.loc.p & 1);
-        b2 << b2_shft
+    fn next(&mut self, is_template: bool, b2: u8) {
+        if is_template {
+            self.loc.next(self.kmer.add_to_seq(b2 as u64));
+        } else {
+            self.loc.next(1 - self.kmer.add_to_seq((b2 ^ 2) as u64));
+        }
     }
+    fn update(&mut self, loc: &KmerLoc, x: usize) {
+        if let Some(outlier) = self.outlier.get_mut(x) {
+            // XXX: this seems like it may not ever occur.
+            let is_same = match outlier.front() {
+                Some(front) => front.idx == loc.idx && front.p == loc.p,
+                None => false,
+            };
+            if is_same {
+                outlier.pop_front();
+            }
+        }
+        if x == 0 {
+            let capacity = self.d.capacity();
+            self.d[self.i % capacity] = *loc;
+        }
 
-    fn update(&mut self) {
-        let loc = self.loc.copy();
-        let capacity = self.d.capacity();
-        self.d[self.i % capacity] = loc;
-        if let Some(ol) = self.ol.get_mut(0) {
-            while ol.len() > 0 {
-                if let Some(back) = ol.back() {
-                    if back.idx < loc.idx || (back.idx == loc.idx && back.p < loc.p) {
-                        break;
+        if let Some(outlier) = self.outlier.get_mut(x) {
+            while outlier.len() > 0 {
+                if let Some(back) = outlier.back() {
+                    if x != 0 {
+                        if back.idx < loc.idx || (back.idx == loc.idx && back.p < loc.p) {
+                            break;
+                        }
+                    } else {
+                        if back.idx > loc.idx || (back.idx == loc.idx && back.p > loc.p) {
+                            break;
+                        }
                     }
                 }
-                ol.pop_back();
+                outlier.pop_back();
             }
-            ol.push_back(loc);
+            outlier.push_back(*loc);
         }
     }
 
     fn is_p(&self, p: u64) -> bool {
-        if let Some(ol) = self.ol[0].front() {
-            return ol.p == p;
+        match self.outlier[0].front() {
+            Some(outlier) => outlier.p == p,
+            None => false,
         }
-        false
     }
 
     fn get_hash_loc(&self, offs: usize) -> KmerLoc {
@@ -144,12 +175,12 @@ impl ExtQueue {
     fn clear(&mut self) {
         self.i = 0;
         self.d.clear();
-        for ext in 0..6 {
-            self.ol[ext].clear();
+        for outlier in &mut self.outlier {
+            outlier.clear();
         }
     }
-    fn get_idx(&mut self, bufsz: u64) -> u64 {
-        let seq = self.kmer.get_strand();
+    fn get_idx(&mut self, bufsz: u64, is_template: bool) -> u64 {
+        let seq = self.kmer.get_strand(is_template);
 
         // flipped if the top bit is set, to reduce size.
         if (seq & bufsz) == 0 {seq} else {(bufsz - 1) & !seq}
@@ -195,6 +226,7 @@ impl KmerStore {
     fn new_contig(&mut self, eq: &mut ExtQueue, goffs: u64) {
         if eq.d.len() != 0 {
             eq.clear();
+            eq.loc.p &= !1;
             if let Some(genomic) = eq.loc.p.checked_sub(goffs) {
                 self.contig.push(Contig { twobit: eq.loc.p, genomic});
             }
@@ -203,71 +235,109 @@ impl KmerStore {
             ctg.genomic += 2;
         }
     }
+    fn get_contig(&self, p: u64) -> usize {
+        let mut size = self.contig.len();
+        let mut base = 0;
+        while size > 0 {
+            size /= 2;
+            let mid = base + size;
+            base = match (self.contig[mid].twobit).cmp(&p) {
+                Less    => mid,
+                Greater => base,
+                Equal   => panic!("kmer offset at contig boundary!?"),
+            };
+        }
+        base
+    }
 }
 
 pub struct KmerIter {
     pos_mask: u64, // : all these are used only once.
     bufsz: u64,
     pub p: u64,
-    goffs: u64,
-    ext_shft: u32, //
+    pos_ori_bitcount: u32, //
     in_use_shft: u32, //
     max_no_kmers: usize,
     pub ks: KmerStore,
 } //^-^\\
 
 impl KmerIter {
-    pub fn new(readlen: usize, bitlen: usize) -> Self {
+    pub fn new(readlen: usize, bitlen: usize, pos_ori_bitcount: u32) -> Self {
         // FIXME: different kmer lengths not supported currently. requires kmer extension
         // windows to be adapted)
         assert_eq!(bitlen, 16);
         // to try to make use of the entire u32 domain.
 
 	    KmerIter {
-            pos_mask: (1 << 40) - 1,
+            pos_mask: (1 << pos_ori_bitcount) - 1,
             bufsz: 1 << (bitlen - 1),
             p: 0,
-            goffs: 0,
-            ext_shft: 40,
+            pos_ori_bitcount,
             in_use_shft: 63,
             max_no_kmers: readlen - (bitlen / 2),
             ks: KmerStore::new(bitlen),
         }
     }
 
-    fn relocate(&mut self, p: u64) {
-        // probleem: we zouden rekening moeten houden met contigs, maar welke contigs
-        // omsluit deze positie?
+    fn get_plimit(&mut self, is_template: bool, p: u64) -> u64 {
+        // binary search; limit endp to end of contig
+        let mut base = self.ks.get_contig(p);
+        if is_template {
+            let default = p + ((self.max_no_kmers as u64) << 1);
+            if self.ks.contig[base].twobit < p {
+                base += 1;
+                if base == self.ks.contig.len() {
+                    let end_of_seq = (self.ks.b2.len() << 3) as u64;
+                    return if end_of_seq > default {default} else {end_of_seq};
+                }
+            }
+            let end_of_contig = self.ks.contig[base].twobit;
+            if default > end_of_contig {default} else {end_of_contig}
+        } else {
+            let default = p - ((self.max_no_kmers as u64) << 1);
+            if self.ks.contig[base].twobit > p {
+                if base == 0 {
+                    return if default > 0 {default} else {0};
+                }
+                base -= 1;
+            }
+            let start_of_contig = self.ks.contig[base].twobit;
+            if start_of_contig < default {default} else {start_of_contig}
+        }
+    }
+    fn relocate(&mut self, is_template: bool, p: u64) {
+        let is_new_seq = false;
         let pos = p & self.pos_mask;
-        let mut eq = ExtQueue::new(pos - ((self.max_no_kmers as u64) << 1), self.max_no_kmers);
-        let endp = pos + ((self.max_no_kmers as u64) << 1);
-        let b2o = self.bufsz >> 1;
+        let plimit = self.get_plimit(is_template, pos);
+        let mut eq = ExtQueue::new(pos - ((self.max_no_kmers as u64) << 1), self.max_no_kmers, self.bufsz >> 1);
+
         // rebuild Extqueue up to where repeat kmer occurs
         while eq.all_kmers_complete() == false || !eq.is_p(p) {
             if let Some(qb) = self.ks.b2.get_mut(eq.loc.p as usize >> 3) {
                 let shft = eq.loc.p & 6;
-                eq.add_to_seq((*qb >> shft) & 3, b2o);
+                eq.next(is_template, (*qb >> shft) & 3);
             }
-            let _ = self.progress(&mut eq, false);
+            let _ = self.progress(&mut eq, is_template, is_new_seq);
         }
         assert_eq!(eq.loc.p & (1 << self.in_use_shft), 1 << self.in_use_shft);
         // make sure this position can no longer be used for this extension
         if let Some(e) = self.ks.kmp.get_mut(eq.loc.idx as usize) {
-            *e = (eq.loc.p & !self.pos_mask) + (1 << self.ext_shft);
+            *e = (eq.loc.p & !self.pos_mask) + (1 << self.pos_ori_bitcount);
         }
 
-        while (eq.loc.p & self.pos_mask) <= endp {
-            let _ = self.progress(&mut eq, false);
+        // progress() will extend kmers that were invalidated
+        while (eq.loc.p & self.pos_mask) != plimit {
+            let _ = self.progress(&mut eq, is_template, is_new_seq);
             if let Some(qb) = self.ks.b2.get_mut(eq.loc.p as usize >> 3) {
                 let shft = eq.loc.p & 6;
-                eq.add_to_seq((*qb >> shft) & 3, b2o);
+                eq.next(is_template, (*qb >> shft) & 3);
             }
         }
     }
 
     fn set_extra(&mut self, ent: &KmerLoc, x: u64) {
         // not necessarily a min / max. written to have some fallback.
-        let ext_bits = (x+1) << self.ext_shft;
+        let ext_bits = (x+1) << self.pos_ori_bitcount;
         if let Some(e) = self.ks.kmp.get_mut(ent.idx as usize) {
             // set position, if not yet in use or of lower extension
             if *e <= ext_bits {
@@ -276,17 +346,17 @@ impl KmerIter {
                 // duplicate for this extension, invalidate:
                 // can only be overwritten by next+ extension, or any with in_use bit set.
                 if (*e & !(1 << self.in_use_shft)) != (ent.p | ext_bits) {
-                    *e = (x+2) << self.ext_shft;
+                    *e = (x+2) << self.pos_ori_bitcount;
                 }
             }
         }
     }
 
     fn set_in_use(&mut self, eq: &ExtQueue, x: u64) -> bool {
-        if let Some(ent) = eq.ol[0].front() {
+        if let Some(ent) = eq.outlier[0].front() {
             // for a minimum / maximum, set in_use bit.
             let in_use = 1 << self.in_use_shft;
-            let ext_bits = ((x+1) << self.ext_shft) | in_use;
+            let ext_bits = ((x+1) << self.pos_ori_bitcount) | in_use;
             let mut p = 0;
             if let Some(e) = self.ks.kmp.get_mut(ent.idx as usize) {
                 // overwritable or already set to this pos: ok.
@@ -299,7 +369,8 @@ impl KmerIter {
             if (p & !self.pos_mask) == ext_bits {
                 // duplicate for this extension + in use, invalidate:
                 // only available for next+ extension.
-                self.relocate(p);
+                let is_template = (p & 1) == 1;
+                self.relocate(is_template, p & !1);
                 // if there is one recurring, there may be more, therefore we
                 // store the entire eq. TODO: eq by eq extension: problem: orientation.
                 // rev_relocate, afh van orientatie van p & 1?
@@ -309,11 +380,11 @@ impl KmerIter {
     }
 
     // for each added kmer the minimum and extension maxima are updated.
-    // returns the extension for which the kmer was firstly not yet in use.
-    fn progress(&mut self, eq: &mut ExtQueue, is_first: bool) -> bool {
+    // returns whether the re was a k-mer not yet in use.
+    fn progress(&mut self, eq: &mut ExtQueue, is_template: bool, is_new_sequence: bool) -> bool {
         let mut already_stored = false;
 
-        eq.loc.idx = eq.get_idx(self.bufsz);
+        eq.loc.idx = eq.get_idx(self.bufsz, is_template);
 
         for x in 0..6 {
             let offs = 1 << x;
@@ -321,21 +392,12 @@ impl KmerIter {
                 return false;
             }
             let loc = eq.get_hash_loc(offs);
-            if is_first {
-                // bij relocation zijn posities al geschreven of invalidated, doet niks meer.
+            if is_new_sequence {
+                // bij relocation zijn posities al geschreven of invalidated.
                 self.set_extra(&loc, x as u64);
             }
             if eq.all_kmers_complete() {
-                if let Some(ol) = eq.ol.get_mut(x) {
-                    let is_same = match ol.front() {
-                        Some(front) => front.idx == loc.idx && front.p == loc.p,
-                        None => false,
-                    };
-                    if is_same {
-                        ol.pop_front();
-                    }
-                }
-                eq.update();
+                eq.update(&loc, x);
                 if already_stored == false && self.set_in_use(eq, x as u64) {
                     already_stored = true;
                 }
@@ -360,9 +422,10 @@ impl KmerIter {
     pub fn markcontig(&mut self, seq: &[u8]) {
 
         // position to b2 offset: Ns and contig offset excluded.
-        let b2o = self.bufsz >> 1;
-        let mut eq = ExtQueue::new(0, self.max_no_kmers);
-        self.goffs = eq.loc.p;
+        let mut eq = ExtQueue::new(0, self.max_no_kmers, self.bufsz >> 1);
+        let goffs = eq.loc.p & !1;
+        let is_template = true;
+        let is_new_seq = true;
 
 	    for c in seq {
             // store sequence in twobit
@@ -370,13 +433,15 @@ impl KmerIter {
             if let Some(qb) = self.ks.b2.get_mut(eq.loc.p as usize >> 3) {
                 b2 = (*c >> 1) & 0x7; // convert ascii to 2bit
                 if b2 < 4 {
-                    *qb |= eq.add_to_seq(b2, b2o);
+                    let b2_shft = eq.loc.p & 6;
+                    eq.next(is_template, b2);
+                    *qb |= b2 << b2_shft;
                 }
             }
             if b2 < 4 {
-                let _ = self.progress(&mut eq, true);
+                let _ = self.progress(&mut eq, is_template, is_new_seq);
             } else {
-                self.ks.new_contig(&mut eq, self.goffs);
+                self.ks.new_contig(&mut eq, goffs);
             }
         }
     }

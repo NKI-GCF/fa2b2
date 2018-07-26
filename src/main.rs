@@ -59,8 +59,9 @@ fn main() {
         println!("Using a kmerlength of {}", bitlen / 2);
 
         let readlen = 64;
+        let pos_ori_bitcount = 40;
 
-        let mut kmi = KmerIter::new(readlen, bitlen);
+        let mut kmi = KmerIter::new(readlen, bitlen, pos_ori_bitcount);
 
         println!("Chromosome\trunning unique count");
         for chr in &chrs {

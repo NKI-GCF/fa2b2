@@ -60,7 +60,6 @@ fn main() {
 
         let readlen = 64;
         let pos_ori_bitcount = 40;
-
         let mut kmi = KmerIter::new(readlen, bitlen, pos_ori_bitcount);
 
         println!("Chromosome\trunning unique count");
@@ -69,22 +68,19 @@ fn main() {
             idxr.fetch_all(&chr.name).expect(&format!("Error fetching {}.", &chr.name));
             idxr.read(&mut seq).expect(&format!("Error reading {}.", &chr.name));
 
-            kmi.markcontig(&seq);
-            println!("{}\t{}", &chr.name, kmi.p);
+            let p = kmi.markcontig(&seq);
+            println!("{}\t{}", &chr.name, p);
         }
-        let mut dup: u64 = 0;
-        let mut uniq: u64 = 0;
+        let mut set: u64 = 0;
         let mut unset: u64 = 0;
         for k in kmi.ks.kmp {
             if k == 0 {
                 unset += 1;
-            } else if (k & (1 << 63)) == 0 {
-                uniq += 1;
             } else {
-                dup += 1;
+                set += 1;
             }
         }
-        println!("dup: {}\tuniq: {}\tunset: {}", dup, uniq, unset);
+        println!("set: {}\tunset: {}", set, unset);
 
         println!("Writing first occurances per kmer to disk");
         //kmi.ks.write(outfile).unwrap();

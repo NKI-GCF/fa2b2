@@ -5,123 +5,23 @@ extern crate rustc_serialize;
 extern crate bincode;
 extern crate clap;
 extern crate bit_reverse;
+extern crate kmer;
+extern crate statdeq;
 
 use flate2::{Compression,write::ZlibEncoder,read::ZlibDecoder};
 
-use std::{io,cmp::{self,Ordering::*},fs::File,collections::VecDeque,collections::HashMap};
+use std::{io,cmp::{self,Ordering::*},fs::File,collections::VecDeque};
 
 use bincode::{SizeLimit,rustc_serialize::{decode_from,encode_into}};
+
+use self::kmer::Kmer;
+use self::statdeq::*; // custom logging (NB_*)
 
 #[derive(RustcEncodable, RustcDecodable)]
 pub struct Contig {
     twobit: u64,
     genomic: u64,    // if 0: next contig
 }
-
-pub struct StatDeq {
-    last: (String, String),
-    cap: usize,
-    d: VecDeque<String>,
-    h: HashMap<String, u32>,
-}
-
-impl StatDeq {
-    fn new(cap: usize) ->  Self {
-        StatDeq {
-            last: (String::new(), String::new()),
-            cap,
-            d: VecDeque::with_capacity(cap),
-            h: HashMap::new(),
-        }
-    }
-    fn add(&mut self, fmt: String, msg: String) {
-        let last_fmt = self.last.0.to_owned();
-        let mut last_msg = self.last.1.to_owned();
-        if last_fmt == fmt && last_msg == msg {
-            let repeat = self.h.entry(String::from("repeat")).or_insert(0);
-            *repeat += 1;
-        } else {
-            if let Some(repeat) = self.h.get_mut(&String::from("repeat")) {
-                if self.d.len() == self.cap {
-                    self.d.pop_front();
-                }
-                if *repeat > 1 {
-                    last_msg.push_str(&format!(" (repeated {} times)", repeat));
-                }
-                *repeat = 0;
-            }
-            self.d.push_back(last_msg);
-            *self.h.entry(last_fmt).or_insert(0) += 1;
-            self.last = (fmt, msg);
-        }
-    }
-    fn dump(&mut self) -> &'static str {
-        self.add(String::new(), String::new()); // to flush last message
-        println!("Note stack:");
-        for msg in &self.d {
-            println!("{}", msg);
-        }
-        println!("--\nTotal file:line:msg(format) and counts:");
-        for (msg, ct) in &self.h {
-            if msg != "repeat" {
-                println!("{}\t{}", msg, ct);
-            }
-        }
-        "StatDeq dump"
-    }
-}
-
-static mut STAT_DB: Option<StatDeq> = None;
-
-macro_rules! NB {
-    ($fmt:expr) => {{
-        unsafe {
-            if let Some(ref mut db) = STAT_DB {
-                db.add(format!("{}:{}:{}", file!(), line!(), $fmt), format!($fmt));
-            }
-        }
-    }};
-    ($fmt:expr, $($arg:tt)*) => {{
-        unsafe {
-            if let Some(ref mut db) = STAT_DB {
-                db.add(format!("{}:{}:{}", file!(), line!(), $fmt), format!($fmt, $($arg)*));
-            }
-        }
-    }};
-}
-
-macro_rules! NB_assert {
-    ($test:expr) => {{
-        unsafe {
-            if let Some(ref mut db) = STAT_DB {
-                assert!($test, db.dump());
-            }
-        }
-    }};
-}
-
-#[allow(unused_macros)]
-macro_rules! NB_assert_eq {
-    ($left:expr, $right:expr) => {{
-        unsafe {
-            if let Some(ref mut db) = STAT_DB {
-                assert_eq!($left, $right, db.dump());
-            }
-        }
-    }};
-}
-
-macro_rules! NB_panic {
-    ($msg:expr) => {{
-        NB!($msg);
-        NB_assert!(false);
-    }};
-    ($msg:expr, $($arg:tt)*) => {{
-        NB!($msg, $($arg)*);
-        NB_assert!(false);
-    }};
-}
-
 
 #[derive(RustcEncodable, RustcDecodable)]
 pub struct KmerStore {
@@ -206,11 +106,11 @@ impl KmerStore {
 
 #[derive(Copy, Clone)]
 pub struct KmerLoc {
-    idx: u64,
+    idx: usize,
     p: u64,
 }
 impl KmerLoc {
-    fn new(idx: u64, p: u64) -> Self {
+    fn new(idx: usize, p: u64) -> Self {
         KmerLoc {idx, p}
     }
     /*fn copy(&self) -> KmerLoc {
@@ -218,47 +118,6 @@ impl KmerLoc {
     }*/
     fn next(&mut self, step_and_strand: u64) {
         self.p += step_and_strand ^ (self.p & 1);
-    }
-}
-
-#[derive(Copy, Clone)]
-struct Kmer {
-    dna: u64,
-    rc: u64,
-    pow2: u64,
-    mask: u64,
-} //^-^\\
-
-// determine orientation reduced kmer (ork) for maximum deviant rot 8 within 64bp.
-// only store pos for this.
-
-impl Kmer {
-    pub fn new(pow2: u64) -> Self {
-	Kmer {
-            dna: 0,
-            rc: 0,
-            pow2,
-            mask: pow2 - 1,
-        }
-    }
-    fn add_to_seq(&mut self, b2: u64) -> u64 {
-        // Add a nucleotide to the sequence. A Nt is added to template(0) in the top two bits.
-        self.dna = (self.dna >> 2) | (b2 * self.pow2);
-        self.rc = ((self.rc & self.mask) << 2) ^ 2 ^ b2;
-
-        // 2 is added for next pos; orientation is set in first bit.
-        if self.get_ori() {3} else {2}
-    }
-    // Orientation is true if the deviant bit is set for the template.
-    fn get_ori(&self) -> bool {
-        let deviant = self.dna ^ self.rc;
-        // The first bit that differs between complements, isolated with the '& wrapping_neg()',
-        // the devbit, dictates the orientation. If none is set, a palindrome, use bit 1.
-        let devbit = if deviant != 0 {deviant & deviant.wrapping_neg()} else {1};
-        (self.dna & devbit) != 0
-    }
-    fn get_strand(&self, is_template: bool) -> u64 {
-        if self.get_ori() == is_template {self.dna} else {self.rc}
     }
 }
 
@@ -270,7 +129,8 @@ pub struct ExtQueue {
     loc: KmerLoc,
     is_template: bool,
     max_no_kmers: usize,
-    kmer: Kmer,
+    ext_max: usize,
+    kmer: Kmer<u64>,
     d: VecDeque<KmerLoc>,
     marked: Vec<VecDeque<KmerLoc>>,
 }
@@ -279,29 +139,28 @@ impl ExtQueue {
     pub fn new(p: u64, readlen: usize, kmerlen: usize, is_template: bool) -> Self {
         let max_no_kmers = readlen - kmerlen;
         let mut marked = vec![VecDeque::with_capacity(max_no_kmers)];
-        let mut x = 1;
-        while max_no_kmers < (1 << x) {
-            marked.push(VecDeque::with_capacity(max_no_kmers - (1 << x)));
-            x += 1;
+        let mut ext_max = 1;
+        while max_no_kmers < (1 << ext_max) {
+            marked.push(VecDeque::with_capacity(max_no_kmers - (1 << ext_max)));
+            ext_max += 1;
         }
         ExtQueue {
             loc: KmerLoc::new(0, p),
             is_template,
             max_no_kmers,
-            kmer: Kmer::new((1 << (2 * (kmerlen - 1))) as u64),
+            ext_max,
+            kmer: Kmer::new(kmerlen as u32),
             d: VecDeque::with_capacity(max_no_kmers),
             marked, // marked; either min or max, dependent on extension (resp. 0 or 1+)
         }
     }
     fn next(&mut self, b2: u8) {
-        self.loc.next(if self.is_template {
-            self.kmer.add_to_seq(u64::from(b2))
-        } else {
-            self.kmer.add_to_seq(u64::from(b2 ^ 2)) - 1
-        });
+        let flip_ori = if self.is_template {self.kmer.add(b2)} else { ! self.kmer.add(b2 ^ 2)};
+        // 2 is added for next pos; orientation is set in first bit.
+        self.loc.next(if flip_ori {3} else {2});
     }
     fn reestablish_marked(&mut self, x: usize, loc: KmerLoc) {
-        let marked = self.marked.get_mut(x).unwrap();
+        let marked = &mut self.marked[x];
         loop {
             match marked.back() {
                 None => break,
@@ -331,7 +190,7 @@ impl ExtQueue {
 
         if let Some(parti) = leaving {
             let hash = self.get_hash_loc(&parti, offs);
-            let marked = self.marked.get_mut(x).unwrap();
+            let marked = &mut self.marked[x];
             if test_pop(&marked, &hash) {
                 marked.pop_front();
             }
@@ -369,17 +228,10 @@ impl ExtQueue {
             marked.clear();
         }
     }
-    fn get_idx(&mut self, bufsz: u64) -> u64 {
-        let seq = self.kmer.get_strand(self.is_template);
-
-        // flipped if the top bit is set, to reduce size.
-        if (seq & bufsz) == 0 {seq} else {(bufsz - 1) & !seq}
-    }
 }
 
 pub struct KmerIter {
     pos_mask: u64, // : all these are used only once.
-    bufsz: u64,
     pos_ori_bitcount: u32, //
     priority_shft: u32, //
     kmerlen: usize,
@@ -389,17 +241,10 @@ pub struct KmerIter {
 
 impl KmerIter {
     pub fn new(readlen: usize, bitlen: usize, pos_ori_bitcount: u32) -> Self {
-        unsafe {
-            STAT_DB = Some(StatDeq::new(500));
-        }
-        // FIXME: different kmer lengths not supported currently. requires kmer extension
-        // windows to be adapted)
-        assert_eq!(bitlen, 32);
-        // to try to make use of the entire u32 domain.
+        NB_new!(500);
 
 	KmerIter {
             pos_mask: (1 << pos_ori_bitcount) - 1,
-            bufsz: 1 << (bitlen - 1),
             pos_ori_bitcount,
             priority_shft: 63,
             kmerlen: bitlen / 2,
@@ -415,7 +260,7 @@ impl KmerIter {
         // binary search; limit endp to end of contig
         let i = self.ks.get_contig(p);
         let add = (self.readlen << 1) as u64;
-        println!("contig[{}].twobit:{}, p:{}, add:{}", i, self.ks.contig[i].twobit, p, add);
+        println!("contig[{}].twobit:{}, p:{}, add:{}", i, self.ks.contig[i].twobit, p, add); //XXX:1
 
         if self.ks.contig[i].twobit < p {
             let x = self.ks.get_twobit_before(i);
@@ -442,27 +287,29 @@ impl KmerIter {
         let x = (p & !(1 << self.priority_shft)) >> self.pos_ori_bitcount;
         NB!("relocate x:{}", x);
         NB_assert!(x == 0); //remove later: relocated for extended kmer is unlikely in beginning
+        let mut already_adapted = false;
 
         for i in 0..self.readlen {
             //println!("p:{}, eq.loc.p:{}", self.pos(p), self.pos(eq.loc.p));
             let b2 = self.ks.b2_for_p(eq.loc.p);
             eq.next(b2);
             if i >= self.kmerlen {
-                if eq.is_p(x as usize, p, self.pos_mask) {
+                if !already_adapted && eq.is_p(x as usize, p, self.pos_mask) {
                     // XXX waarom groeit extensie niet ??
                     let n = (eq.loc.p & !(1 << self.priority_shft)) >> self.pos_ori_bitcount;
                     NB!("0x{:08x}: required extension incremented to {}", eq.loc.idx, n + 1);
-                    self.ks.kmp[eq.loc.idx as usize] = in_use | ((n + 1) << self.pos_ori_bitcount);
+                    self.ks.kmp[eq.loc.idx] = in_use | ((n + 1) << self.pos_ori_bitcount);
+                    already_adapted = true;
                 }
                 let _ = self.progress(&mut eq);
             }
         }
         NB_assert!(eq.all_kmers_complete());
-        println!("complete");
-        assert_eq!(eq.loc.p & in_use, in_use);
+        println!("complete"); //XXX:2
+        NB_panic!("FIXME: will stack overflow after here");
+//        NB_assert!((eq.loc.p & in_use) == in_use);
         // make sure this position can no longer be used for this extension
-        self.ks.kmp[eq.loc.idx as usize] =
-            (eq.loc.p & !self.pos_mask) + (x << self.pos_ori_bitcount);
+        self.ks.kmp[eq.loc.idx] = (eq.loc.p & !self.pos_mask) + (x << self.pos_ori_bitcount);
 
         // progress() will extend kmers that were invalidated
         while (eq.loc.p & self.pos_mask & !1) != plim {
@@ -477,33 +324,33 @@ impl KmerIter {
         // for a minimum / maximum only: set priority bit.
         let ext_bits = (x << self.pos_ori_bitcount) | priority;
         loop {
-            let lookup = *self.ks.kmp.get_mut(new.idx as usize).unwrap();
-            let lookup_had_priority = (lookup & (1 << self.priority_shft)) != 0;
+            let former = self.ks.kmp[new.idx];
+            let former_had_priority = (former & (1 << self.priority_shft)) != 0;
             let pos = self.pos(new.p);
-            let olpos = self.pos(lookup);
+            let olpos = self.pos(former);
 
-            if lookup == (new.p | ext_bits) {
+            if former == (new.p | ext_bits) {
                 //NB!("0x{:08x}: already set to {}", new.idx, pos);
                 return true;
             }
-            let ori = if (lookup & 1) == (new.p & 1) {is_template} else {!is_template};
-            if lookup > ext_bits {
-                if (lookup & !self.pos_mask) == ext_bits {
+            let ori = if (former & 1) == (new.p & 1) {is_template} else {!is_template};
+            if former > ext_bits {
+                if (former & !self.pos_mask) == ext_bits {
                     NB!("0x{:08x}: previous entry has same ext({}); p:{} <=> {}",
                         new.idx, x, olpos, pos);
-                    self.relocate(ori, lookup & !1);
+                    self.relocate(ori, former & !1);
                     // progress() -> update_kmer_entry() -> relocate() -> progress()
                 }
                 // if there is one recurring, there may be more, therefore we
                 // store the entire eq. TODO: eq by eq extension: problem: orientation.
                 // rev_relocate, afh van orientatie van oldp & 1?
-                NB!("0x{:08x}: refuse overriding higher priority and or extension entry", new.idx);
+                NB!("0x{:08x}: refuse overriding higher priority | extension entry", new.idx);
                 return false; // irreplaceable
             }
-            // lookup == ext_bits: marked as unusable for previous, available for this extension.
+            // former == ext_bits: marked as unusable for previous, available for this extension.
 
-            if !lookup_had_priority {
-                if lookup == 0 {
+            if !former_had_priority {
+                if former == 0 {
                     NB!("0x{:08x}: new address for {}", new.idx, pos);
                 } else {
                     NB!("0x{:08x}: accept override non-priority entry by {}", new.idx, pos);
@@ -516,9 +363,9 @@ impl KmerIter {
                 return false;
             }
             NB!("extend previous entry (this is retaken). p:{} <=> {}", olpos, pos);
-            self.relocate(ori, lookup & !1);
+            self.relocate(ori, former & !1);
         }
-        if let Some(e) = self.ks.kmp.get_mut(new.idx as usize) {
+        if let Some(e) = self.ks.kmp.get_mut(new.idx) {
             *e = new.p | ext_bits;
             return true;
         }
@@ -529,12 +376,12 @@ impl KmerIter {
     // returns whether the re was a k-mer not yet in use.
     fn progress(&mut self, eq: &mut ExtQueue) -> bool {
 
-        eq.loc.idx = eq.get_idx(self.bufsz);
+        eq.loc.idx = eq.kmer.get_idx(true);
         let in_use = 1 << self.priority_shft;
 
         let leaving = if eq.all_kmers_complete() {
             let parti = eq.d.pop_front().unwrap();
-            let marked = eq.marked.get_mut(0).unwrap();
+            let marked = &mut eq.marked[0];
             if test_pop(&marked, &parti) {
                 marked.pop_front();
             }
@@ -548,7 +395,7 @@ impl KmerIter {
         let mut already_stored = self.update_kmer_entry(
             eq.marked[0].front().unwrap(), 0, in_use, eq.is_template);
 
-        for x in 1..6 {
+        for x in 1..eq.ext_max {
             // TODO: also implement non-priority entries (not min/max).
             //
             //if eq.loc.p >= (self.ks.b2.len() << 3) as u64 { // new sequence
@@ -614,10 +461,20 @@ impl KmerIter {
 #[cfg(test)]
 mod tests {
     use super::ExtQueue;
+    use super::KmerIter;
     const READLEN: usize = 16;
-    const BITLEN: u32 = 8;
     const KMERLEN: usize = 4;
+    const BITLEN: usize = KMERLEN * 2;
     const BUFSZ: u64 = 1 << BITLEN - 1;
+
+    #[test]
+    fn test_kmi() {
+        let mut kmi = KmerIter::new(READLEN, BITLEN, 48);
+        let seq: Vec<u8> = b"CCCCCC"[..].to_owned();
+        let p = kmi.markcontig(&b"CCCCCC"[..].to_owned());
+        assert_eq!(p, 0xc);
+    }
+
 
     #[test]
     fn test_push_b2() {

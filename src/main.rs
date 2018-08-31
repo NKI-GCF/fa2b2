@@ -65,8 +65,8 @@ fn main() {
         println!("Chromosome\trunning unique count");
         for chr in &chrs {
             let mut seq = Vec::with_capacity(chr.len as usize);
-            idxr.fetch_all(&chr.name).expect(&format!("Error fetching {}.", &chr.name));
-            idxr.read(&mut seq).expect(&format!("Error reading {}.", &chr.name));
+            idxr.fetch_all(&chr.name).unwrap_or_else(|_| panic!("Error fetching {}.", &chr.name));
+            idxr.read(&mut seq).unwrap_or_else(|_| panic!("Error reading {}.", &chr.name));
 
             let p = kmi.markcontig(&seq);
             println!("{}\t{}", &chr.name, p);

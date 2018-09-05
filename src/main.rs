@@ -4,6 +4,7 @@ extern crate arrayvec;
 extern crate rustc_serialize;
 extern crate bincode;
 extern crate clap;
+extern crate kmerstore;
 
 // target/release/fa2b2 -k 16 /net/NGSanalysis/ref/Homo_sapiens.GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.fa test
 //
@@ -18,6 +19,7 @@ use clap::{App,Arg};
 
 mod kmer;
 use kmer::marker::KmerIter;
+use self::kmerstore::KmerStore;
 
 fn main() {
     let matches = App::new("fa2b2")
@@ -60,20 +62,23 @@ fn main() {
 
         let readlen = 64;
         let pos_ori_bitcount = 48;
-        let mut kmi = KmerIter::new(readlen, bitlen, pos_ori_bitcount);
+        let mut ks = KmerStore::new(bitlen);
+        {
+            let mut kmi = KmerIter::new(&mut ks, readlen, bitlen, pos_ori_bitcount);
 
-        println!("Chromosome\trunning unique count");
-        for chr in &chrs {
-            let mut seq = Vec::with_capacity(chr.len as usize);
-            idxr.fetch_all(&chr.name).unwrap_or_else(|_| panic!("Error fetching {}.", &chr.name));
-            idxr.read(&mut seq).unwrap_or_else(|_| panic!("Error reading {}.", &chr.name));
+            println!("Chromosome\trunning unique count");
+            for chr in &chrs {
+                let mut seq = Vec::with_capacity(chr.len as usize);
+                idxr.fetch_all(&chr.name).unwrap_or_else(|_| panic!("Error fetching {}.", &chr.name));
+                idxr.read(&mut seq).unwrap_or_else(|_| panic!("Error reading {}.", &chr.name));
 
-            let p = kmi.markcontig(&seq);
-            println!("{}\t{}", &chr.name, p);
+                let p = kmi.markcontig(&seq);
+                println!("{}\t{}", &chr.name, p);
+            }
         }
         let mut set: u64 = 0;
         let mut unset: u64 = 0;
-        for k in kmi.ks.kmp {
+        for k in ks.kmp {
             if k == 0 {
                 unset += 1;
             } else {

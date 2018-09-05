@@ -13,5 +13,5 @@ bincode = "0.6.0"
 clap = "2.19.1"
 bit_reverse = "0.1.7"
 derive-new = "0.5"
-kmer = { path = "../kmer", version = "0.1.0" }
-statdeq = { path = "../statdeq", version = "0.1.0" }
+extqueue = { path = "../extqueue", version = "0.1.0" }
+kmerstore = { path = "../kmerstore", version = "0.1.0" }

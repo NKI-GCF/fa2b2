@@ -4,7 +4,9 @@ extern crate arrayvec;
 extern crate rustc_serialize;
 extern crate bincode;
 extern crate clap;
+extern crate kmerconst;
 extern crate kmerstore;
+extern crate extqueue;
 
 // target/release/fa2b2 -k 16 /net/NGSanalysis/ref/Homo_sapiens.GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.fa test
 //
@@ -18,8 +20,10 @@ use bio::io::fasta::IndexedReader;
 use clap::{App,Arg};
 
 mod kmer;
-use kmer::marker::KmerIter;
+use kmer::marker::markcontig;
 use self::kmerstore::KmerStore;
+use self::kmerconst::KmerConst;
+use self::extqueue::ExtQueue;
 
 fn main() {
     let matches = App::new("fa2b2")
@@ -51,28 +55,19 @@ fn main() {
 
         let outfile = matches.value_of("out").unwrap();
 
-        let genomesize: usize = chrs.iter().map(|x| x.len as usize).sum();
-        // bit width, required to store all (cumulative) genomic positions, is used as len
-        println!("Genome size: {}", genomesize);
-        println!("power: {}", genomesize.next_power_of_two());
-
-        let bitlen = genomesize.next_power_of_two().trailing_zeros() as usize;
-        println!("bitlen: {}", bitlen);
-        println!("Using a kmerlength of {}", bitlen / 2);
-
         let readlen = 64;
         let pos_ori_bitcount = 48;
-        let mut ks = KmerStore::new(bitlen);
+        let c = KmerConst::new(readlen, chrs.iter().map(|x| x.len as usize).sum(), pos_ori_bitcount);
+        let mut ks = KmerStore::new(c.bitlen);
         {
-            let mut kmi = KmerIter::new(&mut ks, readlen, bitlen, pos_ori_bitcount);
-
+            let mut vq = vec![ExtQueue::new(&mut ks, 0, &c, true)];
             println!("Chromosome\trunning unique count");
             for chr in &chrs {
                 let mut seq = Vec::with_capacity(chr.len as usize);
                 idxr.fetch_all(&chr.name).unwrap_or_else(|_| panic!("Error fetching {}.", &chr.name));
                 idxr.read(&mut seq).unwrap_or_else(|_| panic!("Error reading {}.", &chr.name));
 
-                let p = kmi.markcontig(&seq);
+                let p = markcontig(&mut vq, &seq, &c);
                 println!("{}\t{}", &chr.name, p);
             }
         }

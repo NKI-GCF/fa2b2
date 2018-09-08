@@ -20,7 +20,7 @@ use bio::io::fasta::IndexedReader;
 use clap::{App,Arg};
 
 mod kmer;
-use kmer::marker::markcontig;
+use kmer::marker::KmerIter;
 use self::kmerstore::KmerStore;
 use self::kmerconst::KmerConst;
 use self::extqueue::ExtQueue;
@@ -61,13 +61,14 @@ fn main() {
         let mut ks = KmerStore::new(c.bitlen);
         {
             let mut vq = vec![ExtQueue::new(&mut ks, 0, &c, true)];
+            let mut kmi = KmerIter::new(&mut vq);
             println!("Chromosome\trunning unique count");
             for chr in &chrs {
                 let mut seq = Vec::with_capacity(chr.len as usize);
                 idxr.fetch_all(&chr.name).unwrap_or_else(|_| panic!("Error fetching {}.", &chr.name));
                 idxr.read(&mut seq).unwrap_or_else(|_| panic!("Error reading {}.", &chr.name));
 
-                let p = markcontig(&mut vq, &seq, &c);
+                let p = kmi.markcontig(&seq, &c);
                 println!("{}\t{}", &chr.name, p);
             }
         }

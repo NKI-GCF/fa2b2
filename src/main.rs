@@ -60,15 +60,15 @@ fn main() {
         let c = KmerConst::new(readlen, chrs.iter().map(|x| x.len as usize).sum(), pos_ori_bitcount);
         let mut ks = KmerStore::new(c.bitlen);
         {
-            let mut vq = vec![ExtQueue::new(&mut ks, 0, &c, true)];
-            let mut kmi = KmerIter::new(&mut vq);
+            let mut vq = vec![ExtQueue::new((0, u64::max_value()), &c, true)];
+            let mut kmi = KmerIter::new(&mut ks);
             println!("Chromosome\trunning unique count");
             for chr in &chrs {
                 let mut seq = Vec::with_capacity(chr.len as usize);
                 idxr.fetch_all(&chr.name).unwrap_or_else(|_| panic!("Error fetching {}.", &chr.name));
                 idxr.read(&mut seq).unwrap_or_else(|_| panic!("Error reading {}.", &chr.name));
 
-                let p = kmi.markcontig(&seq, &c);
+                let p = kmi.markcontig(&mut vq, &mut seq.iter(), &c);
                 println!("{}\t{}", &chr.name, p);
             }
         }

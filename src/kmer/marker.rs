@@ -50,77 +50,99 @@ impl<'a> KmerIter<'a> {
             } else if y == vq.len() {
                 vq.push(ExtQueue::new(plimits, kc, is_forward));
             }
-            let mut eq = &mut vq[y];
             let b2;
+            if y != 0 && vq[y].loc.p >= self.ks.p_max {
+                //println!("need more seq (returning to lookback no. 0)!");
+                y = 0;
+            }
             if y == 0 {
                 match seq.next() {
                     None => break, //                                                    loop exit loop
                     Some(c) => {
                         b2 = (*c >> 1) & 0x7;
                         if b2 >= 4 {
-                            eq.update_non_contig(self.ks, goffs);
+                            vq[y].update_non_contig(self.ks, goffs);
                             continue;
                         }
-                        self.add_new_seq(eq.loc.p, b2); //                                 store twobit
+                        self.add_new_seq(vq[y].loc.p, b2); //                                 store twobit
                     },
                 }
             } else {
-                b2 = self.ks.b2_for_p(eq.loc.p);
+                b2 = self.ks.b2_for_p(vq[y].loc.p);
             }
-            if !eq.next(b2) { //                                         false if kmer not yet complete
+            if !vq[y].next(b2) { //                                         false if kmer not yet complete
                 continue;
             }
-            while eq.x <= eq.ext {
-                let new = eq.eval_hash_turnover();
-                let ext_bits = (eq.x << kc.pos_ori_bitcount) as u64 | eq.priority;
+            while vq[y].x <= vq[y].ext {
+                let new = vq[y].eval_hash_turnover();
+                let ext_bits = (vq[y].x << kc.pos_ori_bitcount) as u64 | vq[y].priority;
 
                 let former = self.ks.kmp[new.idx];
-                if !eq.is_kmer_available(new.p, former, ext_bits) {
+                if !vq[y].is_kmer_available(new.p, former, ext_bits) {
 
                     let in_use = former & (1 << kc.priority_shft);
                     let n = (former ^ in_use) >> kc.pos_ori_bitcount;
 
-                    if eq.extension(former) > ext_bits { //                  stored has higher priority
-                        eq.x += 1;
+                    if vq[y].extension(former) > ext_bits { //                  stored has higher priority
+                        vq[y].x += 1;
                         continue;
                     }
+
                     self.ks.kmp[new.idx] = in_use | ((n + 1) << kc.pos_ori_bitcount);
 
                     // XXX: plimits end is not restrictive enough at end of seq!
-                    plimits = eq.get_plimits(self.ks, eq.b2pos(former));
-                    is_forward = eq.is_rebuild_forward(former, new.p);
+                    plimits = vq[y].get_plimits(self.ks, vq[y].b2pos(former));
+                    is_forward = vq[y].is_rebuild_forward(former, new.p);
 
-                    println!("[{}, {}, {}]: {:x} in use by {:x} {:?}, {}", eq.i, eq.x, y,
-                             new.idx, former, plimits, is_forward);
+                    if y == 0 && vq.len() != 1 {
+                        // returned to 0 for more seq, now we may want to return to
+                        // last y, if the recurrance is a continuation.
+                        y = vq.len() - 1;
+                        //println!("[recurrent] returning to lookback no. {}", y);
+                        if vq[y].is_too_nearby(vq[y].loc.p, former) {
+                            break;
+                        }
+                    }
+
+                    //println!("[{}, {}, {}]: {:x} in use by {:x} {:?}, {}", vq[y].i, vq[y].x, y,
+                    //         new.idx, former, plimits, is_forward);
 
                     // FIXME: the position may already be in vq. then rebuild is not required.
                     // but we need to temporarily switch to that extension
 
                     y += 1;
-                    println!("look back no. {}", y);
+                    //println!("look back no. {}", y);
                     assert!(y < 1000);
                     break;
                 }
-                self.ks.kmp[new.idx] = new.p | ext_bits;
-                println!("[{}, {}, {}]: {:x} set to 0x{:x}", eq.i, eq.x, y, new.idx, new.p | ext_bits);
-                eq.priority = 0;
-                if y != 0 && eq.all_kmers() {
+                if former == 0 || !vq[y].is_too_nearby(new.p | ext_bits, former) {
+                    self.ks.kmp[new.idx] = new.p | ext_bits;
+                    //println!("[{}, {}, {}]: {:x} set to 0x{:x}", vq[y].i, vq[y].x, y, new.idx, new.p | ext_bits);
+                }
+                vq[y].priority = 0;
+                if y != 0 && vq[y].all_kmers() {
                     y -= 1;
                     break;
                 }
                 // if there is one recurring, there may be more, therefore we should
                 // store the entire eq. TODO: eq by eq extension: problem: orientation.
                 // rev_relocate, afh van orientatie van oldp & 1?
-                eq.marked[eq.x as usize].push_back(new);
-                eq.x += 1;
+                let x = vq[y].x as usize;
+                vq[y].marked[x].push_back(new);
+                vq[y].x += 1;
+                if y == 0 && vq.len() != 1 {
+                    y = vq.len() - 1;
+                    //println!("[new] returning to lookback no. {}", y);
+                    break;
+                }
             }
-            if eq.priority != 0 {
+            //if vq[y].priority != 0 {
                 // TODO:
                 // If still not unique, include all kmers wrapping sum hashes for minima within
                 // 64bp, until 1 << 16; to enable paired-end matching.
                 //
                 // Maybe, not every, but only for neighbouring unmappable sites?
-            }
+            //}
         }
         vq[y].loc.p & !1
     }

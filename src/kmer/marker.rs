@@ -2,214 +2,210 @@ extern crate arrayvec;
 extern crate bincode;
 extern crate bio;
 extern crate clap;
-extern crate occurrence;
 extern crate kmerconst;
 extern crate kmerloc;
 extern crate kmerstore;
+extern crate occurrence;
 
-use self::occurrence::Occurrence;
 use self::kmerconst::KmerConst;
+use self::kmerloc::KmerPos;
 use self::kmerstore::KmerStore;
-use std::cmp::Ordering::{Equal, Greater, Less};
+use self::occurrence::Occurrence;
+use std::cmp;
 use std::slice::Iter;
 
 pub struct KmerIter<'a> {
 	pub ks: &'a mut KmerStore,
+	n_stretch: u64,
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
 	pub fn new(ks: &'a mut KmerStore) -> Self {
-		KmerIter { ks }
+		KmerIter { ks, n_stretch: 0 }
 	}
 
-	/// add ascii sequence converted to 2bit to kmers and store.
-	fn add_new_seq(&mut self, p: u64, b2: u8) {
+	fn complete_occurance(&mut self, occ: &mut Occurrence<'a>, b2: u8) -> bool {
+		let p = occ.loc.p.get();
 		if let Some(qb) = self.ks.b2.get_mut(p as usize >> 3) {
-			if b2 < 4 {
-				*qb |= b2 << (p & 6);
-			}
+			*qb |= b2 << (p & 6);
 		}
 		self.ks.p_max = (p + 2) & !1;
-	}
-	fn get_vq(&self, vq: &Vec<Occurrence<'a>>, p: u64) -> usize {
-		let mut size = vq.len();
-		let mut base = 0;
-		while size > 0 {
-			size /= 2;
-			let mid = base + size;
-			base = match (vq[mid].loc.p).cmp(&p) {
-				Less => mid,
-				Greater | Equal => base,
-			};
+		occ.add(b2);
+		if occ.all_kmers() {
+			occ.turnover();
+			true
+		} else if occ.now_all_kmers() {
+			self.ks
+				.offset_contig(self.n_stretch + 1 - occ.kc.readlen as u64);
+			true
+		} else {
+			false
 		}
-		base
 	}
 
-	fn next(&mut self, seq: &mut Iter<u8>, occ: &mut Occurrence<'a>, goffs: u64) -> Option<u8> {
-		seq.next().and_then(|c| Some((*c >> 1) & 0x7)).map(|b2| {
-			if b2 >= 4 {
-				occ.update_non_contig(self.ks, goffs);
-			} else {
-				self.add_new_seq(occ.loc.p, b2); // store twobit
-				occ.x = 0;
+	/// if N, insert contig (once) and count stretch, false
+	/// else store and update occurrance kmers, complete ? true : false
+	fn complete_occurance_or_contig(
+		&mut self,
+		occ: &mut Occurrence<'a>,
+		b2: u8,
+		goffs: u64,
+	) -> bool {
+		if b2 < 4 && self.complete_occurance(occ, b2) {
+			true
+		} else {
+			// N-stretch is incremented even until kmer is finished, this is corrected when incrementing contig.
+			if self.n_stretch == 0 {
+				let p = occ.loc.p.low() - 2; //was already incremented in complete_occurance() -> occ.add() -> loc.next()
+				self.ks.push_contig(p, goffs);
+
+				// clear all except orientation and position to rebuild at the start of a new contig.
+				assert_eq!(occ.i, 1);
+				occ.clear();
 			}
-			b2
-		})
+			self.n_stretch += 1;
+			false
+		}
 	}
 
-	/// Traverse a new reference sequence. Store as twobit, and update extension queue,
-	/// N-stretches excluded; Contig regions indicate chrosomes start and the offset of such N-stretches.
+	fn get_occ_idx(&self, occ: &Vec<Occurrence<'a>>, former: &KmerPos) -> usize {
+		let mut first_unused = occ.len();
+		for i in 0..occ.len() {
+			if occ[i].has_in_range(former) {
+				return i;
+			}
+			if first_unused == occ.len()
+				&& occ[i].loc.p.top() == occ[i].ext
+				&& occ[i].loc.p.priority() != 0
+			{
+				assert_eq!(occ[i].loc.p.low(), 0);
+				first_unused = i;
+			}
+		}
+		return first_unused;
+	}
+
+	/// TODO: replace this function
+	/// when rebuilding eq for recurrent kmer, and extending take into account contig boundaries
+	/// for that site
+	pub fn get_plimits(&self, kc: &'a KmerConst, p: u64) -> (u64, u64) {
+		// binary search; limit endp to end of contig
+		assert!(p != 0);
+		let i = self.ks.get_contig(p);
+		assert!(i < self.ks.contig.len());
+		//println!("contig[{}].twobit:{}, p:{}", i, ks.contig[i].twobit, p);
+
+		assert!(self.ks.contig[i].twobit <= p);
+		let x = self.ks.get_twobit_before(i).unwrap_or(0);
+		let addl = (kc.max_no_kmers << 1) as u64;
+		let p_max = self.ks.p_max;
+		let left = if p > x + addl { p - addl } else { x };
+		let right = cmp::min(
+			p + (kc.readlen << 1) as u64,
+			self.ks.get_twobit_after(i).unwrap_or(p_max),
+		);
+		(left, right)
+	}
 	pub fn markcontig(
 		&mut self,
 		occ: &mut Vec<Occurrence<'a>>,
 		seq: &mut Iter<u8>,
 		kc: &'a KmerConst,
 	) -> u64 {
-		// position to b2 offset: Ns and contig offset excluded.
-		let mut y = 0;
-		let mut lastp: Vec<u64> = vec![];
-		let mut plimits = (occ[y].loc.p, occ[y].plim);
-		let mut is_forward = occ[y].is_template;
-		let mut extend_kmer = false;
-		let mut former = 0;
-		let goffs = plimits.0 & !1;
-		occ[y].update_non_contig(self.ks, goffs);
-		// vq kan gesorteerd op loc.p, en dan binary gesearched worden.
+		let mut q = 0;
+		let goffs = occ[0].loc.p.low();
+		let mut former_stack: Vec<u64> = vec![];
 
-		loop {
-			if !extend_kmer {
-				if y != 0 && occ[y].loc.p >= self.ks.p_max {
-					panic!("need more seq (returning to lookback no. 0)!");
-					//y = 0;
-				}
-				let b2 = if y == 0 {
-					match self.next(seq, &mut occ[0], goffs) {
-						Some(7) => continue,
-						Some(b2) => b2,
-						None => break,
+		while let Some(c) = seq.next() {
+			if !self.complete_occurance_or_contig(&mut occ[0], (*c >> 1) & 0x7, goffs) {
+				continue;
+			}
+			while occ[q].loc.p.extension() <= occ[q].ext {
+
+				let new = occ[q].eval_hash_turnover();
+
+				let ext_bits = occ[q].loc.p.top();
+
+				let mut former = KmerPos::new(self.ks.kmp[new.idx]);
+
+				if former.get() <= ext_bits {
+
+					self.ks.kmp[new.idx] = new.p.get() | (1<< 63);
+					println!("// q:{}, [{:08x}] = {:016x}", q, new.idx, self.ks.kmp[new.idx]);
+
+					occ[q].loc.p.unset_priority();
+					if former.b2pos() == 0 {
+						former = match former_stack.pop() {
+							Some(f) => KmerPos::new(f),
+							None => break,
+						};
+						println!("\n// retrieved {:x} from former_stack", former.get());
 					}
 				} else {
-					self.ks.b2_for_p(occ[y].loc.p)
-				};
-				if !occ[y].next(b2) {
-					//false if kmer not yet complete
-					continue;
-				}
-			} else {
-				extend_kmer = false;
-			}
-			let mut x = occ[y].x;
-			while (1 << x) <= occ[y].ext {
-				let new = occ[y].eval_hash_turnover();
-
-				println!("ixyp:[{}, {}, {}, {:x}]", occ[y].i, x, y, occ[y].loc.p);
-				let ext_bits = (x << kc.extent) as u64 | occ[y].priority;
-
-				former = self.ks.kmp[new.idx];
-				if !occ[y].is_kmer_available(new.p, former, ext_bits) {
-					let in_use = former & (1 << kc.priority_shft);
-					let n = (former ^ in_use) & !kc.pos_mask;
-					x += 1;
-					occ[y].x = x;
-
-					if occ[y].extension(former) > ext_bits {
-						//                  stored has higher priority
-						println!(
-							"stored has higher priority (or blacklisted), {:x}, {:x}",
-							former, ext_bits
-						);
-						continue;
-					}
-					lastp.push(occ[y].loc.p);
-					println!(
-						"blacklisting kmer, vq[{}].priority == {:x}",
-						y, occ[y].priority
-					);
-					extend_kmer = true;
-					self.ks.kmp[new.idx] = in_use | (n + (1 << kc.extent)); //         blacklist
-
-					plimits = occ[y].get_plimits(self.ks, occ[y].b2pos(former));
-					is_forward = occ[y].is_rebuild_forward(former, new.p);
-					break;
-				}
-				if (former & kc.pos_mask) == 0 {
-					self.ks.kmp[new.idx] = (new.p - kc.kmerlen as u64) | ext_bits;
-					occ[y].priority = 0;
-					former = lastp.pop().unwrap_or(0);
-					//y = if let Some(p) = lastp.pop() {self.get_vq(&vq, p)} else {0};
-					//println!("set; y: {}, vq[y].priority == {:x}", y, vq[y].priority);
-					break;
-				} else if !occ[y].is_within_read(new.p | ext_bits, former) {
-					//panic!("check branch");
-					if occ[y].extension(former) == ext_bits {
-						extend_kmer = true;
-						println!(
-							"equal extension: switch to last extension, without pop {}, {}",
-							x,
-							occ[y - 1].x
-						);
-						while {
-							assert_ne!(y, 0);
-							y -= 1;
-							occ[y].loc.p != occ[y].b2pos(former)
-						} {}
-						x += 1;
-						occ[y].x = x;
+					occ[q].loc.p.extend();
+					if occ[q].loc.p.extension() > occ[q].ext {
+						println!("unresolveable: TODO make regions of this?");
 						break;
 					}
-					self.ks.kmp[new.idx] = (new.p - kc.kmerlen as u64) | ext_bits;
-					occ[y].priority = 0;
-					if y != 0 {
-						extend_kmer = true;
+
+					if former.b2pos() == 0 || former.top() > ext_bits {
+						println!("// kept former: blacklist for or entry with higher extension (to {:016x}).", occ[q].loc.p.get());
+						continue;
 					}
-					println!(
-						"[{}, {}, {}, {:x}]: {:x} set to 0x{:x}",
-						occ[y].i, x, y, occ[y].loc.p, new.idx, self.ks.kmp[new.idx]
-					);
+					// identical extension: blacklist, handle former and then this p
+					self.ks.kmp[new.idx] += 1 << kc.extent;
+					self.ks.kmp[new.idx] &= !kc.pos_mask;
+					println!("// former_stack push: {} => occ[{}].loc.p:{:016x}", former_stack.len(), q, occ[q].loc.p.get());
+					former_stack.push(occ[q].loc.p.get());
 				}
-				if occ[y].priority == 0 && (self.ks.opt & 2) == 0 {
-					println!("leaving {}", y);
-					break;
+				let x = former.x_usize();
+				let oldp = occ[q].loc.p.low();
+				q = self.get_occ_idx(&occ, &former);
+				if q == occ.len() || !occ[q].has_in_range(&former) {
+					let plimits = self.get_plimits(&kc, former.b2pos());
+
+					println!("// not found. {}: {:016x} != {:016x} plim:{:?} {}", q, former.get(), oldp, plimits, x);
+
+					let is_forward = true; // FIXME
+					let mut new_occ = Occurrence::new(plimits, kc, x as u64, is_forward);
+					while {
+						let b2 = self.ks.b2_for_p(new_occ.loc.p.low());
+						!self.complete_occurance(&mut new_occ, b2) || new_occ.marked[x][0].p.b2pos() != former.b2pos()
+					} {}
+					let test = new_occ.eval_hash_turnover();
+					/*while new_occ.loc.p.x_usize() != x {
+						new_occ.loc.p.extend();
+					}*/
+					println!("// occ insert: q:{}, {:x}", q, test.p.get());
+					if q == occ.len() {
+						occ.push(new_occ);
+					} else {
+						occ[q] = new_occ;
+					}
+
+					println!("dump");
+					for i in 0..occ.len() {
+						println!("q:{}, p:{:016x}", i, occ[i].loc.p.get());
+					}
+				} else {
+					println!("// found: {}, {:016x} == {:016x}", q, occ[q].loc.p.get(), former.get());
+					occ[q].loc.p.set_priority();
 				}
-				// if there is one recurring, there may be more, therefore we should
-				// store the entire eq. TODO: eq by eq extension: problem: orientation.
-				// rev_relocate, afh van orientatie van oldp & 1?
-				occ[y].marked[x as usize].push_back(new);
-				x += 1;
-				occ[y].x = x;
-			}
-			if (former & kc.pos_mask) != 0 {
-				extend_kmer = true;
-				y = self.get_vq(&occ, former);
-				if occ[y].loc.p != former {
-					println!("vq.insert({}, Occurrence[{:?}, {}])", y, plimits, x);
-					occ.insert(y, Occurrence::new(plimits, kc, x, is_forward));
-					y += 1;
-					former = 0;
-				}
-			}
-			if occ[y].ext > occ[y].ext_max && occ[y].priority != 0 {
-				println!("not able to complete lookback: {}, p: {:x}", y, occ[y].loc.p);
-				// TODO:
-				// If still not unique, include all kmers wrapping sum hashes for minima within
-				// 64bp, until 1 << 16; to enable paired-end matching.
-				//
-				// Maybe, not every, but only for neighbouring unmappable sites?
 			}
 		}
-		occ[y].loc.p & !1
+		occ[0].loc.p.low() - kc.kmerlen as u64
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	use super::Occurrence;
 	use super::KmerConst;
 	use super::KmerIter;
 	use super::KmerStore;
+	use super::Occurrence;
 	const READLEN: usize = 16;
 	const SEQLEN: usize = 250;
-	const extent: u32 = 48;
+	const EXTENT: u32 = 48;
 
 	/*#[test]
     fn test_16_c() {
@@ -237,7 +233,7 @@ mod tests {
     }*/
 	#[test]
 	fn test_17_c() {
-		let c = KmerConst::new(READLEN, SEQLEN, extent);
+		let c = KmerConst::new(READLEN, SEQLEN, EXTENT);
 		let mut ks = KmerStore::new(c.bitlen);
 		assert_eq!(ks.kmp.len(), 128);
 		{
@@ -258,6 +254,7 @@ mod tests {
 			}
 		}
 		//800100000000001a
+		println!("{:x}", ks.kmp[0]);
 		assert_ne!(ks.kmp[0], 0);
 		for i in 1..ks.kmp.len() {
 			assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);

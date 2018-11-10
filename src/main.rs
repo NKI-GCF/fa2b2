@@ -70,7 +70,7 @@ fn main() {
                 idxr.fetch_all(&chr.name).unwrap_or_else(|_| panic!("Error fetching {}.", &chr.name));
                 idxr.read(&mut seq).unwrap_or_else(|_| panic!("Error reading {}.", &chr.name));
 
-                let p = kmi.markcontig(&mut vq, &mut seq.iter(), &c);
+                let p = kmi.markcontig::<u64>(&mut vq, &mut seq.iter(), &c);
                 println!("{}\t{}", &chr.name, p);
                 //break;
             }

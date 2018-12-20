@@ -27,7 +27,7 @@ impl<'a> KmerIter<'a> {
 	}
 
 	fn complete_occurance(&mut self, occ: &mut Occurrence, b2: u8) -> bool {
-		let p = occ.loc.p.low();
+		let p = occ.loc.p.pos();
 		if let Some(qb) = self.ks.b2.get_mut(p as usize >> 3) {
 			*qb |= b2 << (p & 6);
 		}
@@ -37,8 +37,9 @@ impl<'a> KmerIter<'a> {
 			occ.turnover();
 			true
 		} else if occ.now_all_kmers() {
-			self.ks
-				.offset_contig(self.n_stretch + 1 - occ.kc.readlen as u64);
+			let t = (occ.kc.readlen - 1) as u64;
+			self.ks.offset_contig(self.n_stretch - t);
+			self.n_stretch = t;
 			true
 		} else {
 			false
@@ -58,11 +59,10 @@ impl<'a> KmerIter<'a> {
 		} else {
 			// N-stretch is incremented even until kmer is finished, this is corrected when incrementing contig.
 			if self.n_stretch == 0 {
-				let p = occ.loc.p.low() - 2; //was already incremented in complete_occurance() -> occ.add() -> loc.next()
+				let p = occ.loc.p.pos() - if b2 < 4 {1} else {0}; //was already incremented in complete_occurance() -> occ.add() -> loc.next()
 				self.ks.push_contig(p, goffs);
 
 				// clear all except orientation and position to rebuild at the start of a new contig.
-				assert_eq!(occ.i, 1);
 				occ.clear();
 			}
 			self.n_stretch += 1;
@@ -78,7 +78,7 @@ impl<'a> KmerIter<'a> {
 		let is_forward = true; // FIXME
 		let mut new_occ = Occurrence::new(plimits, kc, x as u64, is_forward);
 		while {
-			let b2 = self.ks.b2_for_p(new_occ.loc.low());
+			let b2 = self.ks.b2_for_p(new_occ.loc.pos());
 			!self.complete_occurance(&mut new_occ, b2)
 				|| new_occ.marked[x][0].b2pos() != former.b2pos()
 		} {}
@@ -100,7 +100,7 @@ impl<'a> KmerIter<'a> {
 				&& occ[i].loc.p.top() == occ[i].ext
 				&& occ[i].loc.priority() != 0
 			{
-				assert_eq!(occ[i].loc.p.low(), 0);
+				assert_eq!(occ[i].loc.p.pos(), 0);
 				first_unused = i;
 			}
 		}
@@ -138,32 +138,31 @@ impl<'a> KmerIter<'a> {
 		kc: &'a KmerConst,
 	) -> u64 {
 		let mut q = 0;
-		let goffs = occ[0].loc.p.low();
+		let goffs = occ[0].loc.p.pos();
 		let mut former_stack: Vec<u64> = vec![];
-		let mut previous = None;
 
 		while let Some(c) = seq.next() {
 			if !self.complete_occurance_or_contig(&mut occ[0], (*c >> 1) & 0x7, goffs) {
 				continue;
 			}
-			while occ[q].loc.p.extension() <= occ[q].ext {
+			loop {
 
 				let new = occ[q].eval_hash_turnover();
-				if previous == Some(new) {
-					println!("same: [{}][{:08x}] = {:016x}", q, new.idx, self.ks.kmp[new.idx]);
-					//break; or continue?
-				}
-				previous = Some(new);
-
-				let ext_bits = occ[q].loc.p.top();
 
 				let mut former: T = T::from_u64(self.ks.kmp[new.idx]).unwrap();
+				let in_range = former.is_in_range(new.p);
 
-				if former.to_u64().unwrap() <= ext_bits {
-					self.ks.kmp[new.idx] = new.p | (1 << 63);
+				if in_range || former.is_replaceable_by(occ[q].loc.p) {
+
+					if in_range {
+						eprintln!("in range");
+					} else {
+						self.ks.kmp[new.idx] = new.p | (1 << 63);
+
+						occ[q].loc.unset_priority();
+					}
 					println!( "// [{}][{:08x}] = {:016x}", q, new.idx, self.ks.kmp[new.idx]);
 
-					occ[q].loc.unset_priority();
 					if former.b2pos() == 0 {
 						former = match former_stack.pop() {
 							Some(f) => T::from_u64(f).unwrap(),
@@ -172,24 +171,25 @@ impl<'a> KmerIter<'a> {
 						println!("\n// retrieved {:x} from former_stack", former.to_u64().unwrap());
 					}
 				} else {
-					occ[q].loc.p.extend();
-					if occ[q].loc.p.extension() > occ[q].ext {
+					if !occ[q].extend() {
 						println!("unresolveable: TODO: kmers of adjoining regions like these?");
 						break;
 					}
 
-					if former.b2pos() == 0 || former.top() > ext_bits {
-						println!( "// kept former: blacklist for or entry with higher extension.");
-						previous = None;
+					if former.blacklisted_or_higher_extension(occ[q].loc.p) {
+						println!( "// kept former: blacklist-for or entry with higher extension.");
 						continue;
 					}
 					// identical extension: blacklist, handle former and then this p
 					self.ks.kmp[new.idx] += 1 << kc.extent;
 					self.ks.kmp[new.idx] &= !kc.pos_mask;
+					if ((self.ks.kmp[new.idx] & 0x7FFF000000000000) >> kc.extent) >= kc.ext_max() as u64 {
+						eprintln!("Unresolveable, cannot extend anymore.");
+						break;
+					}
 					println!("// unreplaceable, former_stack({}) push: occ[{}].loc.p:{:016x}", former_stack.len(), q, occ[q].loc.p);
 					former_stack.push(occ[q].get_extreme().p);
 				}
-				let oldp = occ[q].loc.p.low();
 				q = self.get_occ_idx::<T>(&occ, &former);
 				if q == occ.len() || occ[q].get_extreme().p != former.to_u64().unwrap() {
 					let plimits = self.get_plimits(&kc, former.b2pos());
@@ -200,7 +200,7 @@ impl<'a> KmerIter<'a> {
 					let is_forward = true; // FIXME
 					let mut new_occ = Occurrence::new(plimits, kc, x as u64, is_forward);
 					while {
-						let b2 = self.ks.b2_for_p(new_occ.loc.p.low());
+						let b2 = self.ks.b2_for_p(new_occ.loc.p.pos());
 						!self.complete_occurance(&mut new_occ, b2)
 							|| new_occ.marked[x][0].p.b2pos() != former.b2pos()
 					} {}
@@ -217,7 +217,7 @@ impl<'a> KmerIter<'a> {
 				}
 			}
 		}
-		occ[0].loc.p.low() - kc.kmerlen as u64
+		occ[0].loc.p.pos() - kc.kmerlen as u64
 	}
 }
 
@@ -232,29 +232,29 @@ mod tests {
 	const EXTENT: u32 = 48;
 
 	/*#[test]
-    fn test_16_c() {
-        let c = KmerConst::new(READLEN, SEQLEN, extent);
-        let mut ks = KmerStore::new(c.bitlen);
-        assert_eq!(ks.kmp.len(), 128);
-        {
-            let mut kmi = KmerIter::new(&mut ks);
+	fn test_16_c() {
+		let c = KmerConst::new(READLEN, SEQLEN, extent);
+		let mut ks = KmerStore::new(c.bitlen);
+		assert_eq!(ks.kmp.len(), 128);
+		{
+			let mut kmi = KmerIter::new(&mut ks);
 
-            let mut vq = vec![Occurrence::new((0, u64::max_value()), &c, 0, true)];
+			let mut vq = vec![Occurrence::new((0, u64::max_value()), &c, 0, true)];
 
-            let seq1: Vec<u8> = b"CCCCCCCCCCCCCCCC"[..].to_owned();
-            assert_eq!(kmi.markcontig(&mut vq, &mut seq1.iter(), &c), 0x20);
-            assert_eq!(vq.len(), 1);
+			let seq1: Vec<u8> = b"CCCCCCCCCCCCCCCC"[..].to_owned();
+			assert_eq!(kmi.markcontig(&mut vq, &mut seq1.iter(), &c), 0x20);
+			assert_eq!(vq.len(), 1);
 
-            assert_eq!(vq[0].kmer.dna, 0x55);
-            assert_eq!(vq[0].kmer.get_idx(true), 0);
-        }
-        assert_eq!(ks.kmp[0], (1 << c.priority_shft) | (16 << 1) - c.kmerlen as u64);
-        for i in 1..ks.kmp.len() {
-            assert_eq!(ks.kmp[i], 0);
-        }
-        //let seq2: Vec<u8> = b"ATCGTCACTGATATCGATCC"[..].to_owned();
-        //assert_eq!(kmi.markcontig(&mut vq, &mut seq2.iter(), &c), 0x48);
-    }*/
+			assert_eq!(vq[0].kmer.dna, 0x55);
+			assert_eq!(vq[0].kmer.get_idx(true), 0);
+		}
+		assert_eq!(ks.kmp[0], (1 << c.priority_shft) | (16 << 1) - c.kmerlen as u64);
+		for i in 1..ks.kmp.len() {
+			assert_eq!(ks.kmp[i], 0);
+		}
+		//let seq2: Vec<u8> = b"ATCGTCACTGATATCGATCC"[..].to_owned();
+		//assert_eq!(kmi.markcontig(&mut vq, &mut seq2.iter(), &c), 0x48);
+	}*/
 	#[test]
 	fn test_17_c() {
 		let c = KmerConst::new(READLEN, SEQLEN, EXTENT);
@@ -278,7 +278,7 @@ mod tests {
 			}
 		}
 		//800100000000001a
-		println!("{:x}", ks.kmp[0]);
+		println!("test_17_c(): {:x}", ks.kmp[0]);
 		assert_ne!(ks.kmp[0], 0);
 		for i in 1..ks.kmp.len() {
 			assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);

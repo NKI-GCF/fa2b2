@@ -94,9 +94,12 @@ impl<'a> KmerIter<'a> {
 		println!("search");
 		let mut first_unused = occ.len();
 		for i in 0..occ.len() {
-			println!("({:x}){:x} vs {:x}", occ[i].loc.p, occ[i].get_extreme().p, former.to_u64().unwrap());
-			if occ[i].get_extreme().p.extpos() == former.extpos() {
-				println!("found.");
+			println!("({:x}){:x} vs {:x}", occ[i].loc.p, occ[i].get_mark().p, former.to_u64().unwrap());
+			if i == 0 && occ[i].loc.p.pos() == former.pos() {
+				println!("found 0.");
+				return 0;
+			} else if occ[i].get_mark().p.extpos() == former.extpos() {
+				println!("found {}.", i);
 				return i;
 			}
 			if first_unused == occ.len()
@@ -153,8 +156,8 @@ impl<'a> KmerIter<'a> {
 
 				let former_u64 = self.ks.kmp[new.idx];
 				let mut former: T = T::from_u64(former_u64).unwrap();
-				let extreme = occ[q].get_extreme().p;
-				debug_assert!(extreme != 0);
+				let mark = occ[q].get_mark().p;
+				debug_assert!(mark != 0);
 
 				if former_u64 == (new.p | (1 << 63)) {
 					former = match former_stack.pop() {
@@ -194,13 +197,13 @@ impl<'a> KmerIter<'a> {
 						break;
 					}
 					println!("// occupied ({:08x}), former_stack({}) push: occ[{}].ext().p:{:016x}, former:{:016x}",
-					new.idx, former_stack.len(), q, extreme, former_u64);
-					former_stack.push(extreme);
+					new.idx, former_stack.len(), q, mark, former_u64);
+					former_stack.push(mark);
 				}
 				let is_template = if former.same_ori(new.p) {occ[q].is_template} else {!occ[q].is_template};
 
 				q = self.get_occ_idx::<T>(&occ, &former);
-				if q == occ.len() || occ[q].get_extreme().p != extreme {
+				if q == occ.len() || if q != 0 {occ[q].get_mark().p != mark} else {occ[q].loc.p.pos() != former.pos()} {
 					let plimits = self.get_plimits(&kc, former.b2pos());
 					let x = former.x();
 
@@ -222,7 +225,7 @@ impl<'a> KmerIter<'a> {
 					} {
 						debug_assert!(new_occ.loc.p.pos() < new_occ.plim, "{:x} < {:x} ?", new_occ.loc.p.pos(), new_occ.plim);
 					}
-					println!( "// occ insert: q:{}, {:x}", q, new_occ.get_extreme().p);
+					println!( "// occ insert: q:{}, {:x}", q, new_occ.get_mark().p);
 					if q == occ.len() {
 						occ.push(new_occ);
 					} else {

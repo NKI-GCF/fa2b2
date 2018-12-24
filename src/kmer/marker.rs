@@ -26,6 +26,8 @@ impl<'a> KmerIter<'a> {
 		KmerIter { ks, n_stretch: 0 }
 	}
 
+	/// return whether required nr of kmers for struct occurance were seen, since contig start.
+	/// adds 2bit to stored sequence, increments .p
 	fn complete_occurance(&mut self, occ: &mut Occurrence, b2: u8) -> bool {
 		let p = occ.loc.p.pos();
 		if let Some(qb) = self.ks.b2.get_mut(p as usize >> 3) {
@@ -33,10 +35,11 @@ impl<'a> KmerIter<'a> {
 		}
 		self.ks.p_max = (p + 2) & !1;
 		occ.add(b2);
+		debug_assert!(p != occ.loc.p.pos());
 		if occ.all_kmers() {
 			occ.turnover();
 			true
-		} else if occ.now_all_kmers() {
+		} else if occ.now_all_kmers() { // it just finished, wrap up last contig
 			let t = (occ.kc.readlen - 1) as u64;
 			self.ks.offset_contig(self.n_stretch - t);
 			self.n_stretch = t;
@@ -110,19 +113,18 @@ impl<'a> KmerIter<'a> {
 		return first_unused;
 	}
 
-	/// TODO: replace this function
 	/// when rebuilding eq for recurrent kmer, and extending take into account contig boundaries
 	/// for that site
 	pub fn get_plimits(&self, kc: &'a KmerConst, p: u64) -> (u64, u64) {
 		// binary search; limit endp to end of contig
-		assert!(p != 0);
+		debug_assert!(p != 0);
 		let i = self.ks.get_contig(p);
-		assert!(i < self.ks.contig.len());
+		debug_assert!(i < self.ks.contig.len());
 		//println!("contig[{}].twobit:{}, p:{}", i, ks.contig[i].twobit, p);
 
-		assert!(self.ks.contig[i].twobit <= p);
+		debug_assert!(self.ks.contig[i].twobit <= p);
 		let x = self.ks.get_twobit_before(i).unwrap_or(0);
-		let addl = (kc.max_no_kmers << 1) as u64;
+		let addl = ((kc.max_no_kmers + kc.kmerlen) << 1) as u64;
 		let p_max = self.ks.p_max;
 		let left = if p > x + addl { p - addl } else { x };
 		let right = cmp::min(
@@ -149,26 +151,30 @@ impl<'a> KmerIter<'a> {
 
 				let new = occ[q].eval_hash_turnover();
 
-				let mut former: T = T::from_u64(self.ks.kmp[new.idx]).unwrap();
-				let in_range = former.is_in_range(new.p);
+				let former_u64 = self.ks.kmp[new.idx];
+				let mut former: T = T::from_u64(former_u64).unwrap();
+				let extreme = occ[q].get_extreme().p;
+				debug_assert!(extreme != 0);
 
-				if in_range || former.is_replaceable_by(occ[q].loc.p) {
+				if former_u64 == (new.p | (1 << 63)) {
+					former = match former_stack.pop() {
+						Some(f) => T::from_u64(f).unwrap(),
+						None => break,
+					};
+					println!("\n// retrieved {:x} from former_stack", former);
+				} else if former.is_replaceable_by(occ[q].loc.p) {
 
-					if in_range {
-						eprintln!("in range");
-					} else {
-						self.ks.kmp[new.idx] = new.p | (1 << 63);
+					self.ks.kmp[new.idx] = new.p | (1 << 63);
 
-						occ[q].loc.unset_priority();
-					}
-					println!( "// [{}][{:08x}] = {:016x}", q, new.idx, self.ks.kmp[new.idx]);
+					occ[q].loc.unset_priority();
+					println!( "// [{}][{:08x}] = {:016x} dna:({:016x})", q, new.idx, self.ks.kmp[new.idx], occ[q].kmer.dna);
 
 					if former.b2pos() == 0 {
 						former = match former_stack.pop() {
 							Some(f) => T::from_u64(f).unwrap(),
 							None => break,
 						};
-						println!("\n// retrieved {:x} from former_stack", former.to_u64().unwrap());
+						println!("\n// retrieved {:x} from former_stack", former);
 					}
 				} else {
 					if !occ[q].extend() {
@@ -187,23 +193,35 @@ impl<'a> KmerIter<'a> {
 						eprintln!("Unresolveable, cannot extend anymore.");
 						break;
 					}
-					println!("// unreplaceable, former_stack({}) push: occ[{}].loc.p:{:016x}", former_stack.len(), q, occ[q].loc.p);
-					former_stack.push(occ[q].get_extreme().p);
+					println!("// occupied ({:08x}), former_stack({}) push: occ[{}].ext().p:{:016x}, former:{:016x}",
+					new.idx, former_stack.len(), q, extreme, former_u64);
+					former_stack.push(extreme);
 				}
+				let is_template = if former.same_ori(new.p) {occ[q].is_template} else {!occ[q].is_template};
+
 				q = self.get_occ_idx::<T>(&occ, &former);
-				if q == occ.len() || occ[q].get_extreme().p != former.to_u64().unwrap() {
+				if q == occ.len() || occ[q].get_extreme().p != extreme {
 					let plimits = self.get_plimits(&kc, former.b2pos());
 					let x = former.x();
 
-					// not found.
+					eprintln!("// not found. building occurance from pos; is_template:{:?}", is_template);
 
-					let is_forward = true; // FIXME
-					let mut new_occ = Occurrence::new(plimits, kc, x as u64, is_forward);
+
+					let mut new_occ = Occurrence::new(plimits, kc, x as u64, is_template);
+					//eprintln!("pos: {:x}, x:{}", former.b2pos(), x);
 					while {
 						let b2 = self.ks.b2_for_p(new_occ.loc.p.pos());
-						!self.complete_occurance(&mut new_occ, b2)
-							|| new_occ.marked[x][0].p.b2pos() != former.b2pos()
-					} {}
+						let is_complete = self.complete_occurance(&mut new_occ, b2);
+						/*eprintln!("[{:08x}] {:016x} dna:({:08x}), idx: {:08x}, p: {:x} ?", new_occ.loc.idx,
+						new_occ.loc.p, new_occ.kmer.dna, if is_complete {new_occ.marked[x][0].idx}
+						else {0}, if is_complete {new_occ.marked[x][0].p} else {0});*/
+						if is_complete {
+							new_occ.eval_hash_turnover();
+						}
+						!is_complete || new_occ.marked[x][0].p.b2pos() != former.b2pos()
+					} {
+						debug_assert!(new_occ.loc.p.pos() < new_occ.plim, "{:x} < {:x} ?", new_occ.loc.p.pos(), new_occ.plim);
+					}
 					println!( "// occ insert: q:{}, {:x}", q, new_occ.get_extreme().p);
 					if q == occ.len() {
 						occ.push(new_occ);

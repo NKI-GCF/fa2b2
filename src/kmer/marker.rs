@@ -16,216 +16,187 @@ use self::occurrence::Occurrence;
 use std::cmp;
 use std::slice::Iter;
 
-pub struct KmerIter<'a> {
-	pub ks: &'a mut KmerStore,
+#[macro_export]
+macro_rules! dbgf {
+	($l:literal) => ({
+		eprint!("[{}:{}] {}\n", file!(), line!(), stringify!($l));
+		assert!(cfg!(debug_assertions));
+		$l
+	});
+	($fmt:literal, $expr:expr$(, $opt:expr)*) => {
+		match $expr {
+			expr => {
+				eprint!(concat!("[{}:{}] {} = ", $fmt, "\n"), file!(), line!(), stringify!($expr), &expr$(, $opt)*);
+				assert!(cfg!(debug_assertions));
+				expr
+			}
+		}
+	}
+}
+
+
+
+pub struct KmerIter {
 	n_stretch: u64,
+	goffs: u64,
 } //^-^\\
 
-impl<'a> KmerIter<'a> {
-	pub fn new(ks: &'a mut KmerStore) -> Self {
-		KmerIter { ks, n_stretch: 0 }
+impl<'a> KmerIter {
+	pub fn new() -> Self {
+		KmerIter { n_stretch: 0, goffs: 0 }
 	}
 
-	/// return whether required nr of kmers for struct occurance were seen, since contig start.
-	/// adds 2bit to stored sequence, increments .p
-	fn complete_occurance(&mut self, occ: &mut Occurrence, b2: u8) -> bool {
-		let p = occ.loc.p.pos();
-		if let Some(qb) = self.ks.b2.get_mut(p as usize >> 3) {
-			*qb |= b2 << (p & 6);
-		}
-		self.ks.p_max = (p + 2) & !1;
-		occ.add(b2);
-		debug_assert!(p != occ.loc.p.pos());
-		if occ.all_kmers() {
-			occ.turnover();
-			true
-		} else if occ.now_all_kmers() { // it just finished, wrap up last contig
-			let t = (occ.kc.readlen - 1) as u64;
-			self.ks.offset_contig(self.n_stretch - t);
-			self.n_stretch = t;
-			true
-		} else {
-			false
+	fn finalize_n_stretch_if_pending(&mut self, ks: &mut KmerStore<u64>) {
+		if self.n_stretch > 0 {
+			eprintln!("added new contig. Ns:{}", self.n_stretch);
+			ks.offset_contig(self.n_stretch);
+			self.goffs += self.n_stretch;
+			self.n_stretch = 0;
 		}
 	}
 
 	/// if N, insert contig (once) and count stretch, false
 	/// else store and update occurrance kmers, complete ? true : false
 	fn complete_occurance_or_contig(
-		&mut self,
-		occ: &mut Occurrence<'a>,
+		&mut self, ks: &mut KmerStore<u64>,
+		occ: &mut Occurrence,
 		b2: u8,
-		goffs: u64,
 	) -> bool {
-		if b2 < 4 && self.complete_occurance(occ, b2) {
-			true
+		let p = occ.p.pos();
+		if b2 < 4 {
+			if let Some(qb) = ks.b2.get_mut(p as usize >> 3) {
+				*qb |= b2 << (p & 6);
+			}
+			ks.p_max = (p + 2) & !1;
+			if occ.complete(b2) {// ks, 
+				return true;
+			}
+			self.finalize_n_stretch_if_pending(ks);
+		} else if occ.i != 0 {
+			self.goffs += occ.i as u64;
+			eprintln!("started N-stretch at {}.", p);
+			ks.push_contig(p, self.goffs);
+
+			// clear all except orientation and position to rebuild at the start of a new contig.
+			//assert_eq!(occ.i, 1);
+			occ.d.clear();
+			occ.i = 0;
+			self.n_stretch = 1;
 		} else {
-			// N-stretch is incremented even until kmer is finished, this is corrected when incrementing contig.
-			if self.n_stretch == 0 {
-				let p = occ.loc.p.pos() - if b2 < 4 {1} else {0}; //was already incremented in complete_occurance() -> occ.add() -> loc.next()
-				self.ks.push_contig(p, goffs);
-
-				// clear all except orientation and position to rebuild at the start of a new contig.
-				occ.clear();
-			}
 			self.n_stretch += 1;
-			false
 		}
-	}
-
-	/*fn build_occ(&mut self, kc: &KmerConst, former: &KmerLoc, x: usize) -> Occurrence {
-		let plimits = self.get_plimits(&kc, former.b2pos());
-
-		println!( "// not found. {:016x} plim:{:?} {}", former.get(), plimits, x);
-
-		let is_forward = true; // FIXME
-		let mut new_occ = Occurrence::new(plimits, kc, x as u64, is_forward);
-		while {
-			let b2 = self.ks.b2_for_p(new_occ.loc.pos());
-			!self.complete_occurance(&mut new_occ, b2)
-				|| new_occ.marked[x][0].b2pos() != former.b2pos()
-		} {}
-		println!("// occ insert: {:x}", new_occ.get_extreme().get());
-		new_occ
-	}*/
-
-	fn get_occ_idx<T: MidPos>(&self, occ: &Vec<Occurrence<'a>>, former: &T) -> usize {
-
-		println!("search");
-		let mut first_unused = occ.len();
-		for i in 0..occ.len() {
-			println!("({:x}){:x} vs {:x}", occ[i].loc.p, occ[i].get_mark().p, former.to_u64().unwrap());
-			if i == 0 && occ[i].loc.p.pos() == former.pos() {
-				println!("found 0.");
-				return 0;
-			} else if occ[i].get_mark().p.extpos() == former.extpos() {
-				println!("found {}.", i);
-				return i;
-			}
-			if first_unused == occ.len()
-				&& occ[i].loc.p.top() == occ[i].ext
-				&& occ[i].loc.priority() != 0
-			{
-				assert_eq!(occ[i].loc.p.pos(), 0);
-				first_unused = i;
-			}
-		}
-		if first_unused == occ.len() {
-			println!("not found.");
-		}
-		return first_unused;
+		false
 	}
 
 	/// when rebuilding eq for recurrent kmer, and extending take into account contig boundaries
 	/// for that site
-	pub fn get_plimits(&self, kc: &'a KmerConst, p: u64) -> (u64, u64) {
+	fn get_plimits(&self, ks: &KmerStore<u64>, kc: &KmerConst, p: u64) -> (u64, u64) {
 		// binary search; limit endp to end of contig
 		debug_assert!(p != 0);
-		let i = self.ks.get_contig(p);
-		debug_assert!(i < self.ks.contig.len());
+		let i = ks.get_contig(p);
+		debug_assert!(i < ks.contig.len());
 		//println!("contig[{}].twobit:{}, p:{}", i, ks.contig[i].twobit, p);
 
-		debug_assert!(self.ks.contig[i].twobit <= p);
-		let x = self.ks.get_twobit_before(i).unwrap_or(0);
+		debug_assert!(ks.contig[i].twobit <= p);
+		let x = ks.get_twobit_before(i).unwrap_or(0);
 		let addl = ((kc.max_no_kmers + kc.kmerlen) << 1) as u64;
-		let p_max = self.ks.p_max;
+		let p_max = ks.p_max;
+		//eprintln!("p:{:x} > x:{:x} + addl:{:x} ?",  p, x, addl);
 		let left = if p > x + addl { p - addl } else { x };
 		let right = cmp::min(
 			p + (kc.readlen << 1) as u64,
-			self.ks.get_twobit_after(i).unwrap_or(p_max),
+			ks.get_twobit_after(i).unwrap_or(p_max),
 		);
 		(left, right)
 	}
+
 	pub fn markcontig<T: MidPos>(
-		&mut self,
-		occ: &mut Vec<Occurrence<'a>>,
+		&mut self, ks: &'a mut KmerStore<u64>,
 		seq: &mut Iter<u8>,
 		kc: &'a KmerConst,
 	) -> u64 {
+		let mut occ = vec![Occurrence::new((0, u64::max_value()), kc, 0, true)];
 		let mut q = 0;
-		let goffs = occ[0].loc.p.pos();
-		let mut former_stack: Vec<u64> = vec![];
-
+		self.goffs = 0;
+		ks.push_contig(occ[0].p.pos(), self.goffs);
 		while let Some(c) = seq.next() {
-			if !self.complete_occurance_or_contig(&mut occ[0], (*c >> 1) & 0x7, goffs) {
+			if !self.complete_occurance_or_contig(ks, &mut occ[0], (*c >> 1) & 0x7) {
 				continue;
 			}
 			loop {
-
-				let new = occ[q].eval_hash_turnover();
-
-				let former_u64 = self.ks.kmp[new.idx];
-				let mut former: T = T::from_u64(former_u64).unwrap();
-				let mark = occ[q].get_mark().p;
-				debug_assert!(mark != 0);
-
-				if former_u64 == (new.p | (1 << 63)) {
-					former = match former_stack.pop() {
-						Some(f) => T::from_u64(f).unwrap(),
-						None => break,
-					};
-					println!("\n// retrieved {:x} from former_stack", former);
-				} else if former.is_replaceable_by(occ[q].loc.p) {
-
-					self.ks.kmp[new.idx] = new.p | (1 << 63);
-
-					occ[q].loc.unset_priority();
-					println!( "// [{}][{:08x}] = {:016x} dna:({:016x})", q, new.idx, self.ks.kmp[new.idx], occ[q].kmer.dna);
-
-					if former.b2pos() == 0 {
-						former = match former_stack.pop() {
-							Some(f) => T::from_u64(f).unwrap(),
-							None => break,
-						};
-						println!("\n// retrieved {:x} from former_stack", former);
-					}
-				} else {
-					if !occ[q].extend() {
-						println!("unresolveable: TODO: kmers of adjoining regions like these?");
-						break;
-					}
-
-					if former.blacklisted_or_higher_extension(occ[q].loc.p) {
-						println!( "// kept former: blacklist-for or entry with higher extension.");
-						continue;
-					}
-					// identical extension: blacklist, handle former and then this p
-					self.ks.kmp[new.idx] += 1 << kc.extent;
-					self.ks.kmp[new.idx] &= !kc.pos_mask;
-					if ((self.ks.kmp[new.idx] & 0x7FFF000000000000) >> kc.extent) >= kc.ext_max() as u64 {
-						eprintln!("Unresolveable, cannot extend anymore.");
-						break;
-					}
-					println!("// occupied ({:08x}), former_stack({}) push: occ[{}].ext().p:{:016x}, former:{:016x}",
-					new.idx, former_stack.len(), q, mark, former_u64);
-					former_stack.push(mark);
-				}
-				let is_template = if former.same_ori(new.p) {occ[q].is_template} else {!occ[q].is_template};
-
-				q = self.get_occ_idx::<T>(&occ, &former);
-				if q == occ.len() || if q != 0 {occ[q].get_mark().p != mark} else {occ[q].loc.p.pos() != former.pos()} {
-					let plimits = self.get_plimits(&kc, former.b2pos());
-					let x = former.x();
-
-					eprintln!("// not found. building occurance from pos; is_template:{:?}", is_template);
-
-
-					let mut new_occ = Occurrence::new(plimits, kc, x as u64, is_template);
-					//eprintln!("pos: {:x}, x:{}", former.b2pos(), x);
-					while {
-						let b2 = self.ks.b2_for_p(new_occ.loc.p.pos());
-						let is_complete = self.complete_occurance(&mut new_occ, b2);
-						/*eprintln!("[{:08x}] {:016x} dna:({:08x}), idx: {:08x}, p: {:x} ?", new_occ.loc.idx,
-						new_occ.loc.p, new_occ.kmer.dna, if is_complete {new_occ.marked[x][0].idx}
-						else {0}, if is_complete {new_occ.marked[x][0].p} else {0});*/
-						if is_complete {
-							new_occ.eval_hash_turnover();
+				eprintln!("---\n");
+				if !occ[q].mark.is_set() {
+					let x = occ[q].p.x();
+					let offs = if x == 0 {0} else {1<<x};
+					let end_i = kc.max_no_kmers - offs;
+					for i in 0..end_i {
+						let (hash, p) = occ[q].get_hash_p(i, x, (end_i + offs - i) << 1);
+						if dbg!(occ[q].hash_is_extreme(hash, p, x)) {
+							break;
 						}
-						!is_complete || new_occ.marked[x][0].p.b2pos() != former.b2pos()
-					} {
-						debug_assert!(new_occ.loc.p.pos() < new_occ.plim, "{:x} < {:x} ?", new_occ.loc.p.pos(), new_occ.plim);
 					}
-					println!( "// occ insert: q:{}, {:x}", q, new_occ.get_mark().p);
+					dbgf!("{:#x?}", occ[q].mark.p);
+				}
+
+				let mark_idx = occ[q].mark.idx;
+				let mark_p = occ[q].mark.p;
+				let mut former = ks.kmp[mark_idx];
+				debug_assert!(mark_p != 0);
+				//eprintln!("{:#x?}", former_stack);
+
+				if dbgf!("{:#?}: had stored kmer already this position?", former.is_same(mark_p | (1 << 63))) {
+					break;
+				} else if dbgf!("{:#?}: former:{:#016x}, mark_p:{:#016x}", former.is_replaceable_by(mark_p), former, mark_p) {
+
+					ks.kmp[mark_idx] = dbgf!("{:x}: position set for kmer [{:#x}]", mark_p, mark_idx);
+					ks.kmp[mark_idx].set_priority();
+
+					occ[q].p.unset_priority();
+
+					if dbgf!("{:#?}: if blacklisted former occ requires no extension.", former.blacklisted()) {
+						break;
+					} // else need to update former.
+				} else if dbgf!("{:#?}: extend(), still possible?", occ[q].extend()) {
+					occ[q].mark.reset();
+					// not done yet with occ[q]. It was extended and needs to be reevaluated for new mark.
+					continue;
+				} else {
+					ks.kmp[mark_idx].blacklist();
+					break;
+				}
+
+				// FIXME: can we circumvent a linear search here?
+				eprintln!("search whether there was already an occurance for former position");
+				q = occ.len();
+				for i in 0..occ.len() {
+					eprintln!("{:#x} vs {:#x}", occ[i].mark.p, former);
+					if (i == 0 && occ[i].mark.p.pos() == former.pos()) || occ[i].mark.p.extpos() == former.extpos() {
+						eprintln!("found {}.", i);
+						q = i;
+						break;
+					}
+					if q == occ.len() && occ[i].p.pos() == 0 && occ[i].all_kmers() {
+						assert_eq!(occ[i].p.pos(), 0);
+						q = i;
+					}
+				}
+				if q == occ.len() || if q != 0 {occ[q].mark.p != former} else {occ[q].mark.p.pos() != former.pos()} {
+					eprintln!("not found, we have to build occ.");
+					let plimits = self.get_plimits(ks, &kc, former.b2pos());
+
+					let is_template = (former & 1) == 0; // XXX likely incorrect. In what direction
+					// do we need to extend?
+					//if former.same_ori(occ[q].mark.p) {occ[q].is_template} else {!occ[q].is_template};
+
+					let mut new_occ = Occurrence::new(plimits, kc, former.extension(), dbg!(is_template));
+					eprintln!("pos: {:#x}, x:{}", former.b2pos(), former.x());
+					while {
+						let b2 = ks.b2_for_p(new_occ.p.pos());
+						!new_occ.complete(b2) || new_occ.mark.p.b2pos() != former.b2pos()//ks, 
+					} {
+						debug_assert!(new_occ.p.pos() < new_occ.plim, "{:#x} < {:#x} ?", new_occ.p.pos(), new_occ.plim);
+					}
+					println!( "// occ insert: q:{}, {:#x}", q, new_occ.mark.p);
 					if q == occ.len() {
 						occ.push(new_occ);
 					} else {
@@ -234,11 +205,13 @@ impl<'a> KmerIter<'a> {
 
 				} else {
 					// found.
-					occ[q].loc.set_priority();
+					assert!(occ[q].all_kmers(), "{}, {}", occ[q].i, kc.readlen);
+					//occ[q].p.set_priority();
 				}
 			}
 		}
-		occ[0].loc.p.pos() - kc.kmerlen as u64
+		self.finalize_n_stretch_if_pending(ks);
+		occ[0].p.pos() as u64
 	}
 }
 
@@ -247,7 +220,6 @@ mod tests {
 	use super::KmerConst;
 	use super::KmerIter;
 	use super::KmerStore;
-	use super::Occurrence;
 	const READLEN: usize = 16;
 	const SEQLEN: usize = 250;
 	const EXTENT: u32 = 48;
@@ -255,7 +227,7 @@ mod tests {
 	/*#[test]
 	fn test_16_c() {
 		let c = KmerConst::new(READLEN, SEQLEN, extent);
-		let mut ks = KmerStore::new(c.bitlen);
+		let mut ks = KmerStore::<u64>::new(c.bitlen);
 		assert_eq!(ks.kmp.len(), 128);
 		{
 			let mut kmi = KmerIter::new(&mut ks);
@@ -277,34 +249,63 @@ mod tests {
 		//assert_eq!(kmi.markcontig(&mut vq, &mut seq2.iter(), &c), 0x48);
 	}*/
 	#[test]
+	fn test_16n() {
+		let kc = KmerConst::new(READLEN, SEQLEN, EXTENT);
+		let mut ks = KmerStore::<u64>::new(kc.bitlen);
+		{
+			let mut kmi = KmerIter::new();
+			let seq1: Vec<u8> = b"NNNNNNNNNNNNNNNN"[..].to_owned();
+			kmi.markcontig::<u64>(&mut ks, &mut seq1.iter(), &kc);
+		}
+		assert_eq!(ks.contig.len(), 1);
+		assert_eq!(ks.contig[0].twobit, 0);
+		assert_eq!(ks.contig[0].genomic, 16);
+	}
+	#[test]
+	fn test_1n() {
+		let kc = KmerConst::new(READLEN, SEQLEN, EXTENT);
+		let mut ks = KmerStore::<u64>::new(kc.bitlen);
+		{
+			let mut kmi = KmerIter::new();
+			let seq1: Vec<u8> = b"N"[..].to_owned();
+			kmi.markcontig::<u64>(&mut ks, &mut seq1.iter(), &kc);
+		}
+		assert_eq!(ks.contig.len(), 1);
+		assert_eq!(ks.contig[0].twobit, 0);
+		assert_eq!(ks.contig[0].genomic, 1);
+	}
+	#[test]
+	fn test_1n1c1n() {
+		let kc = KmerConst::new(READLEN, SEQLEN, EXTENT);
+		let mut ks = KmerStore::<u64>::new(kc.bitlen);
+		{
+			let mut kmi = KmerIter::new();
+			let seq1: Vec<u8> = b"NCN"[..].to_owned();
+			kmi.markcontig::<u64>(&mut ks, &mut seq1.iter(), &kc);
+		}
+		assert_eq!(ks.contig.len(), 2);
+		assert_eq!(ks.contig[0].twobit, 0);
+		assert_eq!(ks.contig[0].genomic, 1);
+		assert_eq!(ks.contig[1].twobit, 2);
+		assert_eq!(ks.contig[1].genomic, 3);
+
+	}
+	#[test]
 	fn test_17_c() {
-		let c = KmerConst::new(READLEN, SEQLEN, EXTENT);
-		let mut ks = KmerStore::new(c.bitlen);
+		let kc = KmerConst::new(READLEN, SEQLEN, EXTENT);
+		let mut ks = KmerStore::<u64>::new(kc.bitlen);
 		assert_eq!(ks.kmp.len(), 128);
 		{
-			let mut kmi = KmerIter::new(&mut ks);
-
-			let mut vq = vec![Occurrence::new((0, u64::max_value()), &c, 0, true)];
+			let mut kmi = KmerIter::new();
 
 			// XXX ik verwacht hier (17 x C!!) een multimapper, geen positie, maar geblacklist.
 			let seq1: Vec<u8> = b"CCCCCCCCCCCCCCCCC"[..].to_owned();
-			//let seq1: Vec<u8> = b"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"[..].to_owned();
-			//let seq1: Vec<u8> = b"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"[..].to_owned();
-			kmi.markcontig::<u64>(&mut vq, &mut seq1.iter(), &c);
-			if let Some(eq) = vq.get(0) {
-				assert_eq!(eq.kmer.dna, 0x55); // index out of bounds????
-				assert_eq!(eq.kmer.get_idx(true), 0);
-			} else {
-				panic!("out of bounds!?");
-			}
+			kmi.markcontig::<u64>(&mut ks, &mut seq1.iter(), &kc);
 		}
-		//800100000000001a
-		println!("test_17_c(): {:x}", ks.kmp[0]);
-		assert_ne!(ks.kmp[0], 0);
 		for i in 1..ks.kmp.len() {
 			assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);
 		}
-		//let seq2: Vec<u8> = b"ATCGTCACTGATATCGATCC"[..].to_owned();
-		//assert_eq!(kmi.markcontig(&mut vq, &mut seq2.iter(), &c), 0x48);
+		let unresolveable = (1 << 63) | ((kc.ext_max() as u64) << 48);
+		assert_eq!(ks.kmp[0], unresolveable, "test_17_c(): {:x}", ks.kmp[0]);
 	}
 }

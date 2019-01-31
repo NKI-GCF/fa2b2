@@ -6,7 +6,7 @@ extern crate bincode;
 extern crate clap;
 extern crate kmerconst;
 extern crate kmerstore;
-extern crate occurrence;
+extern crate kmerloc;
 
 // target/release/fa2b2 -k 16 /net/NGSanalysis/ref/Homo_sapiens.GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.fa test
 //
@@ -23,10 +23,10 @@ mod kmer;
 use kmer::marker::KmerIter;
 use self::kmerstore::KmerStore;
 use self::kmerconst::KmerConst;
-use self::occurrence::Occurrence;
+use self::kmerloc::PriExtPosOri;
 
 fn main() {
-    let matches = App::new("fa2b2")
+	let matches = App::new("fa2b2")
 		.version("1.0")
 		.about("Read genome fasta file and write 2bit and region data ")
 		.arg(Arg::with_name("ref")
@@ -57,46 +57,39 @@ fn main() {
 
 	let readlen = 64;
 	let extent = 48;
-	let c = KmerConst::new(readlen, chrs.iter().map(|x| x.len as usize).sum(), extent);
-	let mut ks = KmerStore::new(c.bitlen);
+	let kc = KmerConst::new(readlen, chrs.iter().map(|x| x.len as usize).sum(), extent);
+	let mut ks = KmerStore::<u64>::new(kc.bitlen);
 	ks.opt |= 1; // 
+	//ks.opt |= 2; // if set also non-priority (ext)kmers
 	{
-	    let mut vq = vec![Occurrence::new((0, u64::max_value()), &c, 0, true)];
-	    let mut kmi = KmerIter::new(&mut ks);
-	    println!("Chromosome\trunning unique count");
-	    for chr in &chrs {
-		let mut seq = Vec::with_capacity(chr.len as usize);
-		idxr.fetch_all(&chr.name).unwrap_or_else(|_| panic!("Error fetching {}.", &chr.name));
-		idxr.read(&mut seq).unwrap_or_else(|_| panic!("Error reading {}.", &chr.name));
+		let mut kmi = KmerIter::new();
+		println!("Chromosome\trunning unique count");
+		for chr in &chrs {
+			let mut seq = Vec::with_capacity(chr.len as usize);
+			idxr.fetch_all(&chr.name).unwrap_or_else(|_| panic!("Error fetching {}.", &chr.name));
+			idxr.read(&mut seq).unwrap_or_else(|_| panic!("Error reading {}.", &chr.name));
 
-		let p = kmi.markcontig::<u64>(&mut vq, &mut seq.iter(), &c);
-		println!("{}\t{}", &chr.name, p);
-		//break;
-	    }
+			let p = kmi.markcontig::<u64>(&mut ks, &mut seq.iter(), &kc);
+			println!("{}\t{}", &chr.name, p);
+			//break;
+		}
 	}
 	let mut stat = [[0; 8]; 4];
 	for k in ks.kmp {
-	    let priority = k & (1 << c.priority_shft);
-	    let ext = (k ^ priority) >> c.extent;
-	    let zeroed = (k & ((1 << c.extent) - 1)) == 0;
-	    let i = if priority == 0 {
-		if zeroed {3} else {1}
-	    } else {
-		if zeroed {2} else {0}
-	    };
-	    stat[i][ext as usize] += 1;
+		let i = if k.blacklisted() {2} else {0} | if k.priority() == 0 {1} else {0};
+		stat[i][k.x()] += 1;
 	}
 	for j in 0..8 {
-	    println!("Priority position, extension {}: {}", j, stat[0][j]);
+		println!("Priority position, extension {}: {}", j, stat[0][j]);
 	}
 	for j in 0..8 {
-	    println!("Non-priority position, extension {}: {}", j, stat[1][j]);
+		println!("Non-priority position, extension {}: {}", j, stat[1][j]);
 	}
 	for j in 0..8 {
-	    println!("Priority, zeroed, before extension {}: {}", j, stat[2][j]);
+		println!("Priority, blacklisted for extension {}: {}", j, stat[2][j]);
 	}
 	for j in 0..8 {
-	    println!("Non-priority, zeroed, extension {}: {}", j, stat[3][j]);
+		println!("Non-priority, blacklisted for extension {}: {}", j, stat[3][j]);
 	}
 
 

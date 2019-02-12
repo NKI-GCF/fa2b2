@@ -62,14 +62,14 @@ fn main() {
 	ks.opt |= 1; // 
 	//ks.opt |= 2; // if set also non-priority (ext)kmers
 	{
-		let mut kmi = KmerIter::new();
+		let mut kmi = KmerIter::new(&mut ks, &kc);
 		println!("Chromosome\trunning unique count");
 		for chr in &chrs {
 			let mut seq = Vec::with_capacity(chr.len as usize);
 			idxr.fetch_all(&chr.name).unwrap_or_else(|_| panic!("Error fetching {}.", &chr.name));
 			idxr.read(&mut seq).unwrap_or_else(|_| panic!("Error reading {}.", &chr.name));
 
-			let p = kmi.markcontig::<u64>(&mut ks, &mut seq.iter(), &kc);
+			let p = kmi.markcontig::<u64>(&mut seq.iter());
 			println!("{}\t{}", &chr.name, p);
 			//break;
 		}

@@ -126,7 +126,7 @@ impl<'a> KmerIter<'a> {
 
 		let plimits = self.get_plimits(stored_at_index.b2pos());
 
-		Occurrence::new(plimits, self.occ[0].kc, stored_at_index.extension(), dbg!(is_template))
+		Occurrence::new(plimits, self.occ[0].kc, stored_at_index.extension(), is_template)
 	}
 
 	fn search_occ_for_pos(&self, original_n: usize, stored_at_index: u64) -> usize {
@@ -176,16 +176,13 @@ impl<'a> KmerIter<'a> {
 
 					self.ks.kmp[min_index] = min_pos;
 					if dbg!(stored_at_index.is_set_and_not(min_pos)) {
-						let mut ori = self.occ[n].is_template;
+
+						let stored_ori = self.occ[n].get_ori_for_stored(stored_at_index);
 
 						n = self.search_occ_for_pos(n, stored_at_index);
 						if self.occ[dbg!(n)].mark.p != stored_at_index {
 
-							if stored_at_index & 1 != min_pos & 1 {
-								ori = !ori;
-							}
-
-							let next = self.rebuild_kmer_stack_with_extension(&mut stored_at_index, ori);
+							let next = self.rebuild_kmer_stack_with_extension(&mut stored_at_index, dbg!(stored_ori));
 
 							if n != 0 {
 								// position is written below, this self.occ[n] is done.
@@ -211,13 +208,15 @@ impl<'a> KmerIter<'a> {
 						self.ks.kmp[min_index].blacklist();
 						// both stored and current require extension
 
+						let stored_ori = self.occ[n].get_ori_for_stored(stored_at_index);
+
 						// search whether stored is already in self.occ (TODO enable binary search?)
 						n = self.search_occ_for_pos(n, stored_at_index);
 
 						if dbgf!(stored_at_index != self.occ[n].mark.p,
 								 "{:#?}\nn:{}: {:x}, {:x}", n, stored_at_index, self.occ[n].mark.p) {
-							let is_template = (stored_at_index & 1) == (min_pos & 1);
-							let next_stack = self.rebuild_kmer_stack_with_extension(&mut stored_at_index, is_template);
+
+							let next_stack = self.rebuild_kmer_stack_with_extension(&mut stored_at_index, dbg!(stored_ori));
 
 							n = self.occ.len();
 							self.occ.push_back(next_stack);

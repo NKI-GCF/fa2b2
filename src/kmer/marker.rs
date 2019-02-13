@@ -20,22 +20,31 @@ use std::collections::VecDeque;
 #[macro_export]
 macro_rules! dbgf {
 	($l:literal) => ({
-		eprint!("[{}:{}] {}\n", file!(), line!(), stringify!($l));
-		assert!(cfg!(debug_assertions));
+		if cfg!(debug_assertions) {
+			eprint!("[{}:{}] {}\n", file!(), line!(), stringify!($l));
+		}
 		$l
 	});
 	($expr:expr, $fmt:literal$(, $opt:expr)*) => {
 		match $expr {
 			expr => {
-				eprint!(concat!("[{}:{}] {} = ", $fmt, "\n"), file!(), line!(), stringify!($expr), &expr$(, $opt)*);
-				assert!(cfg!(debug_assertions));
+				if cfg!(debug_assertions) {
+					eprint!(concat!("[{}:{}] {} = ", $fmt, "\n"), file!(), line!(), stringify!($expr), &expr$(, $opt)*);
+				}
 				expr
 			}
 		}
 	}
 }
-
-
+macro_rules! dbgx {
+	($expr:expr) => ({
+		if cfg!(debug_assertions) {
+			dbg!($expr)
+		} else {
+			$expr
+		}
+	})
+}
 
 pub struct KmerIter<'a> {
 	n_stretch: u64,
@@ -136,7 +145,7 @@ impl<'a> KmerIter<'a> {
 		for n in 0..original_n {
 			if dbgf!(stored_at_index == self.occ[n].mark.p,
 					"{:#?}: {:#016x} == {:#016x}?", stored_at_index, self.occ[n].mark.p) {
-				return dbg!(n);
+				return dbgx!(n);
 			}
 		}
 		original_n
@@ -161,12 +170,8 @@ impl<'a> KmerIter<'a> {
 			if !self.complete_occurance_or_contig(n, b2) {
 				continue;
 			}
-			if n != 0 {
-				dbgf!(self.occ[n].mark.p, "{:#016x}");
-			}
+			if n != 0 { dbgf!(self.occ[n].mark.p, "{:#016x}"); }
 			loop {
-				eprintln!("\n--");
-
 				let (min_index, min_pos) = (self.occ[n].mark.idx, self.occ[n].mark.p);
 
 				let mut stored_at_index = self.ks.kmp[min_index];
@@ -175,14 +180,16 @@ impl<'a> KmerIter<'a> {
 					"{:#?}\nstored_at_index:{:#016x}, min_pos:{:#016x}\n", stored_at_index, min_pos) {
 
 					self.ks.kmp[min_index] = min_pos;
-					if dbg!(stored_at_index.is_set_and_not(min_pos)) {
+					dbgf!(self.ks.kmp[min_index], "{:#x} [{:#x}]", min_index);
+
+					if dbgx!(stored_at_index.is_set_and_not(min_pos)) {
 
 						let stored_ori = self.occ[n].get_ori_for_stored(stored_at_index);
 
 						n = self.search_occ_for_pos(n, stored_at_index);
-						if self.occ[dbg!(n)].mark.p != stored_at_index {
+						if self.occ[dbgx!(n)].mark.p != stored_at_index {
 
-							let next = self.rebuild_kmer_stack_with_extension(&mut stored_at_index, dbg!(stored_ori));
+							let next = self.rebuild_kmer_stack_with_extension(&mut stored_at_index, dbgx!(stored_ori));
 
 							if n != 0 {
 								// position is written below, this self.occ[n] is done.
@@ -194,7 +201,7 @@ impl<'a> KmerIter<'a> {
 								n += 1;
 							}
 						}
-					} else if dbg!(n > 0) {
+					} else if dbgx!(n > 0) {
 						let recurrent = self.occ.pop_back();
 						n -= 1;
 						continue;
@@ -202,9 +209,9 @@ impl<'a> KmerIter<'a> {
 
 					break; // position written (done) or added next_stack which requires extension.
 				}
-				if dbg!(self.occ[n].try_extension_redefine_minimum()) {
+				if dbgx!(self.occ[n].try_extension_redefine_minimum()) {
 
-					if dbg!(stored_at_index.extension() == min_pos.extension()) {
+					if dbgx!(stored_at_index.extension() == min_pos.extension()) {
 						self.ks.kmp[min_index].blacklist();
 						// both stored and current require extension
 
@@ -216,7 +223,7 @@ impl<'a> KmerIter<'a> {
 						if dbgf!(stored_at_index != self.occ[n].mark.p,
 								 "{:#?}\nn:{}: {:x}, {:x}", n, stored_at_index, self.occ[n].mark.p) {
 
-							let next_stack = self.rebuild_kmer_stack_with_extension(&mut stored_at_index, dbg!(stored_ori));
+							let next_stack = self.rebuild_kmer_stack_with_extension(&mut stored_at_index, dbgx!(stored_ori));
 
 							n = self.occ.len();
 							self.occ.push_back(next_stack);
@@ -226,12 +233,12 @@ impl<'a> KmerIter<'a> {
 					}
 				} else {
 					self.ks.kmp[min_index].blacklist();
-					if dbg!(n == 0) { // never pop 0th. 0th needs to be renewed when done.
+					if dbgx!(n == 0) { // never pop 0th. 0th needs to be renewed when done.
 						break;
 					}
 					let blacklisted = self.occ.pop_back();
 					n -= 1;
-					if dbg!(n == 0 && self.occ[n].mark.p == self.ks.kmp[self.occ[n].mark.idx]) {
+					if dbgx!(n == 0 && self.occ[n].mark.p == self.ks.kmp[self.occ[n].mark.idx]) {
 						// test already done
 						break;
 					}
@@ -357,8 +364,10 @@ mod tests {
 			let seq1: Vec<u8> = b"ATATATATATATATATA"[..].to_owned();
 			kmi.markcontig::<u64>(&mut seq1.iter());
 		}
-		for i in 1..ks.kmp.len() {
-			assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);
+		for i in 0..ks.kmp.len() {
+			if i != 0x0 && i != 0x22 {
+				assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);
+			}
 		}
 		let unresolveable = (1 << 63) | ((kc.ext_max() as u64) << 48);
 		assert_eq!(ks.kmp[0], unresolveable);

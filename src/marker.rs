@@ -118,24 +118,26 @@ impl<'a> KmerIter<'a> {
 		original_n
 	}
 
-	/// when a min_pos can replace an existing entry in ks.kmp, the existing entry
-	/// needs extension, and to be added to occ.
-	fn next_after_replacement(&mut self, stored_at_index: &mut u64, original_n: usize) -> usize {
+	/// when the stored entry in ks.kmp is replaced or blacklisted, the occurence for the stored
+	/// needs to be extended to find, there, a minposfor the extended kmers.
+	/// the entry is added to the stack, return the index.
+	fn get_next_for_extension(&mut self, stored_at_index: &mut u64, original_n: usize,
+						   is_replaced: bool) -> usize {
 
 		let original_stored_ori = self.occ[original_n].get_ori_for_stored(*stored_at_index);
 
 		let mut n = self.search_occ_for_pos(original_n, *stored_at_index);
-		if self.occ[dbgx!(n)].mark.p != *stored_at_index {
+		if *stored_at_index != self.occ[dbgx!(n)].mark.p {
 
-			let next = self.rebuild_kmer_stack_with_extension(stored_at_index, dbgx!(original_stored_ori));
+			let next_stack = self.rebuild_kmer_stack_with_extension(stored_at_index, dbgx!(original_stored_ori));
 
-			if n != 0 {
+			if is_replaced && n != 0 {
 				// position is written below, this self.occ[n] is done.
 				// Could add it to recurring kmer_stacks, though.
-				self.occ[n] = next;
+				self.occ[n] = next_stack;
 			} else {
 				// 0th is never overwritten.
-				self.occ.push(next);
+				self.occ.push(next_stack);
 				n += 1;
 			}
 		}
@@ -180,7 +182,7 @@ impl<'a> KmerIter<'a> {
 
 					if dbgx!(stored_at_index.is_set_and_not(min_pos)) {
 
-						n = self.next_after_replacement(&mut stored_at_index, n);
+						n = self.get_next_for_extension(&mut stored_at_index, n, true);
 
 					} else if dbgx!(n > 0) {
 						let recurrent = self.occ.pop();
@@ -196,23 +198,10 @@ impl<'a> KmerIter<'a> {
 
 					if dbgx!(stored_at_index.extension() == min_pos.extension()) {
 						self.ks.kmp[min_index].blacklist();
-						// both stored and current require extension
 
-						// keep before asignment of n:
-						let stored_ori = self.occ[n].get_ori_for_stored(stored_at_index);
+						// both stored and current require extensiona
+						n = self.get_next_for_extension(&mut stored_at_index, n, false);
 
-						// search whether stored is already in self.occ (TODO enable binary search?)
-						n = self.search_occ_for_pos(n, stored_at_index);
-
-						if dbgf!(stored_at_index != self.occ[n].mark.p,
-								 "{:#?}\nn:{}: {:x}, {:x}", n, stored_at_index, self.occ[n].mark.p) {
-
-							let next_stack = self.rebuild_kmer_stack_with_extension(&mut stored_at_index, dbgx!(stored_ori));
-
-							n = self.occ.len();
-							self.occ.push(next_stack);
-							// has to be rebuilt
-						}
 						break; // next_stack .
 					}
 				} else {

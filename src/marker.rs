@@ -7,7 +7,6 @@ extern crate num;
 
 use std::cmp;
 use std::slice::Iter;
-use std::collections::VecDeque;
 
 use kmerconst::KmerConst;
 use occurrence::Occurrence;
@@ -17,14 +16,13 @@ use kmerstore::KmerStore;
 pub struct KmerIter<'a> {
 	n_stretch: u64,
 	goffs: u64,
-	occ: VecDeque<Occurrence<'a>>,
+	occ: Vec<Occurrence<'a>>,
 	ks: &'a mut KmerStore<u64>,
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
 	pub fn new(ks: &'a mut KmerStore<u64>, kc: &'a KmerConst) -> Self {
-		let mut occ = VecDeque::new();
-		occ.push_back(Occurrence::new((0, u64::max_value()), kc, 0, true));
+		let occ = vec![Occurrence::new((0, u64::max_value()), kc, 0, true)];
 		KmerIter { n_stretch: 0, goffs: 0, occ, ks }
 	}
 
@@ -120,6 +118,39 @@ impl<'a> KmerIter<'a> {
 		original_n
 	}
 
+	/// when a min_pos can replace an existing entry in ks.kmp, the existing entry
+	/// needs extension, and to be added to occ.
+	fn next_after_replacement(&mut self, stored_at_index: &mut u64, original_n: usize) -> usize {
+
+		let original_stored_ori = self.occ[original_n].get_ori_for_stored(*stored_at_index);
+
+		let mut n = self.search_occ_for_pos(original_n, *stored_at_index);
+		if self.occ[dbgx!(n)].mark.p != *stored_at_index {
+
+			let next = self.rebuild_kmer_stack_with_extension(stored_at_index, dbgx!(original_stored_ori));
+
+			if n != 0 {
+				// position is written below, this self.occ[n] is done.
+				// Could add it to recurring kmer_stacks, though.
+				self.occ[n] = next;
+			} else {
+				// 0th is never overwritten.
+				self.occ.push(next);
+				n += 1;
+			}
+		}
+		n
+	}
+
+	fn next_b2(&self, seq: &mut Iter<u8>, n: usize) -> Option<u8> {
+		if n == 0 {
+			seq.next().map(|c| (c >> 1) & 7u8)
+		} else {
+			//dbgf!(self.occ[n].mark.p, "{:#016x}");
+			self.ks.b2_for_p(self.occ[n].p.pos())
+		}
+	}
+
 	pub fn markcontig<T: MidPos>(
 		&mut self,
 		seq: &mut Iter<u8>,
@@ -129,14 +160,8 @@ impl<'a> KmerIter<'a> {
 		self.goffs = 0;
 		self.ks.push_contig(self.occ[n].p.pos(), self.goffs);
 
-		while let Some(b2) = {
-			if n == 0 {
-				seq.next().map(|c| (c >> 1) & 7u8)
-			} else {
-				//dbgf!(self.occ[n].mark.p, "{:#016x}");
-				self.ks.b2_for_p(self.occ[n].p.pos())
-			}
-		}{
+		while let Some(b2) = self.next_b2(seq, n) {
+
 			if !self.complete_occurance_or_contig(n, b2) {
 				continue;
 			}
@@ -155,26 +180,10 @@ impl<'a> KmerIter<'a> {
 
 					if dbgx!(stored_at_index.is_set_and_not(min_pos)) {
 
-						// keep before asignment of n:
-						let stored_ori = self.occ[n].get_ori_for_stored(stored_at_index);
+						n = self.next_after_replacement(&mut stored_at_index, n);
 
-						n = self.search_occ_for_pos(n, stored_at_index);
-						if self.occ[dbgx!(n)].mark.p != stored_at_index {
-
-							let next = self.rebuild_kmer_stack_with_extension(&mut stored_at_index, dbgx!(stored_ori));
-
-							if n != 0 {
-								// position is written below, this self.occ[n] is done.
-								// Could add it to recurring kmer_stacks, though.
-								self.occ[n] = next;
-							} else {
-								// 0th is never overwritten.
-								self.occ.push_back(next);
-								n += 1;
-							}
-						}
 					} else if dbgx!(n > 0) {
-						let recurrent = self.occ.pop_back();
+						let recurrent = self.occ.pop();
 						// TODO add to another stack for fast lookup for multimappers.
 						n -= 1;
 						continue;
@@ -201,7 +210,7 @@ impl<'a> KmerIter<'a> {
 							let next_stack = self.rebuild_kmer_stack_with_extension(&mut stored_at_index, dbgx!(stored_ori));
 
 							n = self.occ.len();
-							self.occ.push_back(next_stack);
+							self.occ.push(next_stack);
 							// has to be rebuilt
 						}
 						break; // next_stack .
@@ -211,7 +220,7 @@ impl<'a> KmerIter<'a> {
 					if dbgx!(n == 0) { // never pop 0th. 0th needs to be renewed when done.
 						break;
 					}
-					let blacklisted = self.occ.pop_back();
+					let blacklisted = self.occ.pop();
 					// TODO: add blacklisted in unmappable regions.
 					n -= 1;
 					if dbgx!(n == 0 && self.occ[n].mark.p == self.ks.kmp[self.occ[n].mark.idx]) {

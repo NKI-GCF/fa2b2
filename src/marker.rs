@@ -2,49 +2,17 @@ extern crate arrayvec;
 extern crate bincode;
 extern crate bio;
 extern crate clap;
-extern crate kmerconst;
-extern crate kmerloc;
-extern crate kmerstore;
-extern crate occurrence;
 extern crate num_traits;
 extern crate num;
 
-use self::kmerconst::KmerConst;
-use self::kmerloc::{PriExtPosOri,MidPos};
-use self::kmerstore::KmerStore;
-use self::occurrence::Occurrence;
 use std::cmp;
 use std::slice::Iter;
 use std::collections::VecDeque;
 
-#[macro_export]
-macro_rules! dbgf {
-	($l:literal) => ({
-		if cfg!(debug_assertions) {
-			eprint!("[{}:{}] {}\n", file!(), line!(), stringify!($l));
-		}
-		$l
-	});
-	($expr:expr, $fmt:literal$(, $opt:expr)*) => {
-		match $expr {
-			expr => {
-				if cfg!(debug_assertions) {
-					eprint!(concat!("[{}:{}] {} = ", $fmt, "\n"), file!(), line!(), stringify!($expr), &expr$(, $opt)*);
-				}
-				expr
-			}
-		}
-	}
-}
-macro_rules! dbgx {
-	($expr:expr) => ({
-		if cfg!(debug_assertions) {
-			dbg!($expr)
-		} else {
-			$expr
-		}
-	})
-}
+use kmerconst::KmerConst;
+use occurrence::Occurrence;
+use kmerloc::{PriExtPosOri,MidPos};
+use kmerstore::KmerStore;
 
 pub struct KmerIter<'a> {
 	n_stretch: u64,
@@ -92,6 +60,7 @@ impl<'a> KmerIter<'a> {
 				self.ks.push_contig(p, self.goffs);
 
 				// clear all except orientation and position to rebuild at the start of a new contig.
+				//assert_eq!(occ.i, 1);
 				occ.d.clear();
 				occ.i = 0;
 				self.n_stretch = 1;
@@ -164,6 +133,7 @@ impl<'a> KmerIter<'a> {
 			if n == 0 {
 				seq.next().map(|c| (c >> 1) & 7u8)
 			} else {
+				//dbgf!(self.occ[n].mark.p, "{:#016x}");
 				self.ks.b2_for_p(self.occ[n].p.pos())
 			}
 		}{
@@ -172,6 +142,7 @@ impl<'a> KmerIter<'a> {
 			}
 			if n != 0 { dbgf!(self.occ[n].mark.p, "{:#016x}"); }
 			loop {
+
 				let (min_index, min_pos) = (self.occ[n].mark.idx, self.occ[n].mark.p);
 
 				let mut stored_at_index = self.ks.kmp[min_index];
@@ -184,6 +155,7 @@ impl<'a> KmerIter<'a> {
 
 					if dbgx!(stored_at_index.is_set_and_not(min_pos)) {
 
+						// keep before asignment of n:
 						let stored_ori = self.occ[n].get_ori_for_stored(stored_at_index);
 
 						n = self.search_occ_for_pos(n, stored_at_index);
@@ -203,6 +175,7 @@ impl<'a> KmerIter<'a> {
 						}
 					} else if dbgx!(n > 0) {
 						let recurrent = self.occ.pop_back();
+						// TODO add to another stack for fast lookup for multimappers.
 						n -= 1;
 						continue;
 					}
@@ -210,11 +183,13 @@ impl<'a> KmerIter<'a> {
 					break; // position written (done) or added next_stack which requires extension.
 				}
 				if dbgx!(self.occ[n].try_extension_redefine_minimum()) {
+					dbgf!(self.occ[n].mark.p, "{:x}, n:{}", n);
 
 					if dbgx!(stored_at_index.extension() == min_pos.extension()) {
 						self.ks.kmp[min_index].blacklist();
 						// both stored and current require extension
 
+						// keep before asignment of n:
 						let stored_ori = self.occ[n].get_ori_for_stored(stored_at_index);
 
 						// search whether stored is already in self.occ (TODO enable binary search?)
@@ -237,6 +212,7 @@ impl<'a> KmerIter<'a> {
 						break;
 					}
 					let blacklisted = self.occ.pop_back();
+					// TODO: add blacklisted in unmappable regions.
 					n -= 1;
 					if dbgx!(n == 0 && self.occ[n].mark.p == self.ks.kmp[self.occ[n].mark.idx]) {
 						// test already done

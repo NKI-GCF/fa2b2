@@ -1,7 +1,14 @@
+[[bin]]
+name = "fa2b2"
+
 [package]
 name = "fa2b2"
 version = "0.1.0"
 authors = ["Roel Kluin <r.kluin@nki.nl>"]
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["rlib", "dylib"]
 
 [dependencies]
 bio = "*"
@@ -13,9 +20,9 @@ bincode = "0.6.0"
 clap = "2.19.1"
 bit_reverse = "0.1.7"
 derive-new = "0.5"
-occurrence = { path = "../occurrence", version = "0.1.0" }
 kmerstore = { path = "../kmerstore", version = "0.1.0" }
-kmerconst = { path = "../kmerconst", version = "0.1.0" }
 kmerloc = { path = "../kmerloc", version = "0.1.0" }
 num-traits = "0.2"
 num = "0.2"
+rand = "0.5"
+

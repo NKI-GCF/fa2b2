@@ -4,9 +4,8 @@ extern crate arrayvec;
 extern crate rustc_serialize;
 extern crate bincode;
 extern crate clap;
-extern crate kmerconst;
-extern crate kmerstore;
-extern crate kmerloc;
+
+extern crate fa2b2;
 
 // target/release/fa2b2 -k 16 /net/NGSanalysis/ref/Homo_sapiens.GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.fa test
 //
@@ -19,11 +18,11 @@ use bio::io::fasta::IndexedReader;
 //use flate2::bufread::MultiGzDecoder;
 use clap::{App,Arg};
 
-mod kmer;
-use kmer::marker::KmerIter;
-use self::kmerstore::KmerStore;
-use self::kmerconst::KmerConst;
-use self::kmerloc::PriExtPosOri;
+use fa2b2::marker::KmerIter;
+use fa2b2::kmerstore::KmerStore;
+use fa2b2::kmerconst::KmerConst;
+use fa2b2::kmerloc::PriExtPosOri;
+
 
 fn main() {
 	let matches = App::new("fa2b2")

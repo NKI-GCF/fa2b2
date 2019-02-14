@@ -51,7 +51,6 @@ impl KmerConst {
 
 #[cfg(test)]
 mod tests {
-    use super::KmerConst;
     const READLEN: usize = 64;
     const KMERLEN: usize = 16;
     #[test]

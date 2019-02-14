@@ -90,4 +90,28 @@ impl<T: PriExtPosOri> KmerStore<T>
 	}
 }
 
+#[cfg(test)]
+mod tests {
+    use super::KmerStore;
+    #[test]
+    fn it_works() {
+        //let mut ks = KmerStore::new(32); // allocates 16 gig of data
+        let mut ks = KmerStore::<u64>::new(2);
+        let mut p = 0;
+        let goffs = p & !1;
 
+        ks.push_contig(p, goffs);
+                ks.offset_contig(10000);  // simulate N-stretch of 10000
+        p += 64;                  // 64 Nt's == one readlength
+        ks.push_contig(p, goffs);
+                ks.offset_contig(64);
+
+        ks.push_contig(p, goffs);
+        ks.offset_contig(10000); // another N-stretch of 10000
+        ks.push_contig(p, goffs);
+        let i = ks.get_contig(11016);
+        assert_eq!(ks.contig[i].twobit, 64);
+
+
+    }
+}

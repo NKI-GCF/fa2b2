@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use kmer::Kmer;
-use kmerconst::KmerConst;
+pub use kmerconst::KmerConst;
 use kmerloc::{KmerLoc,PriExtPosOri};
 
 
@@ -148,3 +148,83 @@ impl<'a> Occurrence<'a> {
 		false
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::KmerConst;
+	use super::Occurrence;
+
+	const READLEN: usize = 16;
+	const SEQLEN: usize = 250;
+	const EXTENT: u32 = 48;
+
+	#[test]
+	fn test_push_b2() {
+		let c = KmerConst::new(READLEN, SEQLEN, EXTENT);
+                let is_template = true;
+		let mut occ = Occurrence::new((0, 100), &c, 0, is_template);
+		for _ in 0..6 {
+			occ.complete(1);
+		}
+		assert_eq!(occ.kmer.dna, 0x55);
+		assert_eq!(occ.kmer.rc, 0xff);
+		assert_eq!(occ.p, 0xc);
+
+		occ.complete(2);
+		assert_eq!(occ.kmer.dna, 0x95);
+		assert_eq!(occ.kmer.rc, 0xfc);
+		assert_eq!(occ.p, 0xf);
+		assert_eq!(occ.kmer.get_idx(true), 0x6a);
+	}
+	#[test]
+	fn test_push_b2_rc() {
+		let c = KmerConst::new(READLEN, SEQLEN, EXTENT);
+                let is_template = false;
+		let mut occ = Occurrence::new((0, 16), &c, 0, is_template);
+		occ.complete(2);
+		for _ in 0..3 {
+			occ.complete(1);
+		}
+		assert_eq!(occ.p, 0x9);
+		assert_eq!(occ.kmer.dna, 0xfc);
+		assert_eq!(occ.kmer.rc, 0x95);
+		assert_eq!(occ.kmer.get_idx(true), 0x6a);
+	}
+	#[test]
+	fn test_ori1() {
+		let c = KmerConst::new(READLEN, SEQLEN, EXTENT);
+                let is_template = true;
+		let mut occ = Occurrence::new((0, 100), &c, 0, is_template);
+		occ.kmer.dna = 0xaa;
+		assert_eq!(occ.kmer.is_template(), true);
+	}
+
+	#[test]
+	fn test_ori2() {
+		let c = KmerConst::new(READLEN, SEQLEN, EXTENT);
+                let is_template = true;
+		let mut occ = Occurrence::new((0, 100), &c, 0, is_template);
+		occ.kmer.rc = 0xaa;
+		assert_eq!(occ.kmer.is_template(), false);
+	}
+
+	#[test]
+	fn occurrence() {
+		let c = KmerConst::new(READLEN, SEQLEN, EXTENT);
+                let is_template = true;
+		let mut occ = Occurrence::new((0, 100), &c, 0, is_template);
+		for _ in 0..8 {
+			occ.complete(0);
+		}
+		for _ in 0..8 {
+			occ.complete(1);
+		}
+		for _ in 0..8 {
+			occ.complete(2);
+		}
+		for _ in 0..8 {
+			occ.complete(3);
+		}
+	}
+}
+

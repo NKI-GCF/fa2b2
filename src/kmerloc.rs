@@ -28,7 +28,7 @@ ToPrimitive + LowerHex {
 
 impl PriExtPosOri for u64 {
 	fn extension(&self) -> u64 {
-		self & 0x7FFF000000000000
+		self & 0x7FFF_0000_0000_0000
 	}
 	fn x(&self) -> usize {
 		(self.extension() >> 48) as usize
@@ -40,14 +40,14 @@ impl PriExtPosOri for u64 {
 		(self & 1) == (p & 1)
 	}
 	fn top(&self) -> u64 {
-		*self & !0xFFFFFFFFFFFF
+		*self & !0x_FFFF_FFFF_FFFF
 	}
 	fn pos(&self) -> u64 {
-		*self & 0xFFFFFFFFFFFE
+		*self & 0x_FFFF_FFFF_FFFE
 	}
 	fn blacklist(&mut self) {
 		if !self.blacklisted() {
-			*self &= !0xFFFFFFFFFFFE;
+			*self &= !0x_FFFF_FFFF_FFFE;
 			self.extend();
 		}
 	}
@@ -59,7 +59,7 @@ impl PriExtPosOri for u64 {
 	}
 	fn set_extension(&mut self, x: u64) {
 		debug_assert!(x <= 0x7FFF);
-		*self &= 0x8000FFFFFFFFFFFF;
+		*self &= 0x8000_FFFF_FFFF_FFFF;
 		*self |= x << 48;
 	}
 	fn priority(&self) -> u64 {
@@ -69,10 +69,10 @@ impl PriExtPosOri for u64 {
 		*self |= 1 << 63;
 	}
 	fn unset_priority(&mut self) {
-		*self &= 0x7FFFFFFFFFFFFFFF;
+		*self &= 0x7FFF_FFFF_FFFF_FFFF;
 	}
 	fn clear_extension_and_priority(&mut self) {
-		*self &= 0xFFFFFFFFFFFF;
+		*self &= 0x_FFFF_FFFF_FFFF;
 	}
 	fn is_same(&self, other: u64) -> bool {
 		*self == other
@@ -91,7 +91,7 @@ impl MidPos for u64 {
 	/// The stored position is inbetween kmer or hash, and shifted. (pos << 1) - kmerlen + extension.
 	/// this converts it to start of sequence. Zero-based so the first kmer is at 0.
 	fn b2pos(&self) -> u64 {
-		let p = *self & 0xFFFFFFFFFFFE;
+		let p = *self & 0x_FFFF_FFFF_FFFE;
 		if p != 0 {
 			let ext = 1 << self.x();
 			debug_assert!(p >= ext, "{:x}, {:x}", p, ext);
@@ -135,7 +135,7 @@ impl<T: PriExtPosOri> KmerLoc<T> {
 	}
 
 	pub fn priority(&self) -> u64 {
-		self.p.to_u64().unwrap() & 0x8000000000000000
+		self.p.to_u64().unwrap() & 0x8000_0000_0000_0000
 	}
 	pub fn next(&mut self, ori: bool, is_template: bool) {
 		// ori == true if kmer is for template, then we want 1 in self.p

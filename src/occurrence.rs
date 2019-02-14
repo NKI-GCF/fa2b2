@@ -136,7 +136,7 @@ impl<'a> Occurrence<'a> {
 			}
 
 			if self.all_kmers() {
-				if self.i > self.kc.readlen && dbg!(self.mark_is_leaving()) {
+				if self.i > self.kc.readlen && dbgx!(self.mark_is_leaving()) {
 					// there is a leaving kmer and the extreme was popped.
 					// need to reestablish new ext from all kmers and extensions.
 					// but cannot be less than this extension:

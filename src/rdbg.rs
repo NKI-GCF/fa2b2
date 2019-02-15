@@ -3,7 +3,7 @@
 macro_rules! dbgf {
 	($l:literal) => ({
 		if cfg!(debug_assertions) {
-			eprint!("[{}:{}] {}\n", file!(), line!(), stringify!($l));
+			eprintln!("[{}:{}] {}", file!(), line!(), stringify!($l));
 		}
 		$l
 	});
@@ -11,7 +11,7 @@ macro_rules! dbgf {
 		match $expr {
 			expr => {
 				if cfg!(debug_assertions) {
-					eprint!(concat!("[{}:{}] {} = ", $fmt, "\n"), file!(), line!(), stringify!($expr), &expr$(, $opt)*);
+					eprintln!(concat!("[{}:{}] {} = ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*);
 				}
 				expr
 			}
@@ -26,6 +26,16 @@ macro_rules! dbgx {
 		} else {
 			$expr
 		}
+	})
+}
+
+#[macro_export]
+macro_rules! dbgln {
+	($expr:expr) => ({
+		if cfg!(debug_assertions) {
+			eprintln!($expr);
+		}
+		$expr
 	})
 }
 

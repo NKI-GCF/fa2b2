@@ -2,7 +2,8 @@ use std::collections::VecDeque;
 
 use kmer::Kmer;
 pub use kmerconst::KmerConst;
-use kmerloc::{KmerLoc,PriExtPosOri};
+use kmerloc::{KmerLoc,PriExtPosOri,MidPos};
+use kmerstore::KmerStore;
 
 
 // rename to Recurrance?
@@ -11,7 +12,7 @@ pub struct Occurrence<'a> {
 	pub p: u64,
 	pub is_template: bool, //
 	pub kmer: Kmer<u64>,
-	pub d: VecDeque<usize>,	   //
+	d: VecDeque<usize>,	   //
 	pub mark: KmerLoc<u64>,
 	pub i: usize,
 	pub plim: u64,
@@ -35,18 +36,17 @@ impl<'a> Occurrence<'a> {
 
 
 	pub fn extend(&mut self) -> bool {
-		self.p.extend();
-		self.p.x() < self.kc.ext_max()
+		if self.p.x() < self.kc.ext_max() {
+			self.p.extend();
+			self.p.x() < self.kc.ext_max()
+		} else {false}
 	}
 
 	pub fn try_extension_redefine_minimum(&mut self) -> bool {
-		self.p.extend();
-		if self.p.x() == self.kc.ext_max() {
-			false
-		} else {
+		if self.extend() {
 			self.set_next_mark();
 			true
-		}
+		} else {false}
 	}
 
 	pub fn all_kmers(&self) -> bool {
@@ -87,6 +87,7 @@ impl<'a> Occurrence<'a> {
 
 		self.mark.reset();
 		let x = self.p.x();
+		assert!(x < self.kc.ext_max());
 		let ext = (1 << x) >> 1;
 		let end_i = self.kc.max_no_kmers - (ext << 1);
 		let base = self.i - self.kc.kmerlen;
@@ -102,7 +103,7 @@ impl<'a> Occurrence<'a> {
 			}
 			if self.hash_is_extreme(hash, x) {
 				let p = self.p - ((end_i + ext - i) << 1) as u64;
-				self.mark.set(hash, dbgf!(p, "{:#016x}"), x);
+				self.mark.set(hash, p, x);
 			}
 		}
 	}

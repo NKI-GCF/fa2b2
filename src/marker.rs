@@ -59,7 +59,6 @@ impl<'a> KmerIter<'a> {
 
 				// clear all except orientation and position to rebuild at the start of a new contig.
 				//assert_eq!(occ.i, 1);
-				occ.d.clear();
 				occ.i = 0;
 				self.n_stretch = 1;
 				return false;
@@ -107,7 +106,6 @@ impl<'a> KmerIter<'a> {
 
 	fn search_occ_for_pos(&self, original_n: usize, stored_at_index: u64) -> usize {
 
-		assert!(original_n == self.occ.len() - 1);
 
 		for n in 0..original_n {
 			if dbgf!(stored_at_index == self.occ[n].mark.p,
@@ -175,10 +173,9 @@ impl<'a> KmerIter<'a> {
 				let mut stored_at_index = self.ks.kmp[min_index];
 
 				if dbgf!(stored_at_index.is_replaceable_by(min_pos),
-					"{:#?}\nstored_at_index:{:#016x}, min_pos:{:#016x}\n", stored_at_index, min_pos) {
+					"{:#?}\n[{:#x}] (= {:#016x}) <= {:#016x}?\n", min_index, stored_at_index, min_pos) {
 
 					self.ks.kmp[min_index] = min_pos;
-					dbgf!(self.ks.kmp[min_index], "{:#x} [{:#x}]", min_index);
 
 					if dbgx!(stored_at_index.is_set_and_not(min_pos)) {
 

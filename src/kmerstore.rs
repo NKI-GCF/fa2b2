@@ -83,7 +83,9 @@ impl<T: PriExtPosOri> KmerStore<T>
 		if i != 0 {Some(self.contig[i-1].twobit)} else {None}
 	}
 	pub fn b2_for_p(&self, p: u64) -> Option<u8> {
-		self.b2.get(p as usize >> 3).map(|x| (x >> (p & 6)) & 3)
+		let i = p as usize >> 3;
+		assert!(i < self.b2.len(), "{:x}, {:x}", i, self.b2.len());
+		self.b2.get(i).map(|x| (x >> (p & 6)) & 3)
 	}
 	pub fn is_available(&self, idx: usize, x: usize) -> bool {
 		self.kmp[idx].extpos() <= (x as u64) << 48

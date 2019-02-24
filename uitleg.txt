@@ -1,0 +1,71 @@
+
+Een xmer is de kmer van een template of reverse complement strand
+of zijn bitwise complement. Strand keuze is bepaald door in welke
+van de twee kmers de eerste bit, die tussen de twee verschilt, is
+gezet. Aangezien gegarandeerd gezet, is het bitwise complement
+ook uniek. Dit complement wordt genomen als de hoogste bit van de
+gekozen kmer is gezet, wat de resulterende xmer een bit verkleint.
+
+Binnen een venster, de gegeven readlengte, wordt gezocht naar de
+minimale xmer als index voor opslag van strand, positie, extensie   <= TODO: pos xmer midden?
+en prioriteit. Extensie blijft nul zolang de xmer uniek is. De
+prioriteit, de hoogste bit, is gezet in deze informatie.
+
+In eerste instantie itereren we over de contig, als twobits, en
+bouwen/updaten een template en reverse complement kmers om de xmer
+te beplanen. De gehele genomische twobit sequentie wordt ook
+opgeslagen, evenals de genomische coordinaten voor contigs en N-
+stretches met hun lengte.
+
+Als voor een readlengte het xmer minimum niet uniek op het genoom
+is, zit er al informatie opgeslagen voor deze index. Nieuwe en
+opgeslagen informatie wordt vergeleken, de informatie met de
+hoogste extensie komt er te staan. Indien extensie gelijk is komt
+er een blacklisting te staan voor deze extensie: Een nul positie
+met deze extensie plus een. Voor de nu niet opgeslagen informatie
+volgt er een oplossing:
+
+Voor elke in limbo positie wordt met de genomisch opgeslagen
+twobit sequentie het venster gerepliceerd, waarbinnen de xmer als   <= assertie: zelfde xmer?
+minimum naar voren kwam. Maar wordt de extensie verhoogd en zoeken
+we binnen de readlangte hashes van twee xmers, op een afstand van
+elkaar, bepaald door de extensie. Hieruit kiezen we er een hash om
+te gebruiken als index voor de opslag van de informatie, extensie
+plus een. Dit keer is de gekozen hash niet het minimum, maar hangt
+dit af van de extensie.
+
+Indien na extensie de verkregen hash index nog niet uniek is,
+groeit de extensie verder, met een hash optimum van xmers met nog
+meer afstand ertussen als index, totdat of een ongebruikte of
+vervangbare index, met lagere extensie, gevonden wordt of totdat
+de readlengte meer extensie niet toestaat, en er een blacklisting
+voor de hoogste extensie is komen te staan. De positie informatie
+daarbij achtergebleven wordt elders opgeslagen.                     <= niet 100% zeker over `elders'
+
+Een index zonder extensie, is een xmer, met als bijbehorende
+positie de twobit positie na de xmer. Een extended kmer is een xor
+hash van de kmer voor extensie en de kmer na de extensie. De
+bijbehorende positie is het gemiddelde van de twee kmer posities.
+Met een kmerlen 16 zijn er de extensies 2, 4, 8, 16..(16 x n), met  <= waarom niet midpoint?
+n tot hoever valt binnen de readlengte.                             <= TODO: nu nog alleen pow2
+
+Behalve multimappers wordt alle positie informatie in dezelfde
+array opgeslagen. Voor extensie nul wordt de minimale xmer als
+index gebruikt en dus zit deze informatie vooral opgeslagen in het
+eerste stuk van de array. Om index botsing te voorkomen zoekt elke
+extensie een ander optimum, de hashes worden in de hoogste bits
+gemoduleerd, met bitgewijs gespiegelde extensie, alvorens het
+zoeken naar een minimum.
+
+De regios waarbinnen vensters geen resolutie hebben worden           <= TODO
+bijgehouden. Na afloop worden voor nabijgelegen vensters de re
+
+Als een read geen extended kmer heeft met resolutie, worden in paired-end
+de minima van de twee mates met elkaar gehashed. Als de kmer zonder extensie
+niet werkt wordt de kmer hash met extensie 2 gebruikt voor beide reads om te
+hashen, etc. etc.
+
+
+
+
+

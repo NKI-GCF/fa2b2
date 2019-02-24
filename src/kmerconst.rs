@@ -10,6 +10,14 @@ pub struct KmerConst {
 	pub ext_max: usize,
 }
 
+pub fn afstand(x: usize, kmerlen: usize) -> usize {
+	let t = 1 << x;
+	if t <= kmerlen {t} else {
+		let n = kmerlen.next_power_of_two().trailing_zeros() as usize;
+		n + (x - n) * kmerlen
+	}
+}
+
 impl KmerConst {
 	pub fn new(readlen: usize, genomesize: usize) -> Self {
 		// bit width, required to store all (cumulative) genomic positions, is used as len
@@ -24,7 +32,7 @@ impl KmerConst {
 		let mut p = 0;
 		while {
 			p.extend();
-			(1 << p.x()) <= max_no_kmers
+			afstand(p.x(), kmerlen) <= max_no_kmers
 		}{}
 		println!("Using a kmerlength of {}, readlength of {}, ext_max: {}\n--", bitlen / 2, readlen, p.x());
 		KmerConst {

@@ -8,7 +8,6 @@ extern crate num;
 use std::cmp;
 use std::slice::Iter;
 
-use kmerconst::KmerConst;
 use occurrence::Occurrence;
 use kmerloc::{PriExtPosOri,MidPos};
 use kmerstore::KmerStore;
@@ -218,7 +217,7 @@ impl<'a> KmerIter<'a> {
 
 #[cfg(test)]
 mod tests {
-	use super::KmerConst;
+	use kmerconst::KmerConst;
 	use super::KmerIter;
 	use super::KmerStore;
 	use super::Occurrence;

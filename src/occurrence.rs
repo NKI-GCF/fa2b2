@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use kmer::Kmer;
-pub use kmerconst::KmerConst;
+pub use kmerconst::{KmerConst,afstand};
 use kmerloc::{KmerLoc,PriExtPosOri,MidPos};
 use kmerstore::KmerStore;
 
@@ -69,7 +69,7 @@ impl<'a> Occurrence<'a> {
 
 		self.mark.reset();
 		let x = self.p.x();
-		let end_i = (self.kc.max_no_kmers - (1 << x)) + 1;
+		let end_i = (self.kc.max_no_kmers - afstand(x, self.kc.kmerlen)) + 1;
 		let ext = (1 << x) >> 1;
 		debug_assert!(end_i != 0, "{:#x}, ext_max:{}", self.p, self.kc.ext_max);
 		let base = self.i - self.kc.kmerlen;

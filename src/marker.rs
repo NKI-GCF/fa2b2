@@ -16,8 +16,8 @@ use kmerstore::KmerStore;
 pub struct KmerIter<'a> {
 	n_stretch: u64,
 	goffs: u64,
-	occ: &'a mut Vec<Occurrence<'a>>,
-	ks: &'a mut KmerStore<u64>,
+	pub(super) occ: &'a mut Vec<Occurrence<'a>>,
+	pub(super) ks: &'a mut KmerStore<u64>,
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
@@ -94,12 +94,9 @@ impl<'a> KmerIter<'a> {
 		(left, right)
 	}
 
-	fn rebuild_kmer_stack_with_extension(&self, stored_at_index: &mut u64) -> Occurrence<'a> {
-
-		stored_at_index.extend();
+	fn rebuild_kmer_stack(&self, stored_at_index: &u64) -> Occurrence<'a> {
 
 		let plimits = self.get_plimits(stored_at_index.b2pos());
-
 		Occurrence::new(plimits, self.occ[0].kc, stored_at_index.extension())
 	}
 
@@ -124,7 +121,8 @@ impl<'a> KmerIter<'a> {
 		let mut n = self.search_occ_for_pos(original_n, *stored_at_index);
 		if *stored_at_index != self.occ[dbgx!(n)].mark.p {
 
-			let next_stack = self.rebuild_kmer_stack_with_extension(stored_at_index);
+			stored_at_index.extend();
+			let next_stack = self.rebuild_kmer_stack(stored_at_index);
 
 			if is_replaced && n != 0 {
 				// position is written below, this self.occ[n] is done.
@@ -224,9 +222,9 @@ mod tests {
 	use super::KmerIter;
 	use super::KmerStore;
 	use super::Occurrence;
+	use super::PriExtPosOri;
 	const READLEN: usize = 16;
 	const SEQLEN: usize = 250;
-	const EXTENT: u32 = 48;
 
 	fn process<'a>(occ: &'a mut Vec<Occurrence<'a>>, ks: &'a mut KmerStore<u64>, seq: Vec<u8>) {
 		let mut kmi = KmerIter::new(ks, occ);
@@ -235,7 +233,7 @@ mod tests {
 
 	#[test]
 	fn test_16n() {
-		let kc = KmerConst::new(READLEN, SEQLEN, EXTENT);
+		let kc = KmerConst::new(READLEN, SEQLEN);
 		let mut ks = KmerStore::<u64>::new(kc.bitlen);
 		{
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
@@ -247,7 +245,7 @@ mod tests {
 	}
 	#[test]
 	fn test_1n() {
-		let kc = KmerConst::new(READLEN, SEQLEN, EXTENT);
+		let kc = KmerConst::new(READLEN, SEQLEN);
 		let mut ks = KmerStore::<u64>::new(kc.bitlen);
 		{
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
@@ -259,7 +257,7 @@ mod tests {
 	}
 	#[test]
 	fn test_1n1c1n() {
-		let kc = KmerConst::new(READLEN, SEQLEN, EXTENT);
+		let kc = KmerConst::new(READLEN, SEQLEN);
 		let mut ks = KmerStore::<u64>::new(kc.bitlen);
 		{
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
@@ -273,8 +271,8 @@ mod tests {
 
 	}
 	#[test]
-	fn test_17_c() {
-		let kc = KmerConst::new(READLEN, SEQLEN, EXTENT);
+	fn test_17c() {
+		let kc = KmerConst::new(READLEN, SEQLEN);
 		let mut ks = KmerStore::<u64>::new(kc.bitlen);
 		{
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
@@ -284,12 +282,12 @@ mod tests {
 		for i in 1..ks.kmp.len() {
 			assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);
 		}
-		let unresolveable = (1 << 63) | ((kc.ext_max() as u64) << 48);
+		let unresolveable = (1 << 63) | ((kc.ext_max as u64) << 48);
 		assert_eq!(ks.kmp[0], unresolveable, "test_17_c(): {:x}", ks.kmp[0]);
 	}
 	#[test]
 	fn test_1n18c1n() {
-		let kc = KmerConst::new(READLEN, SEQLEN, EXTENT);
+		let kc = KmerConst::new(READLEN, SEQLEN);
 		let mut ks = KmerStore::<u64>::new(kc.bitlen);
 		{
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
@@ -298,12 +296,12 @@ mod tests {
 		for i in 1..ks.kmp.len() {
 			assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);
 		}
-		let unresolveable = (1 << 63) | ((kc.ext_max() as u64) << 48);
+		let unresolveable = (1 << 63) | ((kc.ext_max as u64) << 48);
 		assert_eq!(ks.kmp[0], unresolveable);
 	}
 	#[test]
 	fn test_1n16c() {
-		let kc = KmerConst::new(READLEN, SEQLEN, EXTENT);
+		let kc = KmerConst::new(READLEN, SEQLEN);
 		let mut ks = KmerStore::<u64>::new(kc.bitlen);
 		{
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
@@ -317,7 +315,7 @@ mod tests {
 	}
 	#[test]
 	fn test_16at1a() {
-		let kc = KmerConst::new(READLEN, SEQLEN, EXTENT);
+		let kc = KmerConst::new(READLEN, SEQLEN);
 		let mut ks = KmerStore::<u64>::new(kc.bitlen);
 		{
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
@@ -328,7 +326,66 @@ mod tests {
 				assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);
 			}
 		}
-		let unresolveable = (1 << 63) | ((kc.ext_max() as u64) << 48);
+		let unresolveable = (1 << 63) | ((kc.ext_max as u64) << 48);
 		assert_eq!(ks.kmp[0], unresolveable);
+	}
+	#[test]
+	fn test_reconstruct1() {
+		let kc = KmerConst::new(READLEN, SEQLEN);
+		let mut ks = KmerStore::<u64>::new(kc.bitlen);
+		let ks_kmp_len = ks.kmp.len();
+		let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+		let mut kmi = KmerIter::new(&mut ks, &mut occ);
+		let seq_vec =
+			b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..].to_owned();
+		let mut seq = seq_vec.iter();
+		kmi.markcontig::<u64>(&mut seq);
+		for i in 0..ks_kmp_len {
+			if kmi.ks.kmp[i] != 0 {
+				let mut p = kmi.ks.kmp[i];
+				if p.blacklisted() {
+					continue;
+				}
+				let new_stack = kmi.rebuild_kmer_stack(&p);
+				kmi.occ.push(new_stack);
+				while let Some(b2) = kmi.next_b2(&mut seq, 1) {
+					if kmi.complete_occurance_or_contig(1, b2) {
+						break;
+					}
+				}
+				let pop = kmi.occ.pop().unwrap().mark.p;
+				eprintln!("testing: [{:#x}]: {:#x} == {:#x}", i, pop, p);
+				assert_eq!(pop, p);
+			}
+		}
+	}
+	#[test]
+	fn test_reconstruct_simple() { // all mappable.
+		let kc = KmerConst::new(4, 15);
+		let mut ks = KmerStore::<u64>::new(kc.bitlen);
+		let ks_kmp_len = ks.kmp.len();
+		let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+		let mut kmi = KmerIter::new(&mut ks, &mut occ);
+		let seq_vec = b"GGAACCTTCAGAGTG"[..].to_owned();
+		let mut seq = seq_vec.iter();
+		kmi.markcontig::<u64>(&mut seq);
+		for i in 0..ks_kmp_len {
+			if kmi.ks.kmp[i] != 0 {
+				let mut p = kmi.ks.kmp[i];
+				if p.blacklisted() {
+					continue;
+				}
+				let new_stack = kmi.rebuild_kmer_stack(&p);
+				kmi.occ.push(new_stack);
+				while let Some(b2) = kmi.next_b2(&mut seq, 1) {
+					if kmi.complete_occurance_or_contig(1, b2) {
+						break;
+					}
+				}
+				let pop = kmi.occ.pop().unwrap().mark.p;
+				eprintln!("testing: [{:#x}]: {:#x} == {:#x}", i, pop, p);
+				assert_eq!(pop, p);
+			}
+		}
 	}
 }

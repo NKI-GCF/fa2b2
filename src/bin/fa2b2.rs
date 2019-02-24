@@ -56,8 +56,7 @@ fn main() {
 	let outfile = matches.value_of("out").unwrap();
 
 	let readlen = 64;
-	let extent = 48;
-	let kc = KmerConst::new(readlen, chrs.iter().map(|x| x.len as usize).sum(), extent);
+	let kc = KmerConst::new(readlen, chrs.iter().map(|x| x.len as usize).sum());
 	let mut ks = KmerStore::<u64>::new(kc.bitlen);
 	ks.opt |= 1; // 
 	//ks.opt |= 2; // if set also non-priority (ext)kmers

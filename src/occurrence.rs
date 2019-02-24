@@ -34,9 +34,9 @@ impl<'a> Occurrence<'a> {
 
 
 	pub fn extend(&mut self) -> bool {
-		if self.p.x() < self.kc.ext_max() {
+		if self.p.x() < self.kc.ext_max {
 			self.p.extend();
-			self.p.x() < self.kc.ext_max()
+			self.p.x() < self.kc.ext_max
 		} else {false}
 	}
 
@@ -69,9 +69,9 @@ impl<'a> Occurrence<'a> {
 
 		self.mark.reset();
 		let x = self.p.x();
-		assert!(x < self.kc.ext_max());
+		let end_i = (self.kc.max_no_kmers - (1 << x)) + 1;
 		let ext = (1 << x) >> 1;
-		let end_i = self.kc.max_no_kmers - (ext << 1);
+		debug_assert!(end_i != 0, "{:#x}, ext_max:{}", self.p, self.kc.ext_max);
 		let base = self.i - self.kc.kmerlen;
 
 		for i in 0..end_i {
@@ -88,6 +88,7 @@ impl<'a> Occurrence<'a> {
 				self.mark.set(hash, p, x);
 			}
 		}
+		debug_assert!(self.mark.is_set());
 	}
 
 	/// add b2 to kmer, move .p according to occ orientation
@@ -101,7 +102,7 @@ impl<'a> Occurrence<'a> {
 		if self.i >= self.kc.kmerlen { // some kmers
 			let t = (self.i - self.kc.kmerlen) % self.kc.max_no_kmers;
 
-			assert!(t < self.d.len(), "i:{} kml:{} t:{}, dlen:{}", self.i, self.kc.kmerlen, t, self.d.len());
+			debug_assert!(t < self.d.len(), "i:{} kml:{} t:{}, dlen:{}", self.i, self.kc.kmerlen, t, self.d.len());
 			self.d[t] = self.kmer.get_idx(true);
 			//println!("[{}], idx:{}", self.i, self.d[t]);
 			let x_start = if n == 0 {0} else {self.p.x()};
@@ -125,6 +126,7 @@ impl<'a> Occurrence<'a> {
 
 			if self.all_kmers() {
 				if self.i > self.kc.readlen && dbgx!(self.mark_is_leaving()) {
+					debug_assert!(n == 0);
 					// there is a leaving kmer and the extreme was popped.
 					// need to reestablish new ext from all kmers and extensions.
 					// but cannot be less than this extension:
@@ -145,11 +147,10 @@ mod tests {
 
 	const READLEN: usize = 16;
 	const SEQLEN: usize = 250;
-	const EXTENT: u32 = 48;
 
 	#[test]
 	fn test_push_b2() {
-		let c = KmerConst::new(READLEN, SEQLEN, EXTENT);
+		let c = KmerConst::new(READLEN, SEQLEN);
 		let ks = KmerStore::<u64>::new(c.bitlen);
 		let mut occ = Occurrence::new((0, 100), &c, 0);
 		for _ in 0..6 {
@@ -167,7 +168,7 @@ mod tests {
 	}
 	#[test]
 	fn occurrence() {
-		let c = KmerConst::new(READLEN, SEQLEN, EXTENT);
+		let c = KmerConst::new(READLEN, SEQLEN);
 		let ks = KmerStore::<u64>::new(c.bitlen);
 		let mut occ = Occurrence::new((0, 100), &c, 0);
 		for _ in 0..8 {

@@ -1,10 +1,15 @@
 
 Een xmer is de kmer van een template of reverse complement strand
-of zijn bitwise complement. Strand keuze is bepaald door in welke
-van de twee kmers de eerste bit, die tussen de twee verschilt, is
-gezet. Aangezien gegarandeerd gezet, is het bitwise complement
-ook uniek. Dit complement wordt genomen als de hoogste bit van de
-gekozen kmer is gezet, wat de resulterende xmer een bit verkleint.
+of een bitwise complement van een van de twee. Strand keuze wordt
+bepaald door te kijken naar de eerste bit die verschilt tussen de
+twee. De kmer met deze bit gezet wordt de xmer, of als de hoogste
+bit van de gekozen kmer was gezet, het bitwise complement ervan.
+
+De xmer die bitwise gecomplementeerd is kan niet overeenkomen met
+een kmer die als xmer gekozen zou worden, want deze kmer heeft de
+eerste bit die verschilt met zijn reverse complement niet gezet.
+Uitzondering zijn palindrome kmers. Hierbij wordt er gekeken naar
+de eerste bit, en wordt vergelijkbaar bitwise gecomplementeerd.
 
 Binnen een venster, de gegeven readlengte, wordt gezocht naar de
 minimale xmer als index voor opslag van strand, positie, extensie   <= TODO: pos xmer midden?

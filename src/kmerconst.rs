@@ -1,44 +1,47 @@
 use std::mem::size_of;
 use bit_reverse::ParallelReverse;
+use kmerloc::PriExtPosOri;
 
 pub struct KmerConst {
-	pub pos_mask: u64,
 	pub max_no_kmers: usize,
 	pub kmerlen: usize,
 	pub bitlen: usize,
 	pub readlen: usize,
-	pub priority_shft: usize,
-	pub extent: u32,
+	pub ext_max: usize,
+}
+
+pub fn afstand(x: usize, kmerlen: usize) -> usize {
+	let t = 1 << x;
+	if t <= kmerlen {t} else {
+		let n = kmerlen.next_power_of_two().trailing_zeros() as usize;
+		n + (x - n) * kmerlen
+	}
 }
 
 impl KmerConst {
-	pub fn new(readlen: usize, genomesize: usize, extent: u32) -> Self {
+	pub fn new(readlen: usize, genomesize: usize) -> Self {
 		// bit width, required to store all (cumulative) genomic positions, is used as len
 		println!("Genome size: {}", genomesize);
 
 		let mut bitlen = genomesize.next_power_of_two().trailing_zeros() as usize;
-		if (bitlen & 1) == 1 {
+		if (bitlen & 1) == 1 { // must be even.
 			bitlen += 1
 		}
 		let kmerlen = bitlen / 2;
 		let max_no_kmers = readlen - kmerlen;
-		println!("Using a kmerlength of {}, readlength of {}, ext_max: {}\n--", bitlen / 2, readlen, (max_no_kmers + 1).next_power_of_two().trailing_zeros());
+		let mut p = 0;
+		while {
+			p.extend();
+			afstand(p.x(), kmerlen) <= max_no_kmers
+		}{}
+		println!("Using a kmerlength of {}, readlength of {}, ext_max: {}\n--", bitlen / 2, readlen, p.x());
 		KmerConst {
-			pos_mask: (1 << extent) - 1,
 			max_no_kmers,
 			kmerlen,
 			bitlen,
 			readlen,
-			priority_shft: 8 * size_of::<u64>() - 1,
-			extent,
+			ext_max: p.x()
 		}
-	}
-	pub fn priority(&self) -> u64 {
-		1 << self.priority_shft
-	}
-	pub fn ext_max(&self) -> usize {
-		//(size_of::<usize>() * 8) - (self.max_no_kmers.leading_zeros() as usize) - 1
-		(self.max_no_kmers + 1).next_power_of_two().trailing_zeros() as usize
 	}
 
 	/// with given extension, create bitmask to flip high bits before extreme minimization
@@ -51,10 +54,10 @@ impl KmerConst {
 
 #[cfg(test)]
 mod tests {
-    const READLEN: usize = 64;
-    const KMERLEN: usize = 16;
-    #[test]
-    fn ext_max() {
-        assert_eq!(1, 1);
-    }
+	const READLEN: usize = 64;
+	const KMERLEN: usize = 16;
+	#[test]
+	fn ext_max() {
+	assert_eq!(1, 1);
+	}
 }

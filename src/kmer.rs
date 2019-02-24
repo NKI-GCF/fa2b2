@@ -13,11 +13,10 @@ pub struct Kmer<T> {
 
 /// return true if dna sequence has the bit set for the first bit that differs between complements
 pub fn test_template(dna: u64, rc: u64) -> bool {
-	 let deviant = dna ^ rc;
 	// The first bit that differs between complements, isolated with the '& wrapping_neg()',
 	// the devbit, dictates the orientation. If none is set, a palindrome, use bit 1.
-	let devbit = if deviant != 0 {deviant & deviant.wrapping_neg()} else {1};
-	(dna & devbit) != 0
+	let deviant = dna ^ rc;
+	(dna & if deviant != 0 {deviant.wrapping_neg() & deviant} else {1}) != 0
 }
 
 pub trait RevCmp<T: PrimInt + FromPrimitive> {

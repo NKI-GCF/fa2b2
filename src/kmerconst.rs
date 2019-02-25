@@ -11,7 +11,7 @@ pub struct KmerConst {
 }
 
 pub fn afstand(x: usize, kmerlen: usize) -> usize {
-	let t = 1 << x;
+	let t = if x == 0 {0} else {1 << x};
 	if t <= kmerlen {t} else {
 		let n = kmerlen.next_power_of_two().trailing_zeros() as usize;
 		n + (x - n) * kmerlen

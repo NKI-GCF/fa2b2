@@ -387,4 +387,33 @@ mod tests {
 			}
 		}
 	}
+	#[test]
+	fn test_reconstruct_simplest() { // all mappable.
+		let kc = KmerConst::new(2, 4);
+		let mut ks = KmerStore::<u64>::new(kc.bitlen);
+		let ks_kmp_len = ks.kmp.len();
+		let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+		let mut kmi = KmerIter::new(&mut ks, &mut occ);
+		let seq_vec = b"GCAT"[..].to_owned();
+		let mut seq = seq_vec.iter();
+		kmi.markcontig::<u64>(&mut seq);
+		for i in 0..ks_kmp_len {
+			if kmi.ks.kmp[i] != 0 {
+				let mut p = kmi.ks.kmp[i];
+				if p.blacklisted() {
+					continue;
+				}
+				let new_stack = kmi.rebuild_kmer_stack(&p);
+				kmi.occ.push(new_stack);
+				while let Some(b2) = kmi.next_b2(&mut seq, 1) {
+					if kmi.complete_occurance_or_contig(1, b2) {
+						break;
+					}
+				}
+				let pop = kmi.occ.pop().unwrap().mark.p;
+				eprintln!("testing: [{:#x}]: {:#x} == {:#x}", i, pop, p);
+				assert_eq!(pop, p);
+			}
+		}
+	}
 }

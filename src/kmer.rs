@@ -1,6 +1,7 @@
 use std::mem::size_of;
 use num_traits::PrimInt;
 use num::{FromPrimitive,ToPrimitive,Unsigned};
+use std::ops::BitXorAssign;
 
 #[derive(Copy, Clone)]
 /// A kmer that dissociates index and strand orientation
@@ -48,7 +49,7 @@ macro_rules! implement_revcmp { ($($ty:ty),*) => ($(
 implement_revcmp!(u8, u16, u32, u64, u128, usize);
 
 impl<T> Kmer<T>
-	where T: Unsigned + FromPrimitive + ToPrimitive
+	where T: Unsigned + FromPrimitive + ToPrimitive + BitXorAssign
   {
 	/// get a kmer for this length
 	pub fn new(kmerlen: u32) -> Self {
@@ -81,6 +82,11 @@ impl<T> Kmer<T>
 			topb2: T::from_u32(topb2).unwrap(),
 		}
 	}
+        pub fn hash(&mut self, other: Kmer<T>) {
+            self.dna ^= other.rc;
+            self.rc ^= other.dna;
+        }
+
 	/// adds twobit to kmer sequences, to .dna in the top two bits.
 	pub fn add(&mut self, b2: u8) {
 		debug_assert!(b2 <= 3);

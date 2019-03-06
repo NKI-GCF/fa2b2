@@ -3,7 +3,7 @@ use bit_reverse::ParallelReverse;
 use kmerloc::PriExtPosOri;
 
 pub struct KmerConst {
-	pub max_no_kmers: usize,
+	pub no_kmers: usize,
 	pub kmerlen: usize,
 	pub bitlen: usize,
 	pub readlen: usize,
@@ -11,7 +11,7 @@ pub struct KmerConst {
 }
 
 pub fn afstand(x: usize, kmerlen: usize) -> usize {
-	let t = if x == 0 {0} else {1 << x};
+	let t = if x == 0 {0} else {1 << (x-1)};
 	if t <= kmerlen {t} else {
 		let n = kmerlen.next_power_of_two().trailing_zeros() as usize;
 		n + (x - n) * kmerlen
@@ -28,15 +28,15 @@ impl KmerConst {
 			bitlen += 1
 		}
 		let kmerlen = bitlen / 2;
-		let max_no_kmers = readlen - kmerlen;
+		let no_kmers = readlen - kmerlen + 1;
 		let mut p = 0;
 		while {
 			p.extend();
-			afstand(p.x(), kmerlen) <= max_no_kmers
+			afstand(p.x(), kmerlen) < no_kmers
 		}{}
 		println!("Using a kmerlength of {}, readlength of {}, ext_max: {}\n--", bitlen / 2, readlen, p.x());
 		KmerConst {
-			max_no_kmers,
+			no_kmers,
 			kmerlen,
 			bitlen,
 			readlen,

@@ -84,7 +84,7 @@ impl<T: PriExtPosOri> KmerStore<T>
 	}
 	pub fn b2_for_p(&self, p: u64) -> Option<u8> {
 		let i = p as usize >> 3;
-		assert!(i < self.b2.len(), "{:x}, {:x}", i, self.b2.len());
+		assert!(i < self.b2.len(), "{:x}, {:x}", p, self.b2.len());
 		self.b2.get(i).map(|x| (x >> (p & 6)) & 3)
 	}
 	pub fn is_available(&self, idx: usize, x: usize) -> bool {

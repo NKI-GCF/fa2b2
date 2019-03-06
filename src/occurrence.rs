@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use kmer::Kmer;
+use kmer::{Kmer,test_template};
 pub use kmerconst::{KmerConst,afstand};
 use kmerloc::{KmerLoc,PriExtPosOri,MidPos};
 use kmerstore::KmerStore;
@@ -10,8 +10,7 @@ use kmerstore::KmerStore;
 pub struct Occurrence<'a> {
 	pub kc: &'a KmerConst,
 	pub p: u64,
-	pub kmer: Kmer<u64>,
-	d: VecDeque<usize>,	   //
+	d: VecDeque<Kmer<u64>>,	   //
 	pub mark: KmerLoc<u64>,
 	pub i: usize,
 	pub plim: u64,
@@ -24,12 +23,14 @@ impl<'a> Occurrence<'a> {
 		Occurrence {
 			kc,
 			p: kmp,
-			kmer: Kmer::new(kc.kmerlen as u32),
-			d: VecDeque::from(vec![0; kc.max_no_kmers]),
+			d: VecDeque::from(vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers]),
 			mark: KmerLoc::new(usize::max_value(), ext),
 			i: 0,
 			plim: ps.1,
 		}
+	}
+	pub fn kmer(&self) -> Kmer<u64> {
+		self.d[(self.i - self.kc.kmerlen) % self.kc.no_kmers]
 	}
 
 
@@ -55,37 +56,48 @@ impl<'a> Occurrence<'a> {
 		(hash ^ self.kc.ext_domain(x)) < self.mark.idx
 	}
 
-	fn next(&mut self, ori: bool) {
+	fn complete_kmer(&mut self, b2: u8) -> bool{
 
-		self.i += 1;
 		// ori == true if kmer is for template, then we want 1 in self.p
-		self.p += if ori {3} else {2} - (1 & self.p);
+		let new_idx = match self.i.checked_sub(self.kc.kmerlen).map(|i| i % self.kc.no_kmers) {
+			Some(old_idx) => {
+				let new_idx = if old_idx + 1 != self.kc.no_kmers {old_idx + 1} else {0};
+				self.d[new_idx] = self.d[old_idx];
+				new_idx
+			},
+			None => 0
+		};
+		self.p += if self.d[new_idx].update(b2, true) {3} else {2} - (1 & self.p);
+		self.i += 1;
+		self.i >= self.kc.kmerlen
 	}
 	fn mark_is_leaving(&self) -> bool {
-		self.p.pos() - ((self.kc.max_no_kmers as u64) << 1) == self.mark.p.pos() + 2
+		self.p.pos() - ((self.kc.no_kmers as u64) << 1) == self.mark.p.pos()
 	}
 
 	fn set_next_mark(&mut self) {
 
 		self.mark.reset();
 		let x = self.p.x();
-		let end_i = (self.kc.max_no_kmers - afstand(x, self.kc.kmerlen)) + 1;
-		let ext = (1 << x) >> 1;
+		let kmerlen = self.kc.kmerlen;
+		let end_i = self.kc.no_kmers - afstand(x, kmerlen);
+
 		debug_assert!(end_i != 0, "{:#x}, ext_max:{}", self.p, self.kc.ext_max);
-		let base = self.i - self.kc.kmerlen;
+		let base = self.i - kmerlen;
 
 		for i in 0..end_i {
 
-			let d_i = (base + i - end_i) % self.kc.max_no_kmers;
+			let d_i = (base + (self.kc.no_kmers - i)) % self.kc.no_kmers;
 
-			let mut hash = self.d[d_i];
+			let mut kmer = self.d[d_i];
 			if x > 0 {
-				let d_i2 = (base + i - self.kc.max_no_kmers) % self.kc.max_no_kmers;
-				hash ^= self.d[d_i2];
+				let d_i2 = (d_i + afstand(x, kmerlen)) % self.kc.no_kmers;
+				kmer.hash(self.d[d_i2]);
 			}
-			if self.hash_is_extreme(hash, x) {
-				let p = self.p - ((end_i + ext - i) << 1) as u64;
-				self.mark.set(hash, p, x);
+			let idx = kmer.get_idx(true);
+			if self.hash_is_extreme(idx, x) {
+				let p = self.p - ((end_i - i) << 1) as u64;
+				self.mark.set(idx, p, x);
 			}
 		}
 		debug_assert!(self.mark.is_set());
@@ -96,29 +108,28 @@ impl<'a> Occurrence<'a> {
 	/// adds 2bit to stored sequence
 	pub fn complete(&mut self, ks: &KmerStore<u64>, b2: u8, n: usize) -> bool {
 
-		let ori_change = self.kmer.update(b2, true);
+		if self.complete_kmer(b2) {
 
-		self.next(ori_change);
-		if self.i >= self.kc.kmerlen { // some kmers
-			let t = (self.i - self.kc.kmerlen) % self.kc.max_no_kmers;
-
-			debug_assert!(t < self.d.len(), "i:{} kml:{} t:{}, dlen:{}", self.i, self.kc.kmerlen, t, self.d.len());
-			self.d[t] = self.kmer.get_idx(true);
 			//println!("[{}], idx:{}", self.i, self.d[t]);
 			let x_start = if n == 0 {0} else {self.p.x()};
 
 			for x in x_start..(self.p.x() + 1) {
-				let t2 = self.kc.kmerlen + (if x == 0 {0} else {1 << x});
+				let afs = afstand(x, self.kc.kmerlen);
+				let t2 = self.kc.kmerlen + afs;
 				if self.i < t2 {
 					return false;
 				}
-				let hash = self.d[t] ^ if x == 0 {0} else {
-					self.d[(self.i - t2) % self.kc.max_no_kmers]
-				};
-				let mut p = self.p.with_ext_prior(x);
-				p -= (if x == 0 {0} else {1 << x}) as u64;
-				if self.hash_is_extreme(hash, x) && ks.kmp[hash].is_replaceable_by(p) {
+				let mut kmer = self.kmer();
+				if x != 0 {
+					kmer.hash(self.d[(self.i - afs) % self.kc.no_kmers]);
+				}
+				let hash = kmer.get_idx(true);
+				let mut p = self.p.with_ext_prior(x) - (afs << 1) as u64;
+				if self.hash_is_extreme(hash, x) && dbgx!(ks.kmp[hash].is_replaceable_by(p) || ks.kmp[hash].is_same(p)) {
 					self.mark.idx = hash;
+					if test_template(kmer.dna, kmer.rc) {
+						p |= 1;
+					}
 					self.mark.p = p;
 					break;
 				}
@@ -150,27 +161,29 @@ mod tests {
 
 	#[test]
 	fn test_push_b2() {
-		let c = KmerConst::new(READLEN, SEQLEN);
-		let ks = KmerStore::<u64>::new(c.bitlen);
-		let mut occ = Occurrence::new((0, 100), &c, 0);
+		let kc = KmerConst::new(READLEN, SEQLEN);
+		let ks = KmerStore::<u64>::new(kc.bitlen);
+		let mut occ = Occurrence::new((0, 100), &kc, 0);
 		for _ in 0..6 {
 			occ.complete(&ks, 1, 0);
 		}
-		assert_eq!(occ.kmer.dna, 0x55);
-		assert_eq!(occ.kmer.rc, 0xff);
+		let mut kmer = occ.kmer();
+		assert_eq!(kmer.dna, 0x55);
+		assert_eq!(kmer.rc, 0xff);
 		assert_eq!(occ.p, 0xc);
 
 		occ.complete(&ks, 2, 0);
-		assert_eq!(occ.kmer.dna, 0x95);
-		assert_eq!(occ.kmer.rc, 0xfc);
+		kmer = occ.kmer();
+		assert_eq!(kmer.dna, 0x95);
+		assert_eq!(kmer.rc, 0xfc);
 		assert_eq!(occ.p, 0xf);
-		assert_eq!(occ.kmer.get_idx(true), 0x6a);
+		assert_eq!(kmer.get_idx(true), 0x6a);
 	}
 	#[test]
 	fn occurrence() {
-		let c = KmerConst::new(READLEN, SEQLEN);
-		let ks = KmerStore::<u64>::new(c.bitlen);
-		let mut occ = Occurrence::new((0, 100), &c, 0);
+		let kc = KmerConst::new(READLEN, SEQLEN);
+		let ks = KmerStore::<u64>::new(kc.bitlen);
+		let mut occ = Occurrence::new((0, 100), &kc, 0);
 		for _ in 0..8 {
 			occ.complete(&ks, 0, 0);
 		}

@@ -22,6 +22,7 @@ ToPrimitive + LowerHex {
 	fn priority(&self) -> u64;
 	fn set_priority(&mut self);
 	fn unset_priority(&mut self);
+	fn clear_extension(&mut self);
 	fn clear_extension_and_priority(&mut self);
 	fn is_same(&self, other: u64) -> bool;
         fn with_ext_prior(&self, x: usize) -> u64;
@@ -48,7 +49,7 @@ impl PriExtPosOri for u64 {
 	}
 	fn blacklist(&mut self) {
 		if !self.blacklisted() {
-			*self &= !0x_FFFF_FFFF_FFFE;
+			*self &= !0x_FFFF_FFFF_FFFF;
 			self.extend();
 		}
 	}
@@ -72,6 +73,9 @@ impl PriExtPosOri for u64 {
 	fn unset_priority(&mut self) {
 		*self &= 0x7FFF_FFFF_FFFF_FFFF;
 	}
+	fn clear_extension(&mut self) {
+		*self &= 0x_7FFF_FFFF_FFFF;
+	}
 	fn clear_extension_and_priority(&mut self) {
 		*self &= 0x_FFFF_FFFF_FFFF;
 	}
@@ -86,29 +90,11 @@ impl PriExtPosOri for u64 {
 
 /// for extended kmers, where position is midpoint
 pub trait MidPos: PriExtPosOri {
-	fn b2pos(&self) -> u64;
 	fn is_replaceable_by(&self, new_entry: u64) -> bool;
 	fn is_set_and_not(&self, other: u64) -> bool;
 }
 
 impl MidPos for u64 {
-	/// The stored position is inbetween kmer or hash, and shifted. (pos << 1) - kmerlen + extension.
-	/// this converts it to start of sequence. Zero-based so the first kmer is at 0.
-	fn b2pos(&self) -> u64 {
-		let p = *self & 0x_FFFF_FFFF_FFFE;
-		if p != 0 {
-			let ext = 1 << self.x();
-			debug_assert!(p >= ext, "{:x}, {:x}", p, ext);
-			let half_ext = ext >> 1;
-			if half_ext == 0 {
-				p
-			} else {
-				p - half_ext
-			}
-		} else {
-			0
-		}
-	}
 	// *self == new_entry.top() ? blacklisted was extension below, but not new_entry's
 	fn is_replaceable_by(&self, new_entry: u64) -> bool {
 		*self <= new_entry.top() || self.pos() == new_entry.pos()

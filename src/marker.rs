@@ -80,14 +80,20 @@ impl<'a> KmerIter<'a> {
 		debug_assert!(i < self.ks.contig.len());
 		debug_assert!(self.ks.contig[i].twobit <= p);
 
-		let x = self.ks.get_twobit_before(i).unwrap_or(0);
+		let contig_start = self.ks.get_twobit_before(i).unwrap_or(0);
 		let kc = self.occ[0].kc;
-		let addl = ((kc.max_no_kmers + kc.kmerlen) << 1) as u64;
 		let p_max = self.ks.p_max;
-		//eprintln!("p:{:x} > x:{:x} + addl:{:x} ?",  p, x, addl);
-		let left = if p > x + addl { p - addl } else { x };
+
+		let p_readlengte = (kc.readlen << 1) as u64;
+
+		let left = if dbgx!(p >= contig_start + p_readlengte) {
+			p - p_readlengte
+		} else {
+			contig_start
+		};
+
 		let right = cmp::min(
-			p + (kc.readlen << 1) as u64,
+			p + p_readlengte,
 			self.ks.get_twobit_after(i).unwrap_or(p_max),
 		);
 		(left, right)
@@ -95,7 +101,7 @@ impl<'a> KmerIter<'a> {
 
 	fn rebuild_kmer_stack(&self, stored_at_index: &u64) -> Occurrence<'a> {
 
-		let plimits = self.get_plimits(stored_at_index.b2pos());
+		let plimits = self.get_plimits(stored_at_index.pos());
 		Occurrence::new(plimits, self.occ[0].kc, stored_at_index.extension())
 	}
 
@@ -110,6 +116,13 @@ impl<'a> KmerIter<'a> {
 		}
 		original_n
 	}
+	fn add_newstack(&mut self, next_stack: Occurrence<'a>, n: usize) {
+		if n < self.occ.len() {
+			self.occ[n] = next_stack;
+		} else {
+			self.occ.push(next_stack);
+		}
+	}
 
 	/// when the stored entry in ks.kmp is replaced or blacklisted, the occurence for the stored
 	/// needs to be extended to find, there, a minposfor the extended kmers.
@@ -118,10 +131,10 @@ impl<'a> KmerIter<'a> {
 						   is_replaced: bool) -> usize {
 
 		let mut n = self.search_occ_for_pos(original_n, *stored_at_index);
-		if *stored_at_index != self.occ[dbgx!(n)].mark.p {
+		if dbgx!(*stored_at_index != self.occ[n].mark.p) {
 
 			stored_at_index.extend();
-			let next_stack = self.rebuild_kmer_stack(stored_at_index);
+			let next_stack = self.rebuild_kmer_stack(dbgf!(stored_at_index, "{:#x}"));
 
 			if is_replaced && n != 0 {
 				// position is written below, this self.occ[n] is done.
@@ -129,8 +142,8 @@ impl<'a> KmerIter<'a> {
 				self.occ[n] = next_stack;
 			} else {
 				// 0th is never overwritten.
-				self.occ.push(next_stack);
 				n += 1;
+				self.add_newstack(next_stack, n);
 			}
 		}
 		n
@@ -140,7 +153,6 @@ impl<'a> KmerIter<'a> {
 		if n == 0 {
 			seq.next().map(|c| (c >> 1) & 7u8)
 		} else {
-			//dbgf!(self.occ[n].mark.p, "{:#016x}");
 			self.ks.b2_for_p(self.occ[n].p.pos())
 		}
 	}
@@ -159,15 +171,14 @@ impl<'a> KmerIter<'a> {
 			if !self.complete_occurance_or_contig(n, b2) {
 				continue;
 			}
-			if n != 0 { dbgf!(self.occ[n].mark.p, "{:#016x}"); }
 			loop {
 
 				let (min_index, min_pos) = (self.occ[n].mark.idx, self.occ[n].mark.p);
 
 				let mut stored_at_index = self.ks.kmp[min_index];
 
-				if dbgf!(stored_at_index.is_replaceable_by(min_pos),
-					"{:#?}\n[{:#x}] (= {:#016x}) <= {:#016x}?\n", min_index, stored_at_index, min_pos) {
+				if dbgx!(stored_at_index.is_replaceable_by(min_pos)) {
+					eprintln!("[{:#x}] (={:#016x}) <= {:#016x}", min_index, stored_at_index, min_pos);
 
 					self.ks.kmp[min_index] = min_pos;
 
@@ -175,9 +186,7 @@ impl<'a> KmerIter<'a> {
 
 						n = self.get_next_for_extension(&mut stored_at_index, n, true);
 
-					} else if dbgx!(n > 0) {
-						let recurrent = self.occ.pop();
-						// TODO add to another stack for fast lookup for multimappers.
+					} else if n > 0 {
 						n -= 1;
 						continue;
 					}
@@ -185,12 +194,11 @@ impl<'a> KmerIter<'a> {
 					break; // position written (done) or added next_stack which requires extension.
 				}
 				if dbgx!(self.occ[n].try_extension_redefine_minimum()) {
-					dbgf!(self.occ[n].mark.p, "{:x}, n:{}", n);
 
 					if dbgx!(stored_at_index.extension() == min_pos.extension()) {
 						self.ks.kmp[min_index].blacklist();
 
-						// both stored and current require extensiona
+						// both stored and current require extensions
 						n = self.get_next_for_extension(&mut stored_at_index, n, false);
 
 						break; // next_stack .
@@ -200,8 +208,6 @@ impl<'a> KmerIter<'a> {
 					if dbgx!(n == 0) { // never pop 0th. 0th needs to be renewed when done.
 						break;
 					}
-					let blacklisted = self.occ.pop();
-					// TODO: add blacklisted in unmappable regions.
 					n -= 1;
 					if dbgx!(n == 0 && self.occ[n].mark.p == self.ks.kmp[self.occ[n].mark.idx]) {
 						// test already done
@@ -346,15 +352,15 @@ mod tests {
 					continue;
 				}
 				let new_stack = kmi.rebuild_kmer_stack(&p);
-				kmi.occ.push(new_stack);
+				kmi.add_newstack(new_stack, 1);
 				while let Some(b2) = kmi.next_b2(&mut seq, 1) {
 					if kmi.complete_occurance_or_contig(1, b2) {
 						break;
 					}
 				}
-				let pop = kmi.occ.pop().unwrap().mark.p;
-				eprintln!("testing: [{:#x}]: {:#x} == {:#x}", i, pop, p);
-				assert_eq!(pop, p);
+				let mark_p = kmi.occ[1].mark.p;
+				eprintln!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", i, mark_p, p);
+				assert_eq!(mark_p, p);
 			}
 		}
 	}
@@ -375,15 +381,15 @@ mod tests {
 					continue;
 				}
 				let new_stack = kmi.rebuild_kmer_stack(&p);
-				kmi.occ.push(new_stack);
+				kmi.add_newstack(new_stack, 1);
 				while let Some(b2) = kmi.next_b2(&mut seq, 1) {
 					if kmi.complete_occurance_or_contig(1, b2) {
 						break;
 					}
 				}
-				let pop = kmi.occ.pop().unwrap().mark.p;
-				eprintln!("testing: [{:#x}]: {:#x} == {:#x}", i, pop, p);
-				assert_eq!(pop, p);
+				let mark_p = kmi.occ[1].mark.p;
+				eprintln!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", i, mark_p, p);
+				assert_eq!(mark_p, p);
 			}
 		}
 	}
@@ -404,15 +410,15 @@ mod tests {
 					continue;
 				}
 				let new_stack = kmi.rebuild_kmer_stack(&p);
-				kmi.occ.push(new_stack);
+				kmi.add_newstack(new_stack, 1);
 				while let Some(b2) = kmi.next_b2(&mut seq, 1) {
-					if kmi.complete_occurance_or_contig(1, b2) {
+					if kmi.complete_occurance_or_contig(1, dbgf!(b2, "= => (rebuild) twobit {:x}")) { // BUG here
 						break;
 					}
 				}
-				let pop = kmi.occ.pop().unwrap().mark.p;
-				eprintln!("testing: [{:#x}]: {:#x} == {:#x}", i, pop, p);
-				assert_eq!(pop, p);
+				let mark_p = kmi.occ[1].mark.p;
+				eprintln!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", i, mark_p, p);
+				assert_eq!(mark_p, p);
 			}
 		}
 	}

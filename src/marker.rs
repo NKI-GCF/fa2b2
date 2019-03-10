@@ -403,19 +403,13 @@ mod tests {
 			let ks_kmp_len = ks.kmp.len();
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
 			let mut kmi = KmerIter::new(&mut ks, &mut occ);
-			let seq_vec = [gen & 3, (gen >> 2) & 3, (gen >> 4) & 3, (gen >> 6) & 3];
-			eprint!("\nsequence: ");
-			for i in 0..4 {
-				match seq_vec[i] {
-					0 => eprint!("A"),
-					1 => eprint!("C"),
-					2 => eprint!("T"),
-					3 => eprint!("G"),
-					_ => panic!("here")
-				}
-			}
+			let seq_vec:Vec<_> = [gen & 3, (gen >> 2) & 3, (gen >> 4) & 3, (gen >> 6) & 3].iter().map(|b| match b {
+					0 => 'A', 1 => 'C', 2 => 'T', 3 => 'G', _ => panic!("here") }).collect();
+			eprint!("\nsequence: {:?}", seq_vec);
+
 			eprint!("\n");
-			let mut seq = seq_vec.iter();
+			let vv: Vec<u8> = seq_vec.iter().map(|&c| c as u8).collect();
+			let mut seq = vv.iter();
 			kmi.markcontig::<u64>(&mut seq);
 			let mut miss = 0;
 			for hash in 0..ks_kmp_len {

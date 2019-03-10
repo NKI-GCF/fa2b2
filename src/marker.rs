@@ -395,31 +395,58 @@ mod tests {
 	}
 	#[test]
 	fn test_reconstruct_simplest() { // all mappable.
-		let kc = KmerConst::new(2, 4);
-		let mut ks = KmerStore::<u64>::new(kc.bitlen);
-		let ks_kmp_len = ks.kmp.len();
-		let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
-		let mut kmi = KmerIter::new(&mut ks, &mut occ);
-		let seq_vec = b"GCAT"[..].to_owned();
-		let mut seq = seq_vec.iter();
-		kmi.markcontig::<u64>(&mut seq);
-		for i in 0..ks_kmp_len {
-			if kmi.ks.kmp[i] != 0 {
-				let mut p = kmi.ks.kmp[i];
-				if p.blacklisted() {
-					continue;
+
+		let mut errors = 0;
+		for gen in 0..=255 {
+			let kc = KmerConst::new(2, 4);
+			let mut ks = KmerStore::<u64>::new(kc.bitlen);
+			let ks_kmp_len = ks.kmp.len();
+			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+			let mut kmi = KmerIter::new(&mut ks, &mut occ);
+			let seq_vec = [gen & 3, (gen >> 2) & 3, (gen >> 4) & 3, (gen >> 6) & 3];
+			eprint!("\nsequence: ");
+			for i in 0..4 {
+				match seq_vec[i] {
+					0 => eprint!("A"),
+					1 => eprint!("C"),
+					2 => eprint!("T"),
+					3 => eprint!("G"),
+					_ => panic!("here")
 				}
-				let new_stack = kmi.rebuild_kmer_stack(&p);
-				kmi.add_newstack(new_stack, 1);
-				while let Some(b2) = kmi.next_b2(&mut seq, 1) {
-					if kmi.complete_occurance_or_contig(1, dbgf!(b2, "= => (rebuild) twobit {:x}")) { // BUG here
-						break;
+			}
+			eprint!("\n");
+			let mut seq = seq_vec.iter();
+			kmi.markcontig::<u64>(&mut seq);
+			let mut miss = 0;
+			for hash in 0..ks_kmp_len {
+				if kmi.ks.kmp[hash] != 0 {
+					let mut p = kmi.ks.kmp[hash];
+					if p.blacklisted() {
+						continue;
+					}
+					dbgf!(hash, "[{:#x}] = {:#x}", p);
+					let new_stack = kmi.rebuild_kmer_stack(&p);
+					kmi.add_newstack(new_stack, 1);
+					eprintln!("occ.p={:x} .plim={:x}", kmi.occ[1].p, kmi.occ[1].plim);
+					while let Some(b2) = kmi.next_b2(&mut seq, 1) {
+						eprintln!("occ.p={:x} twobit {:x}", kmi.occ[1].p, b2);
+						if kmi.complete_occurance_or_contig(1, b2) {
+							break;
+						}
+					}
+					let mark_p = kmi.occ[1].mark.p;
+					eprintln!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", hash, mark_p, p);
+					if mark_p != p {
+						miss += 1;
 					}
 				}
-				let mark_p = kmi.occ[1].mark.p;
-				eprintln!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", i, mark_p, p);
-				assert_eq!(mark_p, p);
+			}
+			if miss != 0 {
+				eprintln!("observed {} incorrect rebuilds", miss);
+				errors += 1;
 			}
 		}
+		eprintln!("observed errors in {}/256", errors);
+		assert!(false);
 	}
 }

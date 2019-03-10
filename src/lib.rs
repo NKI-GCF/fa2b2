@@ -14,11 +14,11 @@ extern crate num;
 extern crate num_traits;
 extern crate rand;
 
+#[macro_use]
+pub mod rdbg;
 pub mod kmer;
 pub mod kmerstore;
 pub mod kmerconst;
 pub mod kmerloc;
-#[macro_use]
-pub mod rdbg;
 pub mod occurrence;
 pub mod marker;

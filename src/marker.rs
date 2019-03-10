@@ -84,16 +84,16 @@ impl<'a> KmerIter<'a> {
 		let kc = self.occ[0].kc;
 		let p_max = self.ks.p_max;
 
-		let p_readlengte = (kc.readlen << 1) as u64;
+		let p_no_kmers = (kc.no_kmers << 1) as u64;
 
-		let left = if dbgx!(p >= contig_start + p_readlengte) {
-			p - p_readlengte
+		let left = if dbgx!(p >= contig_start + p_no_kmers) {
+			p - p_no_kmers
 		} else {
 			contig_start
 		};
 
 		let right = cmp::min(
-			p + p_readlengte,
+			p + (kc.readlen << 1) as u64,
 			self.ks.get_twobit_after(i).unwrap_or(p_max),
 		);
 		(left, right)

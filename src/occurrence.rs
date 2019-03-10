@@ -79,24 +79,24 @@ impl<'a> Occurrence<'a> {
 
 		self.mark.reset();
 		let x = self.p.x();
-		let kmerlen = self.kc.kmerlen;
-		let end_i = self.kc.no_kmers - afstand(x, kmerlen);
+		let offs = afstand(x, self.kc.kmerlen);
+		let end_i = self.kc.no_kmers - offs;
 
 		debug_assert!(end_i != 0, "{:#x}, ext_max:{}", self.p, self.kc.ext_max);
-		let base = self.i - kmerlen;
+		let base = self.i - self.kc.kmerlen;
 
 		for i in 0..end_i {
 
-			let d_i = (base + (self.kc.no_kmers - i)) % self.kc.no_kmers;
+			let d_i = base.wrapping_sub(i) % self.kc.no_kmers;
 
 			let mut kmer = self.d[d_i];
 			if x > 0 {
-				let d_i2 = (d_i + afstand(x, kmerlen)) % self.kc.no_kmers;
+				let d_i2 = base.wrapping_sub(i+offs) % self.kc.no_kmers;
 				kmer.hash(self.d[d_i2]);
 			}
 			let idx = kmer.get_idx(true);
 			if self.hash_is_extreme(idx, x) {
-				let p = self.p - ((end_i - i) << 1) as u64;
+				let p = self.p - ((end_i + offs - i) << 1) as u64;
 				self.mark.set(idx, p, x);
 			}
 		}

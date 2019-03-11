@@ -52,11 +52,13 @@ impl<'a> Occurrence<'a> {
 		self.i >= self.kc.readlen
 	}
 
-	pub fn hash_is_extreme(&mut self, hash: usize, x: usize) -> bool {
-		(hash ^ self.kc.ext_domain(x)) < self.mark.idx
+	fn hash_is_extreme(&mut self, hash: usize, p: u64) -> bool {
+		let x = p.x();
+		let xh = hash ^ self.kc.ext_domain(x);
+		xh < self.mark.idx || (xh == self.mark.idx && p < self.mark.p)
 	}
 
-	fn complete_kmer(&mut self, b2: u8) -> bool{
+	fn complete_kmer(&mut self, b2: u8) -> bool {
 
 		// ori == true if kmer is for template, then we want 1 in self.p
 		let new_idx = match self.i.checked_sub(self.kc.kmerlen).map(|i| i % self.kc.no_kmers) {
@@ -75,7 +77,7 @@ impl<'a> Occurrence<'a> {
 		self.p.pos() - ((self.kc.no_kmers as u64) << 1) == self.mark.p.pos()
 	}
 
-	fn set_next_mark(&mut self) {
+	fn set_next_mark(&mut self) -> bool {
 
 		self.mark.reset();
 		let x = self.p.x();
@@ -95,8 +97,10 @@ impl<'a> Occurrence<'a> {
 				kmer.hash(self.d[d_i2]);
 			}
 			let idx = kmer.get_idx(true);
-			if self.hash_is_extreme(idx, x) {
-				let p = self.p - ((end_i + offs - i) << 1) as u64;
+			let p = self.p - ((offs + i) << 1) as u64;
+			if self.hash_is_extreme(idx, p) {
+				dbgf!(idx, "[{:x}] = {:x}", p);
+				//dbgf!(idx, "[{:x}] = {:x} = {:x} - (({:x} + {:x}) << 1)", p, self.p, offs, i);
 				self.mark.set(idx, p, x);
 			}
 		}
@@ -125,11 +129,13 @@ impl<'a> Occurrence<'a> {
 				}
 				let hash = kmer.get_idx(true);
 				let mut p = self.p.with_ext_prior(x) - (afs << 1) as u64;
-				if self.hash_is_extreme(hash, x) && dbgx!(ks.kmp[hash].is_replaceable_by(p) || ks.kmp[hash].is_same(p)) {
+				if test_template(kmer.dna, kmer.rc) {
+					p |= 1;
+				}
+				if self.hash_is_extreme(hash, p) && (dbgf!(ks.kmp[hash].is_replaceable_by(p) ||
+													 ks.kmp[hash].is_same(p), "{:?} [h]:{:x}, p:{:x}",
+													 ks.kmp[hash], p)) {
 					self.mark.idx = hash;
-					if test_template(kmer.dna, kmer.rc) {
-						p |= 1;
-					}
 					self.mark.p = p;
 					break;
 				}
@@ -141,7 +147,7 @@ impl<'a> Occurrence<'a> {
 					// there is a leaving kmer and the extreme was popped.
 					// need to reestablish new ext from all kmers and extensions.
 					// but cannot be less than this extension:
-					self.set_next_mark();
+					return self.set_next_mark();
 				}
 				return true
 			}

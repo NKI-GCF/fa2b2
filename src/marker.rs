@@ -42,13 +42,15 @@ impl<'a> KmerIter<'a> {
 	) -> bool {
 		if let Some(occ) = self.occ.get_mut(n) {
 			let p = occ.p.pos();
+			if n != 0 {
+				debug_assert!((self.ks.b2[p as usize >> 3] >> (p & 6)) & 3 == b2);
+				return occ.complete(self.ks, b2, n);
+			}
 			if b2 < 4 {
-				if n == 0 {
-					if let Some(qb) = self.ks.b2.get_mut(p as usize >> 3) {
-						*qb |= b2 << (p & 6);
-					}
-					self.ks.p_max = (p + 2) & !1;
+				if let Some(qb) = self.ks.b2.get_mut(p as usize >> 3) {
+					*qb |= b2 << (p & 6);
 				}
+				self.ks.p_max = (p + 2) & !1;
 				if occ.complete(self.ks, b2, n) {
 					return true;
 				}
@@ -347,12 +349,9 @@ mod tests {
 			b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..].to_owned();
 		let mut seq = seq_vec.iter();
 		kmi.markcontig::<u64>(&mut seq);
-		for i in 0..ks_kmp_len {
-			if kmi.ks.kmp[i] != 0 {
-				let mut p = kmi.ks.kmp[i];
-				if p.blacklisted() {
-					continue;
-				}
+		for hash in 0..ks_kmp_len {
+			let mut p = kmi.ks.kmp[hash];
+			if !p.blacklisted() {
 				let new_stack = kmi.rebuild_kmer_stack(&p);
 				kmi.add_newstack(new_stack, 1);
 				while let Some(b2) = kmi.next_b2(&mut seq, 1) {
@@ -361,7 +360,7 @@ mod tests {
 					}
 				}
 				let mark_p = kmi.occ[1].mark.p;
-				eprintln!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", i, mark_p, p);
+				eprintln!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", hash, mark_p, p);
 				assert_eq!(mark_p, p);
 			}
 		}
@@ -376,12 +375,9 @@ mod tests {
 		let seq_vec = b"GGAACCTTCAGAGTG"[..].to_owned();
 		let mut seq = seq_vec.iter();
 		kmi.markcontig::<u64>(&mut seq);
-		for i in 0..ks_kmp_len {
-			if kmi.ks.kmp[i] != 0 {
-				let mut p = kmi.ks.kmp[i];
-				if p.blacklisted() {
-					continue;
-				}
+		for hash in 0..ks_kmp_len {
+			let mut p = kmi.ks.kmp[hash];
+			if !p.blacklisted() {
 				let new_stack = kmi.rebuild_kmer_stack(&p);
 				kmi.add_newstack(new_stack, 1);
 				while let Some(b2) = kmi.next_b2(&mut seq, 1) {
@@ -390,7 +386,7 @@ mod tests {
 					}
 				}
 				let mark_p = kmi.occ[1].mark.p;
-				eprintln!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", i, mark_p, p);
+				eprintln!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", hash, mark_p, p);
 				assert_eq!(mark_p, p);
 			}
 		}
@@ -415,12 +411,9 @@ mod tests {
 			kmi.markcontig::<u64>(&mut seq);
 			let mut miss = 0;
 			for hash in 0..ks_kmp_len {
-				if kmi.ks.kmp[hash] != 0 {
-					let mut p = kmi.ks.kmp[hash];
-					if p.blacklisted() {
-						continue;
-					}
-					dbgf!(hash, "[{:#x}] = {:#x}", p);
+				let mut p = kmi.ks.kmp[hash];
+				if !p.blacklisted() {
+					//dbgf!(hash, "[{:#x}] = {:#x}", p);
 					let new_stack = kmi.rebuild_kmer_stack(&p);
 					kmi.add_newstack(new_stack, 1);
 					eprintln!("occ.p={:x} .plim={:x}", kmi.occ[1].p, kmi.occ[1].plim);

@@ -14,6 +14,7 @@ ToPrimitive + LowerHex {
 	fn extpos(&self) -> u64;
 	fn same_ori(&self, p: u64) -> bool;
 	fn top(&self) -> u64;
+	fn bottom(&self) -> u64;
 	fn pos(&self) -> u64;
 	fn blacklist(&mut self);
 	fn blacklisted(&self) -> bool;
@@ -43,6 +44,9 @@ impl PriExtPosOri for u64 {
 	}
 	fn top(&self) -> u64 {
 		*self & !0x_FFFF_FFFF_FFFF
+	}
+	fn bottom(&self) -> u64 {
+		*self & 0x_FFFF_FFFF_FFFF
 	}
 	fn pos(&self) -> u64 {
 		*self & 0x_FFFF_FFFF_FFFE
@@ -82,9 +86,9 @@ impl PriExtPosOri for u64 {
 	fn is_same(&self, other: u64) -> bool {
 		*self == other
 	}
-        fn with_ext_prior(&self, x: usize) -> u64 {
-            self.pos() | (1 << 63) | ((x as u64) << 48)
-        }
+	fn with_ext_prior(&self, x: usize) -> u64 {
+		self.pos() | (1 << 63) | ((x as u64) << 48)
+	}
 }
 
 
@@ -97,7 +101,10 @@ pub trait MidPos: PriExtPosOri {
 impl MidPos for u64 {
 	// *self == new_entry.top() ? blacklisted was extension below, but not new_entry's
 	fn is_replaceable_by(&self, new_entry: u64) -> bool {
-		*self <= new_entry.top() || self.pos() == new_entry.pos()
+		*self <= new_entry.top() || (self.pos() == new_entry.pos() && {
+				debug_assert!(self.same_ori(new_entry), "{:#x}, {:#x}", self, new_entry);
+				true
+			})
 	}
 	fn is_set_and_not(&self, other: u64) -> bool {
 		!self.blacklisted() && !self.is_same(other)

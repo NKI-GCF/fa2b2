@@ -43,10 +43,12 @@ impl<'a> KmerIter<'a> {
 		if let Some(occ) = self.occ.get_mut(n) {
 			let p = occ.p.pos();
 			if b2 < 4 {
-				if let Some(qb) = self.ks.b2.get_mut(p as usize >> 3) {
-					*qb |= b2 << (p & 6);
+				if n == 0 {
+					if let Some(qb) = self.ks.b2.get_mut(p as usize >> 3) {
+						*qb |= b2 << (p & 6);
+					}
+					self.ks.p_max = (p + 2) & !1;
 				}
-				self.ks.p_max = (p + 2) & !1;
 				if occ.complete(self.ks, b2, n) {
 					return true;
 				}

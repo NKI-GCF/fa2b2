@@ -81,11 +81,14 @@ impl<'a> Occurrence<'a> {
 
 		self.mark.reset();
 		let x = self.p.x();
-		let offs = afstand(x, self.kc.kmerlen);
-		let end_i = self.kc.no_kmers - offs;
+		let afs = afstand(x, self.kc.kmerlen);
+		let end_i = self.kc.no_kmers - afs;
+		if end_i == 0 {
+			return false;
+		}
 
 		debug_assert!(end_i != 0, "{:#x}, ext_max:{}", self.p, self.kc.ext_max);
-		let base = self.i - self.kc.kmerlen;
+		let base = self.i - 1 - self.kc.kmerlen;
 
 		for i in 0..end_i {
 
@@ -93,28 +96,32 @@ impl<'a> Occurrence<'a> {
 
 			let mut kmer = self.d[d_i];
 			if x > 0 {
-				let d_i2 = base.wrapping_sub(i+offs) % self.kc.no_kmers;
+				let d_i2 = dbgf!(base.wrapping_sub(i+afs) % self.kc.no_kmers,
+					"[{}] ^ [{}] (afs: {})", i % self.kc.no_kmers, afs);
 				kmer.hash(self.d[d_i2]);
 			}
 			let idx = kmer.get_idx(true);
-			let p = self.p - ((offs + i) << 1) as u64;
+			let mut p = self.p.with_ext_prior(x) - ((afs + i) << 1) as u64;
+			if dbgf!(test_template(kmer.dna, kmer.rc), "{:?}; dna:{:#x}, rc:{:#x}", kmer.dna, kmer.rc) {
+				p |= 1;
+			}
 			if self.hash_is_extreme(idx, p) {
 				dbgf!(idx, "[{:x}] = {:x}", p);
-				//dbgf!(idx, "[{:x}] = {:x} = {:x} - (({:x} + {:x}) << 1)", p, self.p, offs, i);
 				self.mark.set(idx, p, x);
 			}
 		}
 		debug_assert!(self.mark.is_set());
+		true
 	}
 
 	/// add b2 to kmer, move .p according to occ orientation
 	/// return whether required nr of kmers for struct occurance were seen, since contig start.
 	/// adds 2bit to stored sequence
 	pub fn complete(&mut self, ks: &KmerStore<u64>, b2: u8, n: usize) -> bool {
+		let i = self.i;
 
 		if self.complete_kmer(b2) {
 
-			//println!("[{}], idx:{}", self.i, self.d[t]);
 			let x_start = if n == 0 {0} else {self.p.x()};
 
 			for x in x_start..(self.p.x() + 1) {
@@ -125,7 +132,8 @@ impl<'a> Occurrence<'a> {
 				}
 				let mut kmer = self.kmer();
 				if x != 0 {
-					kmer.hash(self.d[(self.i - afs) % self.kc.no_kmers]);
+					kmer.hash(self.d[dbgf!((i - afs) % self.kc.no_kmers,
+					"[{}] ^ [{}] (afs: {})", i % self.kc.no_kmers, afs)]);
 				}
 				let hash = kmer.get_idx(true);
 				let mut p = self.p.with_ext_prior(x) - (afs << 1) as u64;

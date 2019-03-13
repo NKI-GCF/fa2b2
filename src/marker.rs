@@ -88,7 +88,7 @@ impl<'a> KmerIter<'a> {
 		let kc = self.occ[0].kc;
 		let p_max = self.ks.p_max;
 
-		let p_no_kmers = (kc.no_kmers << 1) as u64;
+		let p_no_kmers = ((kc.no_kmers - kc.kmerlen) << 1) as u64;
 
 		let left = if dbgx!(p >= contig_start + p_no_kmers) {
 			p - p_no_kmers

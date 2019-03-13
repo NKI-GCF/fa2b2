@@ -86,33 +86,31 @@ impl<'a> Occurrence<'a> {
 		if end_i == 0 {
 			return false;
 		}
-
-
 		for i in 0..end_i {
-
-			let _ = self.set_if_extreme(i, afs, x);
+			let _ = dbgx!(self.set_if_extreme(i+1, x));
 		}
 		debug_assert!(self.mark.is_set());
 		true
 	}
 
-	fn set_if_extreme(&mut self, i: usize, afs: usize, x: usize) -> bool
+	fn set_if_extreme(&mut self, i: usize, x: usize) -> bool
 	{
 		let base = self.i - self.kc.kmerlen;
-		let d_i = base.wrapping_sub(i + 1) % self.kc.no_kmers;
+		let afs = afstand(x, self.kc.kmerlen);
+		let d_i = base.wrapping_sub(i) % self.kc.no_kmers;
 		let mut kmer = self.d[d_i];
 		if x > 0 {
-			let d_i2 = dbgf!(base.wrapping_sub(afs) % self.kc.no_kmers,
+			let d_i2 = dbgf!(base.wrapping_sub(afs + i) % self.kc.no_kmers,
 				"[{}] ^ [{}] (afs: {})", i % self.kc.no_kmers, afs);
 			kmer.hash(self.d[d_i2]);
 		}
-		let idx = kmer.get_idx(true);
-		let mut p = self.p.with_ext_prior(x) - (afs << 1) as u64;
+		let hash = kmer.get_idx(true);
+		let mut p = self.p.with_ext_prior(x) - ((afs + i) << 1) as u64;
 		if test_template(kmer.dna, kmer.rc) {
 			p |= 1;
 		}
-		if self.hash_is_extreme(idx, p) {
-			self.mark.set(idx, p, x);
+		if self.hash_is_extreme(hash, p) {
+			self.mark.set(hash, p, x);
 			true
 		} else {
 			false
@@ -134,7 +132,7 @@ impl<'a> Occurrence<'a> {
 				if self.i < self.kc.kmerlen + afs {
 					return false;
 				}
-				if self.set_if_extreme(0, afs, x) {
+				if self.set_if_extreme(1, x) {
 					break;
 				}
 			}

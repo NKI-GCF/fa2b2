@@ -44,14 +44,14 @@ impl<'a> KmerIter<'a> {
 			let p = occ.p.pos();
 			if n != 0 {
 				debug_assert!((self.ks.b2[p as usize >> 3] >> (p & 6)) & 3 == b2);
-				return occ.complete(self.ks, b2, n);
+				return occ.complete(b2, n);
 			}
 			if b2 < 4 {
 				if let Some(qb) = self.ks.b2.get_mut(p as usize >> 3) {
 					*qb |= b2 << (p & 6);
 				}
 				self.ks.p_max = (p + 2) & !1;
-				if occ.complete(self.ks, b2, n) {
+				if occ.complete(b2, n) {
 					return true;
 				}
 			} else if occ.i != 0 {
@@ -413,7 +413,6 @@ mod tests {
 			for hash in 0..ks_kmp_len {
 				let mut p = kmi.ks.kmp[hash];
 				if !p.blacklisted() {
-					//dbgf!(hash, "[{:#x}] = {:#x}", p);
 					let new_stack = kmi.rebuild_kmer_stack(&p);
 					kmi.add_newstack(new_stack, 1);
 					eprintln!("occ.p={:x} .plim={:x}", kmi.occ[1].p, kmi.occ[1].plim);
@@ -436,6 +435,5 @@ mod tests {
 			}
 		}
 		eprintln!("observed errors in {}/256", errors);
-		assert!(false);
 	}
 }

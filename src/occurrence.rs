@@ -2,8 +2,7 @@ use std::collections::VecDeque;
 
 use kmer::{Kmer,test_template};
 pub use kmerconst::{KmerConst,afstand};
-use kmerloc::{KmerLoc,PriExtPosOri,MidPos};
-use kmerstore::KmerStore;
+use kmerloc::{KmerLoc,PriExtPosOri};
 
 
 // rename to Recurrance?
@@ -120,8 +119,7 @@ impl<'a> Occurrence<'a> {
 	/// add b2 to kmer, move .p according to occ orientation
 	/// return whether required nr of kmers for struct occurance were seen, since contig start.
 	/// adds 2bit to stored sequence
-	pub fn complete(&mut self, ks: &KmerStore<u64>, b2: u8, n: usize) -> bool {
-		let i = self.i;
+	pub fn complete(&mut self, b2: u8, n: usize) -> bool {
 
 		if self.complete_kmer(b2) {
 
@@ -155,7 +153,6 @@ impl<'a> Occurrence<'a> {
 #[cfg(test)]
 mod tests {
 	use super::KmerConst;
-	use super::KmerStore;
 	use super::Occurrence;
 
 	const READLEN: usize = 16;
@@ -164,17 +161,16 @@ mod tests {
 	#[test]
 	fn test_push_b2() {
 		let kc = KmerConst::new(READLEN, SEQLEN);
-		let ks = KmerStore::<u64>::new(kc.bitlen);
 		let mut occ = Occurrence::new((0, 100), &kc, 0);
 		for _ in 0..6 {
-			occ.complete(&ks, 1, 0);
+			occ.complete(1, 0);
 		}
 		let mut kmer = occ.kmer();
 		assert_eq!(kmer.dna, 0x55);
 		assert_eq!(kmer.rc, 0xff);
 		assert_eq!(occ.p, 0xc);
 
-		occ.complete(&ks, 2, 0);
+		occ.complete(2, 0);
 		kmer = occ.kmer();
 		assert_eq!(kmer.dna, 0x95);
 		assert_eq!(kmer.rc, 0xfc);
@@ -184,19 +180,18 @@ mod tests {
 	#[test]
 	fn occurrence() {
 		let kc = KmerConst::new(READLEN, SEQLEN);
-		let ks = KmerStore::<u64>::new(kc.bitlen);
 		let mut occ = Occurrence::new((0, 100), &kc, 0);
 		for _ in 0..8 {
-			occ.complete(&ks, 0, 0);
+			occ.complete(0, 0);
 		}
 		for _ in 0..8 {
-			occ.complete(&ks, 1, 0);
+			occ.complete(1, 0);
 		}
 		for _ in 0..8 {
-			occ.complete(&ks, 2, 0);
+			occ.complete(2, 0);
 		}
 		for _ in 0..8 {
-			occ.complete(&ks, 3, 0);
+			occ.complete(3, 0);
 		}
 	}
 }

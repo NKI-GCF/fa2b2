@@ -197,7 +197,7 @@ impl<'a> KmerIter<'a> {
 
 					break; // position written (done) or added next_stack which requires extension.
 				}
-				if dbgx!(self.occ[n].try_extension_redefine_minimum()) {
+				if dbgx!(self.occ[n].extend() && self.occ[n].set_next_mark()) {
 
 					if dbgx!(stored_at_index.extension() == min_pos.extension()) {
 						self.ks.kmp[min_index].blacklist();

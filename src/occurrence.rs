@@ -40,13 +40,6 @@ impl<'a> Occurrence<'a> {
 		} else {false}
 	}
 
-	pub fn try_extension_redefine_minimum(&mut self) -> bool {
-		if self.extend() {
-			self.set_next_mark();
-			true
-		} else {false}
-	}
-
 	pub fn all_kmers(&self) -> bool {
 		self.i >= self.kc.readlen
 	}
@@ -76,7 +69,7 @@ impl<'a> Occurrence<'a> {
 		self.p.pos() - ((self.kc.no_kmers as u64) << 1) == self.mark.p.pos()
 	}
 
-	fn set_next_mark(&mut self) -> bool {
+	pub fn set_next_mark(&mut self) -> bool {
 
 		self.mark.reset();
 		let x = self.p.x();

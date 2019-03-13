@@ -79,7 +79,7 @@ impl<'a> Occurrence<'a> {
 			return false;
 		}
 		for i in 0..end_i {
-			let _ = dbgx!(self.set_if_extreme(i+1, x));
+			let _ = self.set_if_extreme(i+1, x);
 		}
 		debug_assert!(self.mark.is_set());
 		true
@@ -92,8 +92,7 @@ impl<'a> Occurrence<'a> {
 		let d_i = base.wrapping_sub(i) % self.kc.no_kmers;
 		let mut kmer = self.d[d_i];
 		if x > 0 {
-			let d_i2 = dbgf!(base.wrapping_sub(afs + i) % self.kc.no_kmers,
-				"[{}] ^ [{}] (afs: {})", i % self.kc.no_kmers, afs);
+			let d_i2 = base.wrapping_sub(afs + i) % self.kc.no_kmers;
 			kmer.hash(self.d[d_i2]);
 		}
 		let hash = kmer.get_idx(true);

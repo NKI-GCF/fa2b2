@@ -66,7 +66,7 @@ impl<'a> Occurrence<'a> {
 		self.i >= self.kc.kmerlen
 	}
 	fn mark_is_leaving(&self) -> bool {
-		self.p.pos() - ((self.kc.no_kmers as u64) << 1) == self.mark.p.pos()
+		self.p.pos() - ((1 + self.kc.no_kmers as u64) << 1) == self.mark.p.pos()
 	}
 
 	pub fn set_next_mark(&mut self) -> bool {
@@ -96,7 +96,7 @@ impl<'a> Occurrence<'a> {
 			kmer.hash(self.d[d_i2]);
 		}
 		let hash = kmer.get_idx(true);
-		let mut p = self.p.with_ext_prior(x) - ((afs + i) << 1) as u64;
+		let mut p = self.p.with_ext_prior(x) - ((afs + i - 1) << 1) as u64;
 		if test_template(kmer.dna, kmer.rc) {
 			p |= 1;
 		}

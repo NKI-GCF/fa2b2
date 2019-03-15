@@ -44,14 +44,15 @@ impl<'a> KmerIter<'a> {
 			let p = occ.p.pos();
 			if n != 0 {
 				debug_assert!((self.ks.b2[p as usize >> 3] >> (p & 6)) & 3 == b2);
-				return occ.complete(b2, n);
+				let x = occ.p.x();
+				return occ.complete(b2, x);
 			}
 			if b2 < 4 {
 				if let Some(qb) = self.ks.b2.get_mut(p as usize >> 3) {
 					*qb |= b2 << (p & 6);
 				}
 				self.ks.p_max = (p + 2) & !1;
-				if occ.complete(b2, n) {
+				if occ.complete(b2, 0) {
 					return true;
 				}
 			} else if occ.i != 0 {
@@ -103,10 +104,22 @@ impl<'a> KmerIter<'a> {
 		(left, right)
 	}
 
-	fn rebuild_kmer_stack(&self, stored_at_index: &u64) -> Occurrence<'a> {
+	fn rebuild_kmer_stack(&self, stored_at_index: u64) -> Occurrence<'a> {
 
 		let plimits = self.get_plimits(stored_at_index.pos());
-		Occurrence::new(plimits, self.occ[0].kc, stored_at_index.extension())
+		let mut occ = Occurrence::new(plimits, self.occ[0].kc, stored_at_index.extension());
+
+		while {
+			let p = occ.p.pos();
+			debug_assert!(p <= occ.plim, "stored {:#x} not observed while rebuilding occ?", stored_at_index);
+			let b2 = self.ks.b2_for_p(p).unwrap();
+
+			eprintln!("=> b2 {:x} <=", b2);
+			let x = occ.p.x();
+			let _ = occ.complete(b2, x);
+			dbgf!(occ.mark.p, "{:#x}") != stored_at_index
+		} {}
+		occ
 	}
 
 	fn search_occ_for_pos(&self, original_n: usize, stored_at_index: u64) -> usize {
@@ -138,7 +151,7 @@ impl<'a> KmerIter<'a> {
 		if dbgx!(*stored_at_index != self.occ[n].mark.p) {
 
 			stored_at_index.extend();
-			let next_stack = self.rebuild_kmer_stack(dbgf!(stored_at_index, "{:#x}"));
+			let next_stack = self.rebuild_kmer_stack(dbgf!(*stored_at_index, "{:#x}"));
 
 			if is_replaced && n != 0 {
 				// position is written below, this self.occ[n] is done.
@@ -191,8 +204,10 @@ impl<'a> KmerIter<'a> {
 						n = self.get_next_for_extension(&mut stored_at_index, n, true);
 
 					} else if n > 0 {
-						n -= 1;
-						continue;
+						if self.occ[n].p >= self.occ[n].plim {
+							n -= 1;
+							continue;
+						}
 					}
 
 					break; // position written (done) or added next_stack which requires extension.
@@ -288,11 +303,9 @@ mod tests {
 			process(&mut occ, &mut ks, b"CCCCCCCCCCCCCCCCC"[..].to_owned());
 		}
 		assert_eq!(ks.kmp.len(), 128);
-		for i in 1..ks.kmp.len() {
-			assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);
+		for i in 0..ks.kmp.len() {
+			assert!(ks.kmp[i].blacklisted(), "[{}], {:x}", i, ks.kmp[i]);
 		}
-		let unresolveable = (1 << 63) | ((kc.ext_max as u64) << 48);
-		assert_eq!(ks.kmp[0], unresolveable, "test_17_c(): {:x}", ks.kmp[0]);
 	}
 	#[test]
 	fn test_1n18c1n() {
@@ -331,12 +344,8 @@ mod tests {
 			process(&mut occ, &mut ks, b"ATATATATATATATATA"[..].to_owned());
 		}
 		for i in 0..ks.kmp.len() {
-			if i != 0x0 && i != 0x22 {
-				assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);
-			}
+			assert!(ks.kmp[i].blacklisted(), "[{}], {:x}", i, ks.kmp[i]);
 		}
-		let unresolveable = (1 << 63) | ((kc.ext_max as u64) << 48);
-		assert_eq!(ks.kmp[0], unresolveable);
 	}
 	#[test]
 	fn test_reconstruct1() {
@@ -352,7 +361,7 @@ mod tests {
 		for hash in 0..ks_kmp_len {
 			let mut p = kmi.ks.kmp[hash];
 			if !p.blacklisted() {
-				let new_stack = kmi.rebuild_kmer_stack(&p);
+				let new_stack = kmi.rebuild_kmer_stack(p);
 				kmi.add_newstack(new_stack, 1);
 				while let Some(b2) = kmi.next_b2(&mut seq, 1) {
 					if kmi.complete_occurance_or_contig(1, b2) {
@@ -378,7 +387,7 @@ mod tests {
 		for hash in 0..ks_kmp_len {
 			let mut p = kmi.ks.kmp[hash];
 			if !p.blacklisted() {
-				let new_stack = kmi.rebuild_kmer_stack(&p);
+				let new_stack = kmi.rebuild_kmer_stack(p);
 				kmi.add_newstack(new_stack, 1);
 				while let Some(b2) = kmi.next_b2(&mut seq, 1) {
 					if kmi.complete_occurance_or_contig(1, b2) {
@@ -392,48 +401,31 @@ mod tests {
 		}
 	}
 	#[test]
-	fn test_reconstruct_simplest() { // all mappable.
+	fn test_reconstruct_gs4_rl1to4_all() { // all mappable.
+		for rl in 1..=4 {
+			for gen in 0..=255 {
+				let kc = KmerConst::new(rl, 4);
+				let mut ks = KmerStore::<u64>::new(kc.bitlen);
+				let ks_kmp_len = ks.kmp.len();
+				let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+				let mut kmi = KmerIter::new(&mut ks, &mut occ);
+				let seq_vec:Vec<_> = [gen & 3, (gen >> 2) & 3, (gen >> 4) & 3, (gen >> 6) & 3].iter().map(|b| match b {
+						0 => 'A', 1 => 'C', 2 => 'T', 3 => 'G', _ => panic!("here") }).collect();
+				eprint!("\nsequence: {:?}", seq_vec);
 
-		let mut errors = 0;
-		for gen in 0..=255 {
-			let kc = KmerConst::new(2, 4);
-			let mut ks = KmerStore::<u64>::new(kc.bitlen);
-			let ks_kmp_len = ks.kmp.len();
-			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
-			let mut kmi = KmerIter::new(&mut ks, &mut occ);
-			let seq_vec:Vec<_> = [gen & 3, (gen >> 2) & 3, (gen >> 4) & 3, (gen >> 6) & 3].iter().map(|b| match b {
-					0 => 'A', 1 => 'C', 2 => 'T', 3 => 'G', _ => panic!("here") }).collect();
-			eprint!("\nsequence: {:?}", seq_vec);
-
-			eprint!("\n");
-			let vv: Vec<u8> = seq_vec.iter().map(|&c| c as u8).collect();
-			let mut seq = vv.iter();
-			kmi.markcontig::<u64>(&mut seq);
-			let mut miss = 0;
-			for hash in 0..ks_kmp_len {
-				let mut p = kmi.ks.kmp[hash];
-				if !p.blacklisted() {
-					let new_stack = kmi.rebuild_kmer_stack(&p);
-					kmi.add_newstack(new_stack, 1);
-					eprintln!("occ.p={:x} .plim={:x}", kmi.occ[1].p, kmi.occ[1].plim);
-					while let Some(b2) = kmi.next_b2(&mut seq, 1) {
-						eprintln!("occ.p={:x} twobit {:x}", kmi.occ[1].p, b2);
-						if kmi.complete_occurance_or_contig(1, b2) {
-							break;
-						}
-					}
-					let mark_p = kmi.occ[1].mark.p;
-					eprintln!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", hash, mark_p, p);
-					if mark_p != p {
-						miss += 1;
+				eprint!("\n");
+				let vv: Vec<u8> = seq_vec.iter().map(|&c| c as u8).collect();
+				let mut seq = vv.iter();
+				kmi.markcontig::<u64>(&mut seq);
+				for hash in 0..ks_kmp_len {
+					let mut p = kmi.ks.kmp[hash];
+					if !p.blacklisted() {
+						eprintln!("hash: [{:#x}]: p: {:#x}", hash, p);
+						let _ = kmi.rebuild_kmer_stack(p);
 					}
 				}
 			}
-			if miss != 0 {
-				eprintln!("observed {} incorrect rebuilds", miss);
-				errors += 1;
-			}
 		}
-		eprintln!("observed errors in {}/256", errors);
 	}
+
 }

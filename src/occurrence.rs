@@ -66,7 +66,7 @@ impl<'a> Occurrence<'a> {
 		self.i >= self.kc.kmerlen
 	}
 	fn mark_is_leaving(&self) -> bool {
-		self.p.pos() - ((1 + self.kc.no_kmers as u64) << 1) == self.mark.p.pos()
+		self.p.pos() - ((self.kc.no_kmers as u64) << 1) == self.mark.p.pos()
 	}
 
 	pub fn set_next_mark(&mut self) -> bool {
@@ -79,7 +79,7 @@ impl<'a> Occurrence<'a> {
 			return false;
 		}
 		for i in 0..end_i {
-			let _ = self.set_if_extreme(i+1, x);
+			let _ = self.set_if_extreme(i, x);
 		}
 		debug_assert!(self.mark.is_set());
 		true
@@ -96,7 +96,7 @@ impl<'a> Occurrence<'a> {
 			kmer.hash(self.d[d_i2]);
 		}
 		let hash = kmer.get_idx(true);
-		let mut p = self.p.with_ext_prior(x) - ((afs + i - 1) << 1) as u64;
+		let mut p = self.p.with_ext_prior(x) - ((afs + i) << 1) as u64;
 		if test_template(kmer.dna, kmer.rc) {
 			p |= 1;
 		}
@@ -111,25 +111,22 @@ impl<'a> Occurrence<'a> {
 	/// add b2 to kmer, move .p according to occ orientation
 	/// return whether required nr of kmers for struct occurance were seen, since contig start.
 	/// adds 2bit to stored sequence
-	pub fn complete(&mut self, b2: u8, n: usize) -> bool {
+	pub fn complete(&mut self, b2: u8, x_start: usize) -> bool {
 
 		if self.complete_kmer(b2) {
-
-			let x_start = if n == 0 {0} else {self.p.x()};
 
 			for x in x_start..(self.p.x() + 1) {
 				let afs = afstand(x, self.kc.kmerlen);
 				if self.i < self.kc.kmerlen + afs {
 					return false;
 				}
-				if self.set_if_extreme(1, x) {
+				if self.set_if_extreme(0, x) {
 					break;
 				}
 			}
 
 			if self.all_kmers() {
 				if self.i > self.kc.readlen && dbgx!(self.mark_is_leaving()) {
-					debug_assert!(n == 0);
 					// there is a leaving kmer and the extreme was popped.
 					// need to reestablish new ext from all kmers and extensions.
 					// but cannot be less than this extension:

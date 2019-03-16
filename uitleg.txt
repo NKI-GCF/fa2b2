@@ -2,8 +2,8 @@
 Een xmer is de kmer van een template of reverse complement strand
 of een bitwise complement van een van de twee. Strand keuze wordt
 bepaald door te kijken naar de eerste bit die verschilt tussen de
-twee. De kmer met deze bit gezet wordt de xmer, of als de hoogste
-bit van de gekozen kmer was gezet, het bitwise complement ervan.
+twee. De kmer met deze bit gezet wordt de xmer, tenzij de hoogste
+bit van deze kmer gezet is, dan het bitwise complement ervan.
 
 De xmer die bitwise gecomplementeerd is kan niet overeenkomen met
 een kmer die als xmer gekozen zou worden, want deze kmer heeft de
@@ -12,32 +12,32 @@ Uitzondering zijn palindrome kmers. Hierbij wordt er gekeken naar
 de eerste bit, en wordt vergelijkbaar bitwise gecomplementeerd.
 
 Binnen een venster, de gegeven readlengte, wordt gezocht naar de
-minimale xmer als index voor opslag van strand, positie, extensie   <= TODO: pos xmer midden?
-en prioriteit. Extensie blijft nul zolang de xmer uniek is. De
-prioriteit, de hoogste bit, is gezet in deze informatie.
+minimale xmer als index voor opslag van strand, positie, extensie
+en prioriteit. Extensie blijft nul zolang de xmer niet eerder is
+voorgekomen op het genoom. De prioriteit, de hoogste bit, is
+standaard gezet.
 
 In eerste instantie itereren we over de contig, als twobits, en
 bouwen/updaten een template en reverse complement kmers om de xmer
-te beplanen. De gehele genomische twobit sequentie wordt ook
+te beplanen. De genomische twobit sequentie wordt ook gelijk
 opgeslagen, evenals de genomische coordinaten voor contigs en N-
 stretches met hun lengte.
 
 Als voor een readlengte het xmer minimum niet uniek op het genoom
 is, zit er al informatie opgeslagen voor deze index. Nieuwe en
 opgeslagen informatie wordt vergeleken, de informatie met de
-hoogste extensie komt er te staan. Indien extensie gelijk is komt
+hoogste extensie komt/blijft staan. Indien extensie gelijk is komt
 er een blacklisting te staan voor deze extensie: Een nul positie
 met deze extensie plus een. Voor de nu niet opgeslagen informatie
 volgt er een oplossing:
 
-Voor elke in limbo positie wordt met de genomisch opgeslagen
-twobit sequentie het venster gerepliceerd, waarbinnen de xmer als   <= assertie: zelfde xmer?
-minimum naar voren kwam. Maar wordt de extensie verhoogd en zoeken
-we binnen de readlangte hashes van twee xmers, op een afstand van
-elkaar, bepaald door de extensie. Hieruit kiezen we er een hash om
-te gebruiken als index voor de opslag van de informatie, extensie
-plus een. Dit keer is de gekozen hash niet het minimum, maar hangt
-dit af van de extensie.
+Met hulp van de genomisch opgeslagen twobit sequentie wordt voor
+de in limbo positie het venster gerepliceerd. Vervolgens wordt de
+extensie verhoogd en maken we binnen de readlangte hashes van twee
+xmers, op een afstand van elkaar, afhankelijk van de extensie.
+Hieruit kiezen we een hash als index voor de opslag van de
+informatie, extensie plus een. Dit keer is de gekozen hash niet
+het minimum, maar een optimum afhankelijk van de extensie.
 
 Indien na extensie de verkregen hash index nog niet uniek is,
 groeit de extensie verder, met een hash optimum van xmers met nog
@@ -71,6 +71,9 @@ niet werkt wordt de kmer hash met extensie 2 gebruikt voor beide reads om te
 hashen, etc. etc.
 
 
+Als een kmer extend wordt na rebuilden occurance, kan de minimale
+hash niet meer in scope zijn voor latere rotaties. dan moeten die
+ook worden geextend met een eigen minimum.
 
 
 

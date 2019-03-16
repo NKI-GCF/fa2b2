@@ -1,9 +1,24 @@
+use std::{cmp,collections::{HashMap,VecDeque}};
+use std::sync::Mutex;
 
+lazy_static! {
+	pub static ref STAT_DB: Mutex<StatDeq> = Mutex::new(StatDeq::new(500));
+}
+
+#[macro_export]
+macro_rules! filelinestr {
+	($l:expr$(, $opt:expr)*) => ({
+		concat!("[", file!(), ":", line!(), "] ", $l$(, $opt)*).to_string()
+	});
+}
+
+/// formatted debug, included in dump but not in stats.
 #[macro_export]
 macro_rules! dbgf {
 	($l:literal) => ({
 		if cfg!(debug_assertions) {
-			eprintln!("[{}:{}] {}", file!(), line!(), stringify!($l));
+			STAT_DB.lock().unwrap().add(false, filelinestr!(stringify!($l)), stringify!($l));
+			//eprintln!("[{}:{}] {}", file!(), line!(), stringify!($l));
 		}
 		$l
 	});
@@ -11,31 +26,195 @@ macro_rules! dbgf {
 		match $expr {
 			expr => {
 				if cfg!(debug_assertions) {
-					eprintln!(concat!("[{}:{}] {} = ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*);
+					STAT_DB.lock().unwrap().add(false, filelinestr!(stringify!($expr), " = ", $fmt),
+						format!(concat!("[{}:{}] {} = ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*));
+					//eprintln!(concat!("[{}:{}] {} = ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*);
 				}
 				expr
 			}
 		}
 	}
 }
+
+/// begin a new round for logging (may trigger dump if dump_next() occurred)
+#[macro_export]
+macro_rules! dbg_restart {
+	($fmt:literal$(, $arg:expr)*) => ({
+		if cfg!(debug_assertions) {
+			STAT_DB.lock().unwrap().restart(filelinestr!(stringify!($fmt)), format!($fmt$(, $arg)*));
+		}
+	});
+}
+
+/// line for dump, not in stats
+#[macro_export]
+macro_rules! dbg_print {
+	($fmt:literal$(, $arg:expr)*) => ({
+		if cfg!(debug_assertions) {
+			STAT_DB.lock().unwrap().add(false, filelinestr!(stringify!($fmt)), format!($fmt$(, $arg)*));
+		}
+	});
+}
+
+/// for dump and in stats, conditionally dump_next()
+#[macro_export]
+macro_rules! dbg_dump_if {
+	($expr:expr, $cond:expr) => ({
+		if let Some(mut db) = STAT_DB.lock().ok().filter(|_| cfg!(debug_assertions)) {
+			match $expr {
+				expr => {
+					db.add(true, format!("[{}:{}] {} = {}", file!(), line!(), stringify!($expr), &expr),
+						format!("[{}:{}] {} = {}", file!(), line!(), stringify!($expr), &expr));
+					if expr == $cond {
+						db.dump_next();
+					}
+					expr
+				}
+			}
+		} else {$expr}
+	})
+}
+
+/// for dump and in stats
 #[macro_export]
 macro_rules! dbgx {
 	($expr:expr) => ({
-		if cfg!(debug_assertions) {
-			dbg!($expr)
-		} else {
-			$expr
+		match $expr {
+			expr => {
+				if cfg!(debug_assertions) {
+					STAT_DB.lock().unwrap().add(true, format!("[{}:{}] {} = {:?}", file!(), line!(), stringify!($expr), &expr),
+						format!("[{}:{}] {} = {:?}", file!(), line!(), stringify!($expr), &expr));
+					//dbg!(&expr)
+				}
+				expr
+			}
 		}
 	})
 }
 
+///trigger dump directly.
 #[macro_export]
-macro_rules! dbgln {
-	($expr:expr) => ({
-		if cfg!(debug_assertions) {
-			eprintln!($expr);
+macro_rules! dbg_dump {
+	() => ({
+		STAT_DB.lock().unwrap().dump();
+		"--- end of dump ---\n"
+	});
+	($fmt:literal$(, $arg:expr)*) => ({
+		STAT_DB.lock().unwrap().dump();
+		format!($fmt$(, $arg)*)
+	});
+}
+
+#[macro_export]
+macro_rules! dbg_assert {
+	($test:expr) => {{
+		debug_assert!($test, "{}", dbg_dump!());
+	}};
+	($test:expr, $fmt:literal$(, $arg:expr)*) => {{
+		debug_assert!($test, "{}", dbg_dump!($fmt$(, $arg)*));
+	}};
+}
+
+#[macro_export]
+macro_rules! dbg_assert_eq {
+	($a:expr, $b:expr) => {{
+		debug_assert_eq!($a, $b, "{}", dbg_dump!());
+	}};
+	($a:expr, $b:expr, $fmt:literal$(, $arg:expr)*) => {{
+		debug_assert_eq!($a, $b, "{}", dbg_dump!($fmt$(, $arg)*));
+	}};
+}
+
+#[macro_export]
+macro_rules! dbg_assert_ne {
+	($a:expr, $b:expr) => {{
+		debug_assert_ne!($a, $b, "{}", dbg_dump!());
+	}};
+	($a:expr, $b:expr, $fmt:literal$(, $arg:expr)*) => {{
+		debug_assert_ne!($a, $b, "{}", dbg_dump!($fmt$(, $arg)*));
+	}};
+}
+
+#[macro_export]
+macro_rules! dbg_panic {
+	() => {{
+		panic!(dbg_dump!());
+	}};
+	($fmt:literal$(, $arg:expr)*) => {{
+		panic!(dbg_dump!($fmt$(, $arg)*));
+	}};
+}
+
+pub struct StatDeq {
+	last: (String, String, bool),
+	ct: usize,
+	d: VecDeque<String>,
+	h: HashMap<String, u32>,
+	dump_next: bool,
+}
+
+impl StatDeq {
+	/// provide a message buffer of 'ct' lines, clamped between 100 and 10_000.
+	pub fn new(ct: usize) ->  Self {
+		StatDeq {
+			last: (String::new(), String::new(), false),
+			ct: cmp::min(10000, cmp::max(ct, 100)),
+			d: VecDeque::with_capacity(ct),
+			h: HashMap::new(),
+			dump_next: false,
 		}
-		$expr
-	})
+	}
+	pub fn restart(&mut self, fmt: String, msg: String) {
+		if self.dump_next {
+			self.dump();
+			self.dump_next = false;
+		}
+		self.d.clear();
+		self.add(false, fmt, msg);
+	}
+	pub fn add(&mut self, new_do_log: bool, fmt: String, msg: String) {
+		let last_fmt = self.last.0.to_owned();
+		let mut last_msg = self.last.1.to_owned();
+		let do_log = self.last.2.to_owned();
+		if last_fmt == fmt && last_msg == msg {
+			if do_log {
+				let repeat = self.h.entry(String::from("repeat")).or_insert(0);
+				*repeat += 1;
+			}
+		} else {
+			if let Some(repeat) = self.h.get_mut(&String::from("repeat")) {
+				if self.d.len() == self.ct {
+					self.d.pop_front();
+				}
+				if *repeat > 1 {
+					last_msg.push_str(&format!(" (repeated {} times)", repeat));
+				}
+				*repeat = 0;
+			}
+			self.d.push_back(last_msg);
+			if do_log {
+				*self.h.entry(last_fmt).or_insert(0) += 1;
+			}
+			self.last = (fmt, msg, new_do_log);
+		}
+	}
+	pub fn dump_next(&mut self) {
+		self.dump_next = true;
+	}
+	pub fn dump<'a>(&mut self) {
+		self.add(false, String::new(), String::new()); // to flush last message
+		eprintln!("--- Notes: ---");
+		for msg in &self.d {
+			eprintln!("{}", msg);
+		}
+		eprintln!("--- Total file:line:message format & counts: ---");
+		let mut count_vec: Vec<_> = self.h.iter().collect();
+		count_vec.sort_by(|a, b| a.0.cmp(b.0));
+		for (msg, ct) in count_vec {
+			if msg != "repeat" {
+				eprintln!("{}\t{}", msg, ct);
+			}
+		}
+	}
 }
 

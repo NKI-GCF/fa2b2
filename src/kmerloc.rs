@@ -6,6 +6,7 @@ use num::ToPrimitive;
 use num_traits::PrimInt;
 use num_traits::NumAssign;
 use std::fmt::LowerHex;
+use rdbg::STAT_DB;
 
 pub trait PriExtPosOri: PrimInt + BitAnd + NumAssign + BitOrAssign + BitAndAssign + FromPrimitive +
 ToPrimitive + LowerHex {
@@ -64,7 +65,7 @@ impl PriExtPosOri for u64 {
 		*self += 1 << 48;
 	}
 	fn set_extension(&mut self, x: u64) {
-		debug_assert!(x <= 0x7FFF);
+		dbg_assert!(x <= 0x7FFF);
 		*self &= 0x8000_FFFF_FFFF_FFFF;
 		*self |= x << 48;
 	}
@@ -102,7 +103,7 @@ impl MidPos for u64 {
 	// *self == new_entry.top() ? blacklisted was extension below, but not new_entry's
 	fn is_replaceable_by(&self, new_entry: u64) -> bool {
 		*self <= new_entry.top() || (self.pos() == new_entry.pos() && {
-				debug_assert!(self.same_ori(new_entry), "{:#x}, {:#x}", self, new_entry);
+				dbg_assert!(self.same_ori(new_entry), "{:#x}, {:#x}", self, new_entry);
 				true
 			})
 	}
@@ -147,7 +148,7 @@ impl<T: PriExtPosOri> KmerLoc<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::KmerLoc;
+    use super::*;
     use rand::{thread_rng, Rng};
     #[test]
     fn forward() {
@@ -157,9 +158,9 @@ mod tests {
         for _ in 0..pick {
             let ori = rng.gen_range(0, 2);
             kl.next(ori != 0, true);
-            assert_eq!(ori, kl.p & 1);
+            dbg_assert_eq!(ori, kl.p & 1);
         }
-        assert_eq!(kl.p & !1, 100 + (pick << 1));
+        dbg_assert_eq!(kl.p & !1, 100 + (pick << 1));
     }
     #[test]
     fn reverse() {
@@ -169,9 +170,9 @@ mod tests {
         for _ in 0..pick {
             let ori = rng.gen_range(0, 2);
             kl.next(ori != 0, false);
-            assert_eq!(ori, kl.p & 1);
+            dbg_assert_eq!(ori, kl.p & 1);
         }
-        assert_eq!(kl.p & !1, 100 - (pick << 1));
+        dbg_assert_eq!(kl.p & !1, 100 - (pick << 1));
     }
 
 }

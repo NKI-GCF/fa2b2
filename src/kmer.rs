@@ -2,6 +2,7 @@ use std::mem::size_of;
 use num_traits::PrimInt;
 use num::{FromPrimitive,ToPrimitive,Unsigned};
 use std::ops::BitXorAssign;
+use rdbg::STAT_DB;
 
 #[derive(Copy, Clone)]
 /// A kmer that dissociates index and strand orientation
@@ -89,7 +90,7 @@ impl<T> Kmer<T>
 
 	/// adds twobit to kmer sequences, to .dna in the top two bits.
 	pub fn add(&mut self, b2: u8) {
-		debug_assert!(b2 <= 3);
+		dbg_assert!(b2 <= 3);
 		let topb2 = T::to_u64(&self.topb2).unwrap();
 		let topless = (1 << topb2) - 1;
 		let dna = T::to_u64(&self.dna).unwrap() >> 2;
@@ -124,7 +125,7 @@ impl<T> Kmer<T>
 
 #[cfg(test)]
 mod tests {
-    use super::{Kmer,RevCmp};
+    use super::*;
     use std::{cmp,iter::once};
     use rand::{thread_rng, Rng};
     #[test]
@@ -133,10 +134,10 @@ mod tests {
         for i in 0..32 {
             kmer.add(i & 3);
         }
-        assert_eq!(kmer.dna, 0xE4E4E4E4E4E4E4E4);  // GTCAGTCAGTCAGTCA => 3210321032103210 (in 2bits)
-        assert_eq!(kmer.rc, 0xB1B1B1B1B1B1B1B1);   // xor 0xaaaaaaaa and reverse per 2bit
-        assert_eq!(kmer.is_template(), false); // first devbit is 1, ori is set in rc, so false
-        assert_eq!(kmer.get_idx(true), 0x4E4E4E4E4E4E4E4E); // highest bit is set, so flipped.
+        dbg_assert_eq!(kmer.dna, 0xE4E4E4E4E4E4E4E4);  // GTCAGTCAGTCAGTCA => 3210321032103210 (in 2bits)
+        dbg_assert_eq!(kmer.rc, 0xB1B1B1B1B1B1B1B1);   // xor 0xaaaaaaaa and reverse per 2bit
+        dbg_assert_eq!(kmer.is_template(), false); // first devbit is 1, ori is set in rc, so false
+        dbg_assert_eq!(kmer.get_idx(true), 0x4E4E4E4E4E4E4E4E); // highest bit is set, so flipped.
     }
     #[test]
     fn test_u32() {
@@ -144,10 +145,10 @@ mod tests {
         for i in 0..16 {
             kmer.add(i & 3);
         }
-        assert_eq!(kmer.dna, 0xE4E4E4E4);
-        assert_eq!(kmer.rc, 0xB1B1B1B1);
-        assert_eq!(kmer.is_template(), false);
-        assert_eq!(kmer.get_idx(true), 0x4E4E4E4E);
+        dbg_assert_eq!(kmer.dna, 0xE4E4E4E4);
+        dbg_assert_eq!(kmer.rc, 0xB1B1B1B1);
+        dbg_assert_eq!(kmer.is_template(), false);
+        dbg_assert_eq!(kmer.get_idx(true), 0x4E4E4E4E);
     }
     #[test]
     fn test_u8() {
@@ -155,10 +156,10 @@ mod tests {
         for i in 0..4 {
             kmer.add(i & 3);
         }
-        assert_eq!(kmer.dna, 0xE4);
-        assert_eq!(kmer.rc, 0xB1);
-        assert_eq!(kmer.is_template(), false);
-        assert_eq!(kmer.get_idx(true), 0x4E);
+        dbg_assert_eq!(kmer.dna, 0xE4);
+        dbg_assert_eq!(kmer.rc, 0xB1);
+        dbg_assert_eq!(kmer.is_template(), false);
+        dbg_assert_eq!(kmer.get_idx(true), 0x4E);
     }
     #[test]
     fn test_usize() {
@@ -166,10 +167,10 @@ mod tests {
         for i in 0..32 {
             kmer.add(i & 3);
         }
-        assert_eq!(kmer.dna, 0xE4E4E4E4E4E4E4E4);
-        assert_eq!(kmer.rc, 0xB1B1B1B1B1B1B1B1);
-        assert_eq!(kmer.is_template(), false);
-        assert_eq!(kmer.get_idx(true), 0x4E4E4E4E4E4E4E4E);
+        dbg_assert_eq!(kmer.dna, 0xE4E4E4E4E4E4E4E4);
+        dbg_assert_eq!(kmer.rc, 0xB1B1B1B1B1B1B1B1);
+        dbg_assert_eq!(kmer.is_template(), false);
+        dbg_assert_eq!(kmer.get_idx(true), 0x4E4E4E4E4E4E4E4E);
     }
     #[test]
     fn unique() {
@@ -180,10 +181,10 @@ mod tests {
                 kmer.add((i >> (j << 1)) & 3);
             }
             let x = (if kmer.is_template() {1} else {0}) | kmer.get_idx(true) << 1;
-            assert!( ! seen[x], format!("0x{:x} already seen!", x));
+            dbg_assert!( ! seen[x], "0x{:x} already seen!", x);
             seen[x] = true;
         }
-        assert_eq!(vec![true; 256], seen);
+        dbg_assert_eq!(vec![true; 256], seen);
     }
     #[test]
     fn test_revcmp() {
@@ -193,7 +194,7 @@ mod tests {
         for _ in 0..32 {
             kmer.add(rng.gen_range(0, 4));
         }
-        assert_eq!(kmer.dna.revcmp(kmerlen as usize), kmer.rc);
+        dbg_assert_eq!(kmer.dna.revcmp(kmerlen as usize), kmer.rc);
     }
     #[test]
     fn test_from_idx() {
@@ -216,16 +217,16 @@ mod tests {
                 test_ori = kmer.is_template();
             }
         }
-        assert_ne!(test_idx, 0xffffffffffffffff);
+        dbg_assert_ne!(test_idx, 0xffffffffffffffff);
         let kmer2 = Kmer::from_idx(test_idx, kmerlen, test_ori);
 
-        assert_eq!(test_dna, kmer2.dna);
-        assert_eq!(test_rc, kmer2.rc);
+        dbg_assert_eq!(test_dna, kmer2.dna);
+        dbg_assert_eq!(test_rc, kmer2.rc);
 
         let kmer3 = Kmer::from_idx(test_idx, kmerlen, !test_ori);
 
-        assert_eq!(test_dna, kmer3.rc);
-        assert_eq!(test_rc, kmer3.dna);
+        dbg_assert_eq!(test_dna, kmer3.rc);
+        dbg_assert_eq!(test_rc, kmer3.dna);
     }
     #[test]
     fn extra() {
@@ -233,7 +234,7 @@ mod tests {
         for _ in 0..16 {
             kmer.add(1);
         }
-        assert_eq!(kmer.dna, 0x55);
-        assert_eq!(kmer.rc, 0xff);
+        dbg_assert_eq!(kmer.dna, 0x55);
+        dbg_assert_eq!(kmer.rc, 0xff);
     }
 }

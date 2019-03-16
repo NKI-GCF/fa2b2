@@ -3,6 +3,7 @@ use std::{io,fs::File,cmp::Ordering::{Less,Greater,Equal}};
 use bincode::{SizeLimit,rustc_serialize::{decode_from,encode_into}};
 
 use kmerloc::PriExtPosOri;
+use rdbg::STAT_DB;
 //use extqueue::ExtQueue;
 
 #[derive(RustcEncodable, RustcDecodable)]
@@ -84,7 +85,7 @@ impl<T: PriExtPosOri> KmerStore<T>
 	}
 	pub fn b2_for_p(&self, p: u64) -> Option<u8> {
 		let i = p as usize >> 3;
-		assert!(i < self.b2.len(), "{:x}, {:x}", p, self.b2.len());
+		dbg_assert!(i < self.b2.len(), "{:x}, {:x}", p, self.b2.len());
 		self.b2.get(i).map(|x| (x >> (p & 6)) & 3)
 	}
 	pub fn is_available(&self, idx: usize, x: usize) -> bool {
@@ -94,7 +95,7 @@ impl<T: PriExtPosOri> KmerStore<T>
 
 #[cfg(test)]
 mod tests {
-    use super::KmerStore;
+    use super::*;
     #[test]
     fn it_works() {
         //let mut ks = KmerStore::new(32); // allocates 16 gig of data
@@ -112,7 +113,7 @@ mod tests {
         ks.offset_contig(10000); // another N-stretch of 10000
         ks.push_contig(p, goffs);
         let i = ks.get_contig(11016);
-        assert_eq!(ks.contig[i].twobit, 64);
+        dbg_assert_eq!(ks.contig[i].twobit, 64);
 
 
     }

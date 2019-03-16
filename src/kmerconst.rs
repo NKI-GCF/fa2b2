@@ -1,6 +1,7 @@
 use std::mem::size_of;
 use bit_reverse::ParallelReverse;
 use kmerloc::PriExtPosOri;
+use rdbg::STAT_DB;
 
 pub struct KmerConst {
 	pub no_kmers: usize,
@@ -21,20 +22,20 @@ pub fn afstand(x: usize, kmerlen: usize) -> usize {
 impl KmerConst {
 	pub fn new(readlen: usize, genomesize: usize) -> Self {
 		// bit width, required to store all (cumulative) genomic positions, is used as len
-		println!("Genome size: {}", genomesize);
 
 		let mut bitlen = genomesize.next_power_of_two().trailing_zeros() as usize;
 		if (bitlen & 1) == 1 { // must be even.
 			bitlen += 1
 		}
 		let kmerlen = bitlen / 2;
+		// e.g. with a RL 4 & KL 2: (0,1), (1,2), (2,3) => 3 kmers.
 		let no_kmers = readlen - kmerlen + 1;
 		let mut p = 0;
 		while {
 			p.extend();
 			afstand(p.x(), kmerlen) < no_kmers
 		}{}
-		println!("Using a kmerlength of {}, readlength of {}, ext_max: {}\n--", bitlen / 2, readlen, p.x());
+		dbg_restart!("Genome size: {}, readlen: {}, kmerlen: {}, ext_max: {}\n--", genomesize, readlen, kmerlen, p.x());
 		KmerConst {
 			no_kmers,
 			kmerlen,
@@ -47,15 +48,9 @@ impl KmerConst {
 	/// with given extension, create bitmask to flip high bits before extreme minimization
 	/// with this each extension minimizes in its own domain, decreasing ks.kmp sparsity.
 	// one added because index is shortened (kmer index top bit flipped, if set)
+	// XXX could use a lookup array instead?
 	pub fn ext_domain(&self, x: usize) -> usize {
 		x.swap_bits() >> (size_of::<usize>() * 8 - self.bitlen + 1)
 	}
 }
 
-#[cfg(test)]
-mod tests {
-	#[test]
-	fn ext_max() {
-	assert_eq!(1, 1);
-	}
-}

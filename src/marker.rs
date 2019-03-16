@@ -11,6 +11,7 @@ use std::slice::Iter;
 use occurrence::Occurrence;
 use kmerloc::{PriExtPosOri,MidPos};
 use kmerstore::KmerStore;
+use rdbg::STAT_DB;
 
 pub struct KmerIter<'a> {
 	n_stretch: u64,
@@ -26,7 +27,7 @@ impl<'a> KmerIter<'a> {
 
 	fn finalize_n_stretch_if_pending(&mut self) {
 		if self.n_stretch > 0 {
-			eprintln!("added new contig. Ns:{}", self.n_stretch);
+			dbg_print!("added new contig. Ns:{}", self.n_stretch);
 			self.ks.offset_contig(self.n_stretch);
 			self.goffs += self.n_stretch;
 			self.n_stretch = 0;
@@ -43,7 +44,7 @@ impl<'a> KmerIter<'a> {
 		if let Some(occ) = self.occ.get_mut(n) {
 			let p = occ.p.pos();
 			if n != 0 {
-				debug_assert!((self.ks.b2[p as usize >> 3] >> (p & 6)) & 3 == b2);
+				dbg_assert!((self.ks.b2[p as usize >> 3] >> (p & 6)) & 3 == b2);
 				let x = occ.p.x();
 				return occ.complete(b2, x);
 			}
@@ -57,11 +58,10 @@ impl<'a> KmerIter<'a> {
 				}
 			} else if occ.i != 0 {
 				self.goffs += occ.i as u64;
-				eprintln!("started N-stretch at {}.", p);
+				dbg_print!("started N-stretch at {}.", p);
 				self.ks.push_contig(p, self.goffs);
 
 				// clear all except orientation and position to rebuild at the start of a new contig.
-				//assert_eq!(occ.i, 1);
 				occ.i = 0;
 				self.n_stretch = 1;
 				return false;
@@ -79,11 +79,11 @@ impl<'a> KmerIter<'a> {
 	fn get_plimits(&self, p: u64) -> (u64, u64) {
 
 		// binary search; limit endp to end of contig
-		debug_assert!(p != 0);
+		dbg_assert!(p != 0);
 		let i = self.ks.get_contig(p);
 
-		debug_assert!(i < self.ks.contig.len());
-		debug_assert!(self.ks.contig[i].twobit <= p);
+		dbg_assert!(i < self.ks.contig.len());
+		dbg_assert!(self.ks.contig[i].twobit <= p);
 
 		let contig_start = self.ks.get_twobit_before(i).unwrap_or(0);
 		let kc = self.occ[0].kc;
@@ -91,7 +91,7 @@ impl<'a> KmerIter<'a> {
 
 		let p_no_kmers = (kc.no_kmers << 1) as u64;
 
-		let left = if dbgx!(p >= contig_start + p_no_kmers) {
+		let left = if p >= contig_start + p_no_kmers {
 			p - p_no_kmers
 		} else {
 			contig_start
@@ -101,6 +101,7 @@ impl<'a> KmerIter<'a> {
 			p + (kc.readlen << 1) as u64,
 			self.ks.get_twobit_after(i).unwrap_or(p_max),
 		);
+
 		(left, right)
 	}
 
@@ -111,13 +112,13 @@ impl<'a> KmerIter<'a> {
 
 		while {
 			let p = occ.p.pos();
-			debug_assert!(p <= occ.plim, "stored {:#x} not observed while rebuilding occ?", stored_at_index);
+			dbg_assert!(p <= occ.plim, "stored {:#x} not observed while rebuilding occ?", stored_at_index);
 			let b2 = self.ks.b2_for_p(p).unwrap();
 
-			eprintln!("=> b2 {:x} <=", b2);
+			dbg_print!("=> b2 {:x} <=", b2);
 			let x = occ.p.x();
 			let _ = occ.complete(b2, x);
-			dbgf!(occ.mark.p, "{:#x}") != stored_at_index
+			dbgf!(occ.p.pos(), "{:#x}") != stored_at_index.pos()
 		} {}
 		occ
 	}
@@ -142,7 +143,7 @@ impl<'a> KmerIter<'a> {
 	}
 
 	/// when the stored entry in ks.kmp is replaced or blacklisted, the occurence for the stored
-	/// needs to be extended to find, there, a minposfor the extended kmers.
+	/// needs to be extended to find, there, a minpos for the extended kmers.
 	/// the entry is added to the stack, return the index.
 	fn get_next_for_extension(&mut self, stored_at_index: &mut u64, original_n: usize,
 						   is_replaced: bool) -> usize {
@@ -153,7 +154,7 @@ impl<'a> KmerIter<'a> {
 			stored_at_index.extend();
 			let next_stack = self.rebuild_kmer_stack(dbgf!(*stored_at_index, "{:#x}"));
 
-			if is_replaced && n != 0 {
+			if dbgx!(is_replaced && n != 0) {
 				// position is written below, this self.occ[n] is done.
 				// Could add it to recurring kmer_stacks, though.
 				self.occ[n] = next_stack;
@@ -195,7 +196,7 @@ impl<'a> KmerIter<'a> {
 				let mut stored_at_index = self.ks.kmp[min_index];
 
 				if dbgx!(stored_at_index.is_replaceable_by(min_pos)) {
-					eprintln!("[{:#x}] (={:#016x}) <= {:#016x}", min_index, stored_at_index, min_pos);
+					dbg_print!("[{:#x}] (={:#016x}) <= {:#016x}", min_index, stored_at_index, min_pos);
 
 					self.ks.kmp[min_index] = min_pos;
 
@@ -217,7 +218,8 @@ impl<'a> KmerIter<'a> {
 					if dbgx!(stored_at_index.extension() == min_pos.extension()) {
 						self.ks.kmp[min_index].blacklist();
 
-						// both stored and current require extensions
+						// both stored and current require extensions. Stored is pushed and handled
+						// now.
 						n = self.get_next_for_extension(&mut stored_at_index, n, false);
 
 						break; // next_stack .
@@ -243,10 +245,7 @@ impl<'a> KmerIter<'a> {
 #[cfg(test)]
 mod tests {
 	use kmerconst::KmerConst;
-	use super::KmerIter;
-	use super::KmerStore;
-	use super::Occurrence;
-	use super::PriExtPosOri;
+	use super::*;
 	const READLEN: usize = 16;
 	const SEQLEN: usize = 250;
 
@@ -263,9 +262,9 @@ mod tests {
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
 			process(&mut occ, &mut ks, b"NNNNNNNNNNNNNNNN"[..].to_owned());
 		}
-		assert_eq!(ks.contig.len(), 1);
-		assert_eq!(ks.contig[0].twobit, 0);
-		assert_eq!(ks.contig[0].genomic, 16);
+		dbg_assert_eq!(ks.contig.len(), 1);
+		dbg_assert_eq!(ks.contig[0].twobit, 0);
+		dbg_assert_eq!(ks.contig[0].genomic, 16);
 	}
 	#[test]
 	fn test_1n() {
@@ -275,9 +274,9 @@ mod tests {
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
 			process(&mut occ, &mut ks, b"N"[..].to_owned());
 		}
-		assert_eq!(ks.contig.len(), 1);
-		assert_eq!(ks.contig[0].twobit, 0);
-		assert_eq!(ks.contig[0].genomic, 1);
+		dbg_assert_eq!(ks.contig.len(), 1);
+		dbg_assert_eq!(ks.contig[0].twobit, 0);
+		dbg_assert_eq!(ks.contig[0].genomic, 1);
 	}
 	#[test]
 	fn test_1n1c1n() {
@@ -287,11 +286,11 @@ mod tests {
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
 			process(&mut occ, &mut ks, b"NCN"[..].to_owned());
 		}
-		assert_eq!(ks.contig.len(), 2);
-		assert_eq!(ks.contig[0].twobit, 0);
-		assert_eq!(ks.contig[0].genomic, 1);
-		assert_eq!(ks.contig[1].twobit, 2);
-		assert_eq!(ks.contig[1].genomic, 3);
+		dbg_assert_eq!(ks.contig.len(), 2);
+		dbg_assert_eq!(ks.contig[0].twobit, 0);
+		dbg_assert_eq!(ks.contig[0].genomic, 1);
+		dbg_assert_eq!(ks.contig[1].twobit, 2);
+		dbg_assert_eq!(ks.contig[1].genomic, 3);
 
 	}
 	#[test]
@@ -302,9 +301,9 @@ mod tests {
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
 			process(&mut occ, &mut ks, b"CCCCCCCCCCCCCCCCC"[..].to_owned());
 		}
-		assert_eq!(ks.kmp.len(), 128);
+		dbg_assert_eq!(ks.kmp.len(), 128);
 		for i in 0..ks.kmp.len() {
-			assert!(ks.kmp[i].blacklisted(), "[{}], {:x}", i, ks.kmp[i]);
+			dbg_assert!(ks.kmp[i].blacklisted(), "[{}], {:x}", i, ks.kmp[i]);
 		}
 	}
 	#[test]
@@ -315,11 +314,9 @@ mod tests {
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
 			process(&mut occ, &mut ks, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned());
 		}
-		for i in 1..ks.kmp.len() {
-			assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);
+		for i in 0..ks.kmp.len() {
+			dbg_assert!(ks.kmp[i].blacklisted(), "[{}], {:x}", i, ks.kmp[i]);
 		}
-		let unresolveable = (1 << 63) | ((kc.ext_max as u64) << 48);
-		assert_eq!(ks.kmp[0], unresolveable);
 	}
 	#[test]
 	fn test_1n16c() {
@@ -330,10 +327,10 @@ mod tests {
 			process(&mut occ, &mut ks, b"NCCCCCCCCCCCCCCCC"[..].to_owned());
 		}
 		for i in 1..ks.kmp.len() {
-			assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);
+			dbg_assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);
 		}
 		let first_pos = (1 << 63) | ((kc.kmerlen as u64)<< 1);
-		assert_eq!(ks.kmp[0], first_pos);
+		dbg_assert_eq!(ks.kmp[0], first_pos);
 	}
 	#[test]
 	fn test_18at() {
@@ -344,7 +341,7 @@ mod tests {
 			process(&mut occ, &mut ks, b"ATATATATATATATATAT"[..].to_owned());
 		}
 		for i in 0..ks.kmp.len() {
-			assert!(ks.kmp[i].blacklisted(), "[{}], {:x}", i, ks.kmp[i]);
+			dbg_assert!(ks.kmp[i].blacklisted(), "[{}], {:x}", i, ks.kmp[i]);
 		}
 	}
 	#[test]
@@ -369,8 +366,8 @@ mod tests {
 					}
 				}
 				let mark_p = kmi.occ[1].mark.p;
-				eprintln!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", hash, mark_p, p);
-				assert_eq!(mark_p, p);
+				dbg_println!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", hash, mark_p, p);
+				dbg_assert_eq!(mark_p, p);
 			}
 		}
 	}
@@ -395,32 +392,40 @@ mod tests {
 					}
 				}
 				let mark_p = kmi.occ[1].mark.p;
-				eprintln!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", hash, mark_p, p);
-				assert_eq!(mark_p, p);
+				dbg_println!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", hash, mark_p, p);
+				dbg_assert_eq!(mark_p, p);
 			}
 		}
 	}
 	#[test]
 	fn test_reconstruct_gs4_rl1to4_all() { // all mappable.
-		for rl in 1..=4 {
-			for gen in 0..=255 {
-				let kc = KmerConst::new(rl, 4);
+		let seqlen: usize = 8;
+
+		let mut bitlen = seqlen.next_power_of_two().trailing_zeros() as usize;
+		if (bitlen & 1) == 1 { // must be even.
+			bitlen += 1
+		}
+		let kmerlen = bitlen / 2;
+
+		for rl in kmerlen..=seqlen {
+			for gen in 0..=4_usize.pow(seqlen as u32) {
+				let kc = KmerConst::new(rl, seqlen);
 				let mut ks = KmerStore::<u64>::new(kc.bitlen);
 				let ks_kmp_len = ks.kmp.len();
 				let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
 				let mut kmi = KmerIter::new(&mut ks, &mut occ);
-				let seq_vec:Vec<_> = [gen & 3, (gen >> 2) & 3, (gen >> 4) & 3, (gen >> 6) & 3].iter().map(|b| match b {
-						0 => 'A', 1 => 'C', 2 => 'T', 3 => 'G', _ => panic!("here") }).collect();
-				eprint!("\nsequence: {:?}", seq_vec);
+				let seq_vec:Vec<_> = (0..seqlen).map(|i| match (gen >> (i << 1)) & 3 {
+				0 => 'A', 1 => 'C', 2 => 'T', 3 => 'G', _ => dbg_panic!("here")}).collect();
+				dbg_println!("sequence: {:?}", seq_vec);
 
-				eprint!("\n");
 				let vv: Vec<u8> = seq_vec.iter().map(|&c| c as u8).collect();
 				let mut seq = vv.iter();
 				kmi.markcontig::<u64>(&mut seq);
+				dbg_println!("-- testing hashes --");
 				for hash in 0..ks_kmp_len {
 					let mut p = kmi.ks.kmp[hash];
 					if !p.blacklisted() {
-						eprintln!("hash: [{:#x}]: p: {:#x}", hash, p);
+						dbg_println!("hash: [{:#x}]: p: {:#x}", hash, p);
 						let _ = kmi.rebuild_kmer_stack(p);
 					}
 				}

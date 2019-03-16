@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use kmer::{Kmer,test_template};
 pub use kmerconst::{KmerConst,afstand};
 use kmerloc::{KmerLoc,PriExtPosOri};
-
+use rdbg::STAT_DB;
 
 // rename to Recurrance?
 pub struct Occurrence<'a> {
@@ -45,8 +45,7 @@ impl<'a> Occurrence<'a> {
 	}
 
 	fn hash_is_extreme(&mut self, hash: usize, p: u64) -> bool {
-		let x = p.x();
-		let xh = hash ^ self.kc.ext_domain(x);
+		let xh = hash ^ self.kc.ext_domain(p.x());
 		xh < self.mark.idx || (xh == self.mark.idx && p < self.mark.p)
 	}
 
@@ -74,14 +73,13 @@ impl<'a> Occurrence<'a> {
 		self.mark.reset();
 		let x = self.p.x();
 		let afs = afstand(x, self.kc.kmerlen);
-		let end_i = self.kc.no_kmers - afs;
-		if end_i == 0 {
+		if dbgx!(self.kc.no_kmers <= afs) {
 			return false;
 		}
-		for i in 0..end_i {
+		for i in 0..(self.kc.no_kmers - afs) {
 			let _ = self.set_if_extreme(i, x);
 		}
-		debug_assert!(self.mark.is_set());
+		dbg_assert!(self.mark.is_set());
 		true
 	}
 
@@ -141,8 +139,7 @@ impl<'a> Occurrence<'a> {
 
 #[cfg(test)]
 mod tests {
-	use super::KmerConst;
-	use super::Occurrence;
+	use super::*;
 
 	const READLEN: usize = 16;
 	const SEQLEN: usize = 250;
@@ -155,16 +152,16 @@ mod tests {
 			occ.complete(1, 0);
 		}
 		let mut kmer = occ.kmer();
-		assert_eq!(kmer.dna, 0x55);
-		assert_eq!(kmer.rc, 0xff);
-		assert_eq!(occ.p, 0xc);
+		dbg_assert_eq!(kmer.dna, 0x55);
+		dbg_assert_eq!(kmer.rc, 0xff);
+		dbg_assert_eq!(occ.p, 0xc);
 
 		occ.complete(2, 0);
 		kmer = occ.kmer();
-		assert_eq!(kmer.dna, 0x95);
-		assert_eq!(kmer.rc, 0xfc);
-		assert_eq!(occ.p, 0xf);
-		assert_eq!(kmer.get_idx(true), 0x6a);
+		dbg_assert_eq!(kmer.dna, 0x95);
+		dbg_assert_eq!(kmer.rc, 0xfc);
+		dbg_assert_eq!(occ.p, 0xf);
+		dbg_assert_eq!(kmer.get_idx(true), 0x6a);
 	}
 	#[test]
 	fn occurrence() {

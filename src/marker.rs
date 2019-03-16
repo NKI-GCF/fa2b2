@@ -336,12 +336,12 @@ mod tests {
 		assert_eq!(ks.kmp[0], first_pos);
 	}
 	#[test]
-	fn test_16at1a() {
+	fn test_18at() {
 		let kc = KmerConst::new(READLEN, SEQLEN);
 		let mut ks = KmerStore::<u64>::new(kc.bitlen);
 		{
 			let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
-			process(&mut occ, &mut ks, b"ATATATATATATATATA"[..].to_owned());
+			process(&mut occ, &mut ks, b"ATATATATATATATATAT"[..].to_owned());
 		}
 		for i in 0..ks.kmp.len() {
 			assert!(ks.kmp[i].blacklisted(), "[{}], {:x}", i, ks.kmp[i]);

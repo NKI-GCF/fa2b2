@@ -43,11 +43,6 @@ impl<'a> KmerIter<'a> {
 	) -> bool {
 		if let Some(occ) = self.occ.get_mut(n) {
 			let p = occ.p.pos();
-			if n != 0 {
-				dbg_assert!((self.ks.b2[p as usize >> 3] >> (p & 6)) & 3 == b2);
-				let x = occ.p.x();
-				return occ.complete(b2, x);
-			}
 			if b2 < 4 {
 				if let Some(qb) = self.ks.b2.get_mut(p as usize >> 3) {
 					*qb |= b2 << (p & 6);
@@ -89,18 +84,20 @@ impl<'a> KmerIter<'a> {
 		let kc = self.occ[0].kc;
 		let p_max = self.ks.p_max;
 
-		let p_no_kmers = (kc.no_kmers << 1) as u64;
+		let p_rl = (kc.readlen << 1) as u64;
 
-		let left = if p >= contig_start + p_no_kmers {
-			p - p_no_kmers
+		let left = if p >= contig_start + p_rl {
+			p - p_rl
 		} else {
 			contig_start
 		};
+		dbgf!(left, "{:?}, p:{}, contig_start:{}, p_rl:{}", p, contig_start, p_rl);
 
 		let right = cmp::min(
-			p + (kc.readlen << 1) as u64,
+			p + ((kc.readlen - kc.kmerlen + 1) << 1) as u64,
 			self.ks.get_twobit_after(i).unwrap_or(p_max),
 		);
+		dbgf!(right, "{:?}, p_max:{}", self.ks.get_twobit_after(i).unwrap_or(p_max));
 
 		(left, right)
 	}
@@ -118,7 +115,7 @@ impl<'a> KmerIter<'a> {
 			dbg_print!("=> b2 {:x} <=", b2);
 			let x = occ.p.x();
 			let _ = occ.complete(b2, x);
-			dbgf!(occ.p.has_samepos(stored_at_index), "{:?}, p:{:#x}", occ.p)
+			dbgf!(!occ.p.has_samepos(stored_at_index), "{:?}, p:{:#x}", occ.p)
 		} {}
 		occ
 	}
@@ -185,14 +182,16 @@ impl<'a> KmerIter<'a> {
 		self.ks.push_contig(self.occ[n].p.pos(), self.goffs);
 
 		while let Some(b2) = self.next_b2(seq, n) {
+			dbg_print!("=> twobit {:x} (n: {}) <=", b2, n);
 
 			if !self.complete_occurance_or_contig(n, b2) {
 				continue;
 			}
 			loop {
+				dbg_print!("---------[ n: {} ]-------------", n);
 
 				let (min_index, min_pos) = (self.occ[n].mark.idx, self.occ[n].mark.p);
-
+				dbg_assert!(min_index < self.ks.kmp.len(), "{:x}, {:x}", min_pos, self.occ[n].p);
 				let mut stored_at_index = self.ks.kmp[min_index];
 
 				if dbgx!(stored_at_index.is_replaceable_by(min_pos)) {
@@ -205,7 +204,7 @@ impl<'a> KmerIter<'a> {
 						n = self.get_next_for_extension(&mut stored_at_index, n, true);
 
 					} else if n > 0 {
-						if self.occ[n].p >= self.occ[n].plim {
+						if dbgf!(self.occ[n].p.pos() >= self.occ[n].plim, "{:?}, {:#x}, {:#x}", self.occ[n].p, self.occ[n].plim) {
 							n -= 1;
 							continue;
 						}
@@ -214,9 +213,11 @@ impl<'a> KmerIter<'a> {
 					break; // position written (done) or added next_stack which requires extension.
 				}
 				if dbgx!(self.occ[n].extend() && self.occ[n].set_next_mark()) {
+					dbgf!(self.occ[n].mark.p, "{:x}");
 
 					if dbgx!(stored_at_index.extension() == min_pos.extension()) {
 						self.ks.kmp[min_index].blacklist();
+						dbgf!(min_index, "[{:#x}] is blacklist'd ({:#x})", self.ks.kmp[min_index]);
 
 						// both stored and current require extension. Stored is handled now.
 						n = self.get_next_for_extension(&mut stored_at_index, n, false);
@@ -225,7 +226,8 @@ impl<'a> KmerIter<'a> {
 					}
 				} else {
 					self.ks.kmp[min_index].blacklist();
-					if dbgx!(n == 0) { // never pop 0th. 0th needs to be renewed when done.
+					dbgf!(min_index, "[{:#x}] is blacklisted ({:#x})", self.ks.kmp[min_index]);
+					if dbgx!(n == 0) { // 0th needs to be renewed when done.
 						break;
 					}
 					n -= 1;
@@ -236,7 +238,7 @@ impl<'a> KmerIter<'a> {
 				}
 			}
 		}
-		self.finalize_n_stretch_if_pending();
+		dbgx!(self.finalize_n_stretch_if_pending());
 		self.occ[0].p.pos() as u64
 	}
 }

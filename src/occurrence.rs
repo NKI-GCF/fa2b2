@@ -60,12 +60,19 @@ impl<'a> Occurrence<'a> {
 			},
 			None => 0
 		};
+		dbg_assert!(new_idx < self.d.len(), "new_idx >= self.d.len(), {} >= {}", new_idx, self.d.len());
 		self.p += if self.d[new_idx].update(b2, true) {3} else {2} - (1 & self.p);
 		self.i += 1;
 		self.i >= self.kc.kmerlen
 	}
-	fn mark_is_leaving(&self) -> bool {
-		self.p.pos() - ((self.kc.no_kmers as u64) << 1) == self.mark.p.pos()
+	fn mark_is_leaving(&self, new_xmer: bool) -> bool {
+
+		dbgf!(self.p.pos(), "{} - ({} << 1) == {} ?", self.kc.no_kmers, self.mark.p.pos());
+		self.p.pos() - ((self.kc.no_kmers as u64) << 1) == self.mark.p.pos() || {
+
+			dbg_assert!(new_xmer || self.kc.readlen != self.kc.kmerlen);
+			false
+		}
 	}
 
 	pub fn set_next_mark(&mut self) -> bool {
@@ -91,6 +98,7 @@ impl<'a> Occurrence<'a> {
 		let mut kmer = self.d[d_i];
 		if x > 0 {
 			let d_i2 = base.wrapping_sub(afs + i) % self.kc.no_kmers;
+			dbg_print!("dna:{:#x}, dna2:{:#x}", self.d[d_i2].dna, kmer.dna);
 			kmer.hash(self.d[d_i2]);
 		}
 		let hash = kmer.get_idx(true);
@@ -112,6 +120,7 @@ impl<'a> Occurrence<'a> {
 	pub fn complete(&mut self, b2: u8, x_start: usize) -> bool {
 
 		if self.complete_kmer(b2) {
+			let mut new_xmer = false;
 
 			for x in x_start..(self.p.x() + 1) {
 				let afs = afstand(x, self.kc.kmerlen);
@@ -119,12 +128,15 @@ impl<'a> Occurrence<'a> {
 					return false;
 				}
 				if self.set_if_extreme(0, x) {
+					dbgf!(self.mark.p, "{:#x}");
+					new_xmer = true;
 					break;
 				}
 			}
+			dbg_assert!(self.mark.is_set(), "or return false?");
 
 			if self.all_kmers() {
-				if self.i > self.kc.readlen && dbgx!(self.mark_is_leaving()) {
+				if self.i > self.kc.readlen && dbgx!(self.mark_is_leaving(new_xmer)) {
 					// there is a leaving kmer and the extreme was popped.
 					// need to reestablish new ext from all kmers and extensions.
 					// but cannot be less than this extension:

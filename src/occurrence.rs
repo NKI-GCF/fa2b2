@@ -66,9 +66,10 @@ impl<'a> Occurrence<'a> {
 		self.i >= self.kc.kmerlen
 	}
 	fn mark_is_leaving(&self, new_xmer: bool) -> bool {
+		let afs = afstand(self.mark.p.x(), self.kc.kmerlen);
 
-		dbgf!(self.p.pos(), "{} - ({} << 1) == {} ?", self.kc.no_kmers, self.mark.p.pos());
-		self.p.pos() - ((self.kc.no_kmers as u64) << 1) == self.mark.p.pos() || {
+		dbgf!(self.p.pos(), "{} - ({} + {} << 1) == {} ?", self.kc.no_kmers, afs, self.mark.p.pos());
+		self.p.pos() - ((self.kc.no_kmers + afs) << 1) as u64 == self.mark.p.pos() || {
 
 			dbg_assert!(new_xmer || self.kc.readlen != self.kc.kmerlen);
 			false

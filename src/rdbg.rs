@@ -203,17 +203,17 @@ impl StatDeq {
 	}
 	pub fn dump<'a>(&mut self) {
 		self.add(false, String::new(), String::new()); // to flush last message
-		eprintln!("--- Notes: ---");
-		for msg in &self.d {
-			eprintln!("{}", msg);
-		}
-		eprintln!("--- Total file:line:message format & counts: ---");
+		eprintln!("--- Total file:line:message & counts: ---");
 		let mut count_vec: Vec<_> = self.h.iter().collect();
 		count_vec.sort_by(|a, b| a.0.cmp(b.0));
 		for (msg, ct) in count_vec {
 			if msg != "repeat" {
 				eprintln!("{}\t{}", msg, ct);
 			}
+		}
+		eprintln!("--- Dump (last iteration): ---");
+		for msg in &self.d {
+			eprintln!("{}", msg);
 		}
 	}
 }

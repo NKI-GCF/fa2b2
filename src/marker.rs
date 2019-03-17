@@ -118,7 +118,7 @@ impl<'a> KmerIter<'a> {
 			dbg_print!("=> b2 {:x} <=", b2);
 			let x = occ.p.x();
 			let _ = occ.complete(b2, x);
-			dbgf!(occ.p.pos(), "{:#x}") != stored_at_index.pos()
+			dbgf!(occ.p.has_samepos(stored_at_index), "{:?}, p:{:#x}", occ.p)
 		} {}
 		occ
 	}
@@ -149,7 +149,7 @@ impl<'a> KmerIter<'a> {
 						   is_replaced: bool) -> usize {
 
 		let mut n = self.search_occ_for_pos(original_n, *stored_at_index);
-		if dbgx!(*stored_at_index != self.occ[n].mark.p) {
+		if dbg_dump_if!(*stored_at_index != self.occ[n].mark.p, false) {
 
 			stored_at_index.extend();
 			let next_stack = self.rebuild_kmer_stack(dbgf!(*stored_at_index, "{:#x}"));
@@ -218,11 +218,10 @@ impl<'a> KmerIter<'a> {
 					if dbgx!(stored_at_index.extension() == min_pos.extension()) {
 						self.ks.kmp[min_index].blacklist();
 
-						// both stored and current require extensions. Stored is pushed and handled
-						// now.
+						// both stored and current require extension. Stored is handled now.
 						n = self.get_next_for_extension(&mut stored_at_index, n, false);
 
-						break; // next_stack .
+						break;
 					}
 				} else {
 					self.ks.kmp[min_index].blacklist();
@@ -366,7 +365,7 @@ mod tests {
 					}
 				}
 				let mark_p = kmi.occ[1].mark.p;
-				dbg_println!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", hash, mark_p, p);
+				dbg_print!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", hash, mark_p, p);
 				dbg_assert_eq!(mark_p, p);
 			}
 		}
@@ -392,7 +391,7 @@ mod tests {
 					}
 				}
 				let mark_p = kmi.occ[1].mark.p;
-				dbg_println!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", hash, mark_p, p);
+				dbg_print!("testing: [{:#x}]: {:#x} == (stored p:){:#x}", hash, mark_p, p);
 				dbg_assert_eq!(mark_p, p);
 			}
 		}
@@ -416,16 +415,16 @@ mod tests {
 				let mut kmi = KmerIter::new(&mut ks, &mut occ);
 				let seq_vec:Vec<_> = (0..seqlen).map(|i| match (gen >> (i << 1)) & 3 {
 				0 => 'A', 1 => 'C', 2 => 'T', 3 => 'G', _ => dbg_panic!("here")}).collect();
-				dbg_println!("sequence: {:?}", seq_vec);
+				dbg_print!("sequence: {:?}", seq_vec);
 
 				let vv: Vec<u8> = seq_vec.iter().map(|&c| c as u8).collect();
 				let mut seq = vv.iter();
 				kmi.markcontig::<u64>(&mut seq);
-				dbg_println!("-- testing hashes --");
+				dbg_print!("-- testing hashes --");
 				for hash in 0..ks_kmp_len {
 					let mut p = kmi.ks.kmp[hash];
 					if !p.blacklisted() {
-						dbg_println!("hash: [{:#x}]: p: {:#x}", hash, p);
+						dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
 						let _ = kmi.rebuild_kmer_stack(p);
 					}
 				}

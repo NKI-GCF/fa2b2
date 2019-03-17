@@ -97,15 +97,20 @@ impl PriExtPosOri for u64 {
 pub trait MidPos: PriExtPosOri {
 	fn is_replaceable_by(&self, new_entry: u64) -> bool;
 	fn is_set_and_not(&self, other: u64) -> bool;
+	fn has_samepos(&self, other: u64) -> bool;
 }
 
 impl MidPos for u64 {
 	// *self == new_entry.top() ? blacklisted was extension below, but not new_entry's
+	fn has_samepos(&self, other: u64) -> bool {
+		self.pos() == other.pos() && {
+			// XXX: may want to remove this later if orientation doesn't matter
+			dbg_assert!(self.same_ori(other), "{:#x}, {:#x}", self, other);
+			true
+		}
+	}
 	fn is_replaceable_by(&self, new_entry: u64) -> bool {
-		*self <= new_entry.top() || (self.pos() == new_entry.pos() && {
-				dbg_assert!(self.same_ori(new_entry), "{:#x}, {:#x}", self, new_entry);
-				true
-			})
+		*self <= new_entry.top() || self.has_samepos(new_entry)
 	}
 	fn is_set_and_not(&self, other: u64) -> bool {
 		!self.blacklisted() && !self.is_same(other)

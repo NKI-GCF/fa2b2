@@ -34,9 +34,9 @@ impl<'a> Occurrence<'a> {
 
 
 	pub fn extend(&mut self) -> bool {
-		if self.p.x() < self.kc.ext_max {
+		if self.p.x() + 1 < self.kc.ext_max {
 			self.p.extend();
-			self.p.x() < self.kc.ext_max
+			true
 		} else {false}
 	}
 

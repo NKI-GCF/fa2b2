@@ -5,7 +5,6 @@ lazy_static! {
 	pub static ref STAT_DB: Mutex<StatDeq> = Mutex::new(StatDeq::new(500));
 }
 
-#[macro_export]
 macro_rules! filelinestr {
 	($l:expr$(, $opt:expr)*) => ({
 		concat!("[", file!(), ":", line!(), "] ", $l$(, $opt)*).to_string()
@@ -150,6 +149,7 @@ pub struct StatDeq {
 	ct: usize,
 	d: VecDeque<String>,
 	h: HashMap<String, u32>,
+	repeat: u32,
 	dump_next: bool,
 }
 
@@ -161,6 +161,7 @@ impl StatDeq {
 			ct: cmp::min(10000, cmp::max(ct, 100)),
 			d: VecDeque::with_capacity(ct),
 			h: HashMap::new(),
+			repeat: 1,
 			dump_next: false,
 		}
 	}
@@ -177,19 +178,14 @@ impl StatDeq {
 		let mut last_msg = self.last.1.to_owned();
 		let do_log = self.last.2.to_owned();
 		if last_fmt == fmt && last_msg == msg {
-			if do_log {
-				let repeat = self.h.entry(String::from("repeat")).or_insert(0);
-				*repeat += 1;
-			}
+			self.repeat += 1;
 		} else {
-			if let Some(repeat) = self.h.get_mut(&String::from("repeat")) {
-				if self.d.len() == self.ct {
-					self.d.pop_front();
-				}
-				if *repeat > 1 {
-					last_msg.push_str(&format!(" (repeated {} times)", repeat));
-				}
-				*repeat = 0;
+			if self.d.len() == self.ct {
+				self.d.pop_front();
+			}
+			if self.repeat > 1 {
+				last_msg.push_str(&format!(" (repeated {} times)", self.repeat));
+				self.repeat = 1;
 			}
 			self.d.push_back(last_msg);
 			if do_log {
@@ -207,9 +203,7 @@ impl StatDeq {
 		let mut count_vec: Vec<_> = self.h.iter().collect();
 		count_vec.sort_by(|a, b| a.0.cmp(b.0));
 		for (msg, ct) in count_vec {
-			if msg != "repeat" {
-				eprintln!("{}\t{}", msg, ct);
-			}
+			eprintln!("{}\t{}", msg, ct);
 		}
 		eprintln!("--- Dump (last iteration): ---");
 		for msg in &self.d {

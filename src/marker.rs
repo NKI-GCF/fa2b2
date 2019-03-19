@@ -104,34 +104,31 @@ impl<'a> KmerIter<'a> {
 
 	fn rebuild_kmer_stack(&mut self, min_index: usize, new_val: u64) -> Occurrence<'a> {
 
-		let stored_at_index = self.ks.kmp[min_index];
+		let mut stored = self.ks.kmp[min_index];
 
-		let plimits = self.get_plimits(stored_at_index.pos());
-		let mut occ = Occurrence::new(plimits, self.occ[0].kc, stored_at_index.extension());
+		let plimits = self.get_plimits(stored.pos());
+		let mut occ = Occurrence::new(plimits, self.occ[0].kc, stored.extension());
 
 		while {
 			let p = occ.p.pos();
-			dbg_assert!(p <= occ.plim, "stored {:#x} not observed while rebuilding occ?", stored_at_index);
 			let b2 = self.ks.b2_for_p(p).unwrap();
 
 			dbg_print!("=> b2 {:x} <=", b2);
 			let x = occ.p.x();
 			let _ = occ.complete(b2, x);
-			if occ.p.pos() == stored_at_index.pos() {
-				self.ks.kmp[min_index] = new_val;
+			if occ.p.pos() <= stored.pos() {
+				if occ.p.pos() == stored.pos() {
+					self.ks.kmp[min_index] = new_val;
+				}
+				true
+			} else {
+				if occ.p.pos() == stored.pos() + 2 {
+					stored = occ.mark.p;
+				}
+				occ.mark.p == stored && occ.p.pos() < occ.plim
 			}
-			occ.p.pos() <= stored_at_index.pos()
 		} {}
-		let new_mark_p = occ.mark.p;
-		while {
-			let p = occ.p.pos();
-			let b2 = self.ks.b2_for_p(p).unwrap();
 
-			dbg_print!("=> b2 {:x} <=", b2);
-			let x = occ.p.x();
-			let _ = occ.complete(b2, x);
-			occ.mark.p == new_mark_p && occ.p.pos() < occ.plim
-		} {}
 		occ
 	}
 

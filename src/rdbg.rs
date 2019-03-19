@@ -107,7 +107,7 @@ macro_rules! dbg_dump {
 #[macro_export]
 macro_rules! dbg_assert {
 	($test:expr) => {{
-		debug_assert!($test, "{}", dbg_dump!());
+		debug_assert!($test, "{}", dbg_dump!("Assert `{}' failed!", stringify!($test)));
 	}};
 	($test:expr, $fmt:literal$(, $arg:expr)*) => {{
 		debug_assert!($test, "{}", dbg_dump!($fmt$(, $arg)*));
@@ -117,7 +117,7 @@ macro_rules! dbg_assert {
 #[macro_export]
 macro_rules! dbg_assert_eq {
 	($a:expr, $b:expr) => {{
-		debug_assert_eq!($a, $b, "{}", dbg_dump!());
+		debug_assert_eq!($a, $b, "{}", dbg_dump!("Assert `{}' == `{}' failed!", stringify!($a), stringify!($b)));
 	}};
 	($a:expr, $b:expr, $fmt:literal$(, $arg:expr)*) => {{
 		debug_assert_eq!($a, $b, "{}", dbg_dump!($fmt$(, $arg)*));
@@ -127,7 +127,7 @@ macro_rules! dbg_assert_eq {
 #[macro_export]
 macro_rules! dbg_assert_ne {
 	($a:expr, $b:expr) => {{
-		debug_assert_ne!($a, $b, "{}", dbg_dump!());
+		debug_assert_ne!($a, $b, "{}", dbg_dump!("Assert `{}' != `{}' failed!", stringify!($a), stringify!($b)));
 	}};
 	($a:expr, $b:expr, $fmt:literal$(, $arg:expr)*) => {{
 		debug_assert_ne!($a, $b, "{}", dbg_dump!($fmt$(, $arg)*));

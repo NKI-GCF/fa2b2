@@ -94,7 +94,7 @@ impl<'a> KmerIter<'a> {
 		dbgf!(left, "{:?}, p:{}, contig_start:{}, p_rl:{}", p, contig_start, p_rl);
 
 		let right = cmp::min(
-			p + ((kc.readlen - kc.kmerlen + 1) << 1) as u64,
+			p + ((kc.readlen - kc.kmerlen) << 1) as u64,
 			self.ks.get_twobit_after(i).unwrap_or(p_max),
 		);
 		dbgf!(right, "{:?}, p_max:{}", self.ks.get_twobit_after(i).unwrap_or(p_max));
@@ -102,7 +102,9 @@ impl<'a> KmerIter<'a> {
 		(left, right)
 	}
 
-	fn rebuild_kmer_stack(&self, stored_at_index: u64) -> Occurrence<'a> {
+	fn rebuild_kmer_stack(&mut self, min_index: usize, new_val: u64) -> Occurrence<'a> {
+
+		let stored_at_index = self.ks.kmp[min_index];
 
 		let plimits = self.get_plimits(stored_at_index.pos());
 		let mut occ = Occurrence::new(plimits, self.occ[0].kc, stored_at_index.extension());
@@ -115,7 +117,20 @@ impl<'a> KmerIter<'a> {
 			dbg_print!("=> b2 {:x} <=", b2);
 			let x = occ.p.x();
 			let _ = occ.complete(b2, x);
-			dbgf!(!occ.p.has_samepos(stored_at_index), "{:?}, p:{:#x}", occ.p)
+			if occ.p.pos() == stored_at_index.pos() {
+				self.ks.kmp[min_index] = new_val;
+			}
+			occ.p.pos() <= stored_at_index.pos()
+		} {}
+		let new_mark_p = occ.mark.p;
+		while {
+			let p = occ.p.pos();
+			let b2 = self.ks.b2_for_p(p).unwrap();
+
+			dbg_print!("=> b2 {:x} <=", b2);
+			let x = occ.p.x();
+			let _ = occ.complete(b2, x);
+			occ.mark.p == new_mark_p && occ.p.pos() < occ.plim
 		} {}
 		occ
 	}
@@ -142,20 +157,24 @@ impl<'a> KmerIter<'a> {
 	/// when the stored entry in ks.kmp is replaced or blacklisted, the occurence for the stored
 	/// needs to be extended to find, there, a minpos for the extended kmers.
 	/// the entry is added to the stack, return the index.
-	fn get_next_for_extension(&mut self, stored_at_index: &mut u64, original_n: usize,
+	fn get_next_for_extension(&mut self, min_index: usize, new_val: u64, original_n: usize,
 						   is_replaced: bool) -> usize {
 
-		let mut n = self.search_occ_for_pos(original_n, *stored_at_index);
-		if dbg_dump_if!(*stored_at_index != self.occ[n].mark.p, false) {
+		let stored_at_index = self.ks.kmp[min_index];
+		let mut n = self.search_occ_for_pos(original_n, stored_at_index);
+		if dbgx!(stored_at_index != self.occ[n].mark.p) {
 
-			stored_at_index.extend();
-			let next_stack = self.rebuild_kmer_stack(dbgf!(*stored_at_index, "{:#x}"));
+			let next_stack = self.rebuild_kmer_stack(min_index, new_val);
 
 			if dbgx!(is_replaced && n != 0) {
 				// position is written below, this self.occ[n] is done.
 				// Could add it to recurring kmer_stacks, though.
-				self.occ[n] = next_stack;
-			} else {
+				if next_stack.p.pos() < next_stack.plim {
+					self.occ[n] = next_stack;
+				} else if n != 0 {
+					n -= 1;
+				}
+			} else if next_stack.p.pos() < next_stack.plim {
 				// 0th is never overwritten.
 				n += 1;
 				self.add_newstack(next_stack, n);
@@ -201,12 +220,17 @@ impl<'a> KmerIter<'a> {
 
 					if dbgx!(stored_at_index.is_set_and_not(min_pos)) {
 
-						n = self.get_next_for_extension(&mut stored_at_index, n, true);
+						n = self.get_next_for_extension(min_index, min_pos, n, true);
 
-					} else if n > 0 {
-						if dbgf!(self.occ[n].p.pos() >= self.occ[n].plim, "{:?}, {:#x}, {:#x}", self.occ[n].p, self.occ[n].plim) {
-							n -= 1;
-							continue;
+					} else {
+						self.ks.kmp[min_index] = min_pos;
+						if n > 0 {
+							// We're done on a recurrence when observing an already set value, not mark.p
+							if dbgf!(stored_at_index.is_same(min_pos) || self.occ[n].p.pos() == self.occ[n].plim,
+									"{:?}, {:#x}, {:#x}", self.occ[n].p, self.occ[n].plim) {
+								n -= 1;
+								continue;
+							}
 						}
 					}
 
@@ -216,11 +240,12 @@ impl<'a> KmerIter<'a> {
 					dbgf!(self.occ[n].mark.p, "{:x}");
 
 					if dbgx!(stored_at_index.extension() == min_pos.extension()) {
-						self.ks.kmp[min_index].blacklist();
+						let mut blacklist = self.ks.kmp[min_index];
+						blacklist.blacklist();
 						dbgf!(min_index, "[{:#x}] is blacklist'd ({:#x})", self.ks.kmp[min_index]);
 
 						// both stored and current require extension. Stored is handled now.
-						n = self.get_next_for_extension(&mut stored_at_index, n, false);
+						n = self.get_next_for_extension(min_index, blacklist, n, false);
 
 						break;
 					}
@@ -359,7 +384,7 @@ mod tests {
 		for hash in 0..ks_kmp_len {
 			let mut p = kmi.ks.kmp[hash];
 			if !p.blacklisted() {
-				let new_stack = kmi.rebuild_kmer_stack(p);
+				let new_stack = kmi.rebuild_kmer_stack(hash, p);
 				kmi.add_newstack(new_stack, 1);
 				while let Some(b2) = kmi.next_b2(&mut seq, 1) {
 					if kmi.complete_occurance_or_contig(1, b2) {
@@ -385,7 +410,7 @@ mod tests {
 		for hash in 0..ks_kmp_len {
 			let mut p = kmi.ks.kmp[hash];
 			if !p.blacklisted() {
-				let new_stack = kmi.rebuild_kmer_stack(p);
+				let new_stack = kmi.rebuild_kmer_stack(hash, p);
 				kmi.add_newstack(new_stack, 1);
 				while let Some(b2) = kmi.next_b2(&mut seq, 1) {
 					if kmi.complete_occurance_or_contig(1, b2) {
@@ -427,7 +452,7 @@ mod tests {
 					let mut p = kmi.ks.kmp[hash];
 					if !p.blacklisted() {
 						dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
-						let _ = kmi.rebuild_kmer_stack(p);
+						let _ = kmi.rebuild_kmer_stack(hash, p);
 					}
 				}
 			}

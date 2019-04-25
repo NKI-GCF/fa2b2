@@ -12,10 +12,9 @@ Uitzondering zijn palindrome kmers. Hierbij wordt er gekeken naar
 de eerste bit, en wordt vergelijkbaar bitwise gecomplementeerd.
 
 Binnen een venster, de gegeven readlengte, wordt gezocht naar de
-minimale xmer als index voor opslag van strand, positie, extensie
-en prioriteit. Extensie blijft nul zolang de xmer niet eerder is
-voorgekomen op het genoom. De prioriteit, de hoogste bit, is
-standaard gezet.
+minimale xmer als index voor opslag van strand, positie en
+extensie. Extensie blijft nul zolang de xmer niet eerder is
+voorgekomen op het genoom.
 
 In eerste instantie itereren we over de contig, als twobits, en
 bouwen/updaten een template en reverse complement kmers om de xmer

@@ -74,23 +74,18 @@ fn main() {
 			//break;
 		}
 	}
-	let mut stat = [[0; 8]; 4];
+	let mut stat = [[0; 8]; 2];
 	for k in ks.kmp {
-		let i = if k.blacklisted() {2} else {0} | if k.priority() == 0 {1} else {0};
-		stat[i][k.x()] += 1;
+		stat[if k.no_pos() {0} else {1}][k.x()] += 1;
+	}
+	println!("Unset: {}", stat[0][0]);
+	for j in 1..8 {
+		println!("Blacklisted for extension {}: {}", j, stat[0][j]);
 	}
 	for j in 0..8 {
-		println!("Priority position, extension {}: {}", j, stat[0][j]);
+		println!("Set for extension {}: {}", j, stat[1][j]);
 	}
-	for j in 0..8 {
-		println!("Non-priority position, extension {}: {}", j, stat[1][j]);
-	}
-	for j in 0..8 {
-		println!("Priority, blacklisted for extension {}: {}", j, stat[2][j]);
-	}
-	for j in 0..8 {
-		println!("Non-priority, blacklisted for extension {}: {}", j, stat[3][j]);
-	}
+
 
 
 	println!("Writing first occurances per kmer to disk");

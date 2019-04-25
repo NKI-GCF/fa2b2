@@ -88,9 +88,6 @@ impl<T: PriExtPosOri> KmerStore<T>
 		dbg_assert!(i < self.b2.len(), "{:x}, {:x}", p, self.b2.len());
 		self.b2.get(i).map(|x| (x >> (p & 6)) & 3)
 	}
-	pub fn is_available(&self, idx: usize, x: usize) -> bool {
-		self.kmp[idx].extpos() <= (x as u64) << 48
-	}
 }
 
 #[cfg(test)]

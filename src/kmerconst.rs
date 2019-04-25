@@ -1,4 +1,5 @@
 use std::mem::size_of;
+use std::cmp::min;
 use bit_reverse::ParallelReverse;
 use kmerloc::PriExtPosOri;
 use rdbg::STAT_DB;
@@ -11,7 +12,7 @@ pub struct KmerConst {
 	pub ext_max: usize,
 }
 
-pub fn afstand(x: usize, kmerlen: usize) -> usize {
+fn afstand(x: usize, kmerlen: usize) -> usize {
 	let t = if x == 0 {0} else {1 << (x-1)};
 	if t <= kmerlen {t} else {
 		let n = kmerlen.next_power_of_two().trailing_zeros() as usize;
@@ -43,6 +44,9 @@ impl KmerConst {
 			readlen,
 			ext_max: p.x()
 		}
+	}
+	pub fn afstand(&self, x: usize) -> usize {
+		min(afstand(x, self.kmerlen), self.readlen)
 	}
 
 	/// with given extension, create bitmask to flip high bits before extreme minimization

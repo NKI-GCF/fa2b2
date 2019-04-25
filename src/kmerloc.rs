@@ -12,33 +12,25 @@ pub trait PriExtPosOri: PrimInt + BitAnd + NumAssign + BitOrAssign + BitAndAssig
 ToPrimitive + LowerHex {
 	fn extension(&self) -> u64;
 	fn x(&self) -> usize;
-	fn extpos(&self) -> u64;
 	fn same_ori(&self, p: u64) -> bool;
 	fn top(&self) -> u64;
 	fn bottom(&self) -> u64;
 	fn pos(&self) -> u64;
 	fn blacklist(&mut self);
-	fn blacklisted(&self) -> bool;
+	fn no_pos(&self) -> bool;
 	fn extend(&mut self);
 	fn set_extension(&mut self, x: u64);
-	fn priority(&self) -> u64;
-	fn set_priority(&mut self);
-	fn unset_priority(&mut self);
 	fn clear_extension(&mut self);
-	fn clear_extension_and_priority(&mut self);
 	fn is_same(&self, other: u64) -> bool;
-        fn with_ext_prior(&self, x: usize) -> u64;
+	fn with_ext(&self, x: usize) -> u64;
 }
 
 impl PriExtPosOri for u64 {
 	fn extension(&self) -> u64 {
-		self & 0x7FFF_0000_0000_0000
+		self & 0xFFFF_0000_0000_0000
 	}
 	fn x(&self) -> usize {
 		(self.extension() >> 48) as usize
-	}
-	fn extpos(&self) -> u64 {
-		self & !(1 << 63)
 	}
 	fn same_ori(&self, p: u64) -> bool {
 		(self & 1) == (p & 1)
@@ -53,42 +45,30 @@ impl PriExtPosOri for u64 {
 		*self & 0x_FFFF_FFFF_FFFE
 	}
 	fn blacklist(&mut self) {
-		if !self.blacklisted() {
+		if !self.no_pos() {
 			*self &= !0x_FFFF_FFFF_FFFF;
 			self.extend();
 		}
 	}
-	fn blacklisted(&self) -> bool {
+	fn no_pos(&self) -> bool {
 		self.pos() == 0
 	}
 	fn extend(&mut self) {
 		*self += 1 << 48;
 	}
 	fn set_extension(&mut self, x: u64) {
-		dbg_assert!(x <= 0x7FFF);
-		*self &= 0x8000_FFFF_FFFF_FFFF;
+		dbg_assert!(x <= 0xFFFF);
+		*self &= 0xFFFF_FFFF_FFFF;
 		*self |= x << 48;
 	}
-	fn priority(&self) -> u64 {
-		self & (1 << 63)
-	}
-	fn set_priority(&mut self) {
-		*self |= 1 << 63;
-	}
-	fn unset_priority(&mut self) {
-		*self &= 0x7FFF_FFFF_FFFF_FFFF;
-	}
 	fn clear_extension(&mut self) {
-		*self &= 0x_7FFF_FFFF_FFFF;
-	}
-	fn clear_extension_and_priority(&mut self) {
 		*self &= 0x_FFFF_FFFF_FFFF;
 	}
 	fn is_same(&self, other: u64) -> bool {
 		*self == other
 	}
-	fn with_ext_prior(&self, x: usize) -> u64 {
-		self.pos() | (1 << 63) | ((x as u64) << 48)
+	fn with_ext(&self, x: usize) -> u64 {
+		self.pos() | ((x as u64) << 48)
 	}
 }
 
@@ -101,7 +81,6 @@ pub trait MidPos: PriExtPosOri {
 }
 
 impl MidPos for u64 {
-	// *self == new_entry.top() ? blacklisted was extension below, but not new_entry's
 	fn has_samepos(&self, other: u64) -> bool {
 		self.pos() == other.pos() && {
 			// XXX: may want to remove this later if orientation doesn't matter
@@ -113,7 +92,7 @@ impl MidPos for u64 {
 		*self <= new_entry.top() || self.has_samepos(new_entry)
 	}
 	fn is_set_and_not(&self, other: u64) -> bool {
-		!self.blacklisted() && !self.is_same(other)
+		!(self.no_pos() || self.is_same(other))
 	}
 }
 
@@ -134,12 +113,11 @@ impl<T: PriExtPosOri> KmerLoc<T> {
 		self.idx = idx;
 		self.p = p;
 		self.p.set_extension(x as u64);
-		self.p.set_priority();
 	}
 
-	pub fn priority(&self) -> u64 {
+	/*pub fn priority(&self) -> u64 {
 		self.p.to_u64().unwrap() & 0x8000_0000_0000_0000
-	}
+	}*/
 	pub fn next(&mut self, ori: bool, is_template: bool) {
 		// ori == true if kmer is for template, then we want 1 in self.p
 		let p = self.p.to_u64().unwrap();

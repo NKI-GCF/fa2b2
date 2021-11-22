@@ -79,6 +79,7 @@ impl<T: PriExtPosOri> KmerStore<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rdbg::STAT_DB;
     #[test]
     fn it_works() {
         //let mut ks = KmerStore::new(32); // allocates 16 gig of data

@@ -352,7 +352,7 @@ impl<'a> KmerIter<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kmerconst::KmerConst;
+    use crate::kmerconst::KmerConst;
     const READLEN: usize = 16;
     const SEQLEN: usize = 250;
 
@@ -464,7 +464,7 @@ mod tests {
         for hash in 0..ks_kmp_len {
             let mut p = kmi.ks.kmp[hash];
             if !p.no_pos() {
-                let new_stack = kmi.rebuild_kmer_stack(hash);
+                let new_stack = kmi.rebuild_kmer_stack(hash).unwrap();
                 dbg_assert_eq!(new_stack.mark.p, p);
             }
         }
@@ -483,9 +483,9 @@ mod tests {
         for hash in 0..ks_kmp_len {
             let mut p = kmi.ks.kmp[hash];
             if !p.no_pos() {
-                let new_stack = kmi.rebuild_kmer_stack(hash);
+                let new_stack = kmi.rebuild_kmer_stack(hash).unwrap();
                 kmi.add_newstack(new_stack, 1);
-                while let Some(b2) = kmi.next_b2(&mut seq, 1) {
+                while let Ok(b2) = kmi.next_b2(&mut seq, 1) {
                     if kmi.complete_occurance_or_contig(1, b2) {
                         break;
                     }
@@ -539,7 +539,7 @@ mod tests {
                     let mut p = kmi.ks.kmp[hash];
                     if !p.no_pos() {
                         dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
-                        dbg_assert_eq!(kmi.rebuild_kmer_stack(hash).mark.p, p);
+                        dbg_assert_eq!(kmi.rebuild_kmer_stack(hash).unwrap().mark.p, p);
                     }
                 }
             }

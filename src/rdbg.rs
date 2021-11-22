@@ -172,10 +172,10 @@ macro_rules! dbg_assert_ne {
 #[macro_export]
 macro_rules! dbg_panic {
 	() => {{
-		panic!(dbg_dump!());
+		panic!("{}", dbg_dump!());
 	}};
 	($fmt:literal$(, $arg:expr)*) => {{
-		panic!(dbg_dump!($fmt$(, $arg)*));
+		panic!("{}", dbg_dump!($fmt$(, $arg)*));
 	}};
 }
 

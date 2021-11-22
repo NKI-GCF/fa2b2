@@ -1,21 +1,12 @@
 use crate::rdbg::STAT_DB;
 use num::FromPrimitive;
-use num::ToPrimitive;
-use num_traits::NumAssign;
 use num_traits::PrimInt;
-use std::fmt::LowerHex;
-use std::ops::BitAnd;
-use std::ops::BitAndAssign;
-use std::ops::BitOrAssign;
+use std::ops::{AddAssign, SubAssign};
 
-pub trait PriExtPosOri:
-    PrimInt + BitAnd + NumAssign + BitOrAssign + BitAndAssign + FromPrimitive + ToPrimitive + LowerHex
-{
+pub trait PriExtPosOri: PrimInt + FromPrimitive + AddAssign + SubAssign {
     fn extension(&self) -> u64;
     fn x(&self) -> usize;
     fn same_ori(&self, p: u64) -> bool;
-    fn top(&self) -> u64;
-    fn bottom(&self) -> u64;
     fn pos(&self) -> u64;
     fn blacklist(&mut self);
     fn no_pos(&self) -> bool;
@@ -35,12 +26,6 @@ impl PriExtPosOri for u64 {
     }
     fn same_ori(&self, p: u64) -> bool {
         (self & 1) == (p & 1)
-    }
-    fn top(&self) -> u64 {
-        *self & !0x_FFFF_FFFF_FFFF
-    }
-    fn bottom(&self) -> u64 {
-        *self & 0x_FFFF_FFFF_FFFF
     }
     fn pos(&self) -> u64 {
         *self & 0x_FFFF_FFFF_FFFE
@@ -89,7 +74,7 @@ impl MidPos for u64 {
         }
     }
     fn is_replaceable_by(&self, new_entry: u64) -> bool {
-        *self <= new_entry.top() || self.has_samepos(new_entry)
+        *self <= new_entry.extension() || self.has_samepos(new_entry)
     }
     fn is_set_and_not(&self, other: u64) -> bool {
         !(self.no_pos() || self.is_same(other))

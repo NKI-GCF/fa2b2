@@ -9,7 +9,7 @@ De xmer die bitwise gecomplementeerd is kan niet overeenkomen met
 een kmer die als xmer gekozen zou worden, want deze kmer heeft de
 eerste bit die verschilt met zijn reverse complement niet gezet.
 Uitzondering zijn palindrome kmers. Hierbij wordt er gekeken naar
-de eerste bit, en wordt vergelijkbaar bitwise gecomplementeerd.
+de eerste bit, en conditioneel hierop bitwise gecomplementeerd.
 
 Binnen een venster, de gegeven readlengte, wordt gezocht naar de
 minimale xmer als index voor opslag van strand, positie en
@@ -29,6 +29,7 @@ hoogste extensie komt/blijft staan. Indien extensie gelijk is komt
 er een blacklisting te staan voor deze extensie: Een nul positie
 met deze extensie plus een. Voor de nu niet opgeslagen informatie
 volgt er een oplossing:
+(idee: geen blacklisting maar dupbit zetten)
 
 Met hulp van de genomisch opgeslagen twobit sequentie wordt voor
 de in limbo positie het venster gerepliceerd. Vervolgens wordt de

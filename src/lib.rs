@@ -1,7 +1,7 @@
 //kmerstore
-extern crate flate2;
-extern crate rustc_serialize;
 extern crate bincode;
+extern crate flate2;
+extern crate serde;
 
 //kmerconst
 extern crate bit_reverse;
@@ -21,8 +21,8 @@ extern crate lazy_static;
 #[macro_use]
 pub mod rdbg;
 pub mod kmer;
-pub mod kmerstore;
 pub mod kmerconst;
 pub mod kmerloc;
-pub mod occurrence;
+pub mod kmerstore;
 pub mod marker;
+pub mod occurrence;

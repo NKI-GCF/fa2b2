@@ -22,7 +22,7 @@ use fa2b2::kmerconst::KmerConst;
 use fa2b2::kmerloc::PriExtPosOri;
 use fa2b2::kmerstore::KmerStore;
 use fa2b2::marker::KmerIter;
-use fa2b2::occurrence::Occurrence;
+use fa2b2::scope::Scope;
 
 fn main() -> Result<()> {
     let matches = App::new("fa2b2")
@@ -64,7 +64,7 @@ fn main() -> Result<()> {
     ks.opt |= 1; //
                  //ks.opt |= 2; // if set also non-priority (ext)kmers
     {
-        let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+        let mut occ: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
         let mut kmi = KmerIter::new(&mut ks, &mut occ);
         println!("Chromosome\trunning unique count");
         for chr in &chrs {

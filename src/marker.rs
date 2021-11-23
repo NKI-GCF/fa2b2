@@ -10,19 +10,19 @@ use std::slice::Iter;
 
 use crate::kmerloc::{MidPos, PriExtPosOri};
 use crate::kmerstore::KmerStore;
-use crate::occurrence::Occurrence;
 use crate::rdbg::STAT_DB;
+use crate::scope::Scope;
 use anyhow::{anyhow, Result};
 
 pub struct KmerIter<'a> {
     n_stretch: u64,
     goffs: u64,
-    pub(super) occ: &'a mut Vec<Occurrence<'a>>,
+    pub(super) occ: &'a mut Vec<Scope<'a>>,
     pub(super) ks: &'a mut KmerStore<u64>,
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
-    pub fn new(ks: &'a mut KmerStore<u64>, occ: &'a mut Vec<Occurrence<'a>>) -> Self {
+    pub fn new(ks: &'a mut KmerStore<u64>, occ: &'a mut Vec<Scope<'a>>) -> Self {
         KmerIter {
             n_stretch: 0,
             goffs: 0,
@@ -43,8 +43,8 @@ impl<'a> KmerIter<'a> {
     }
 
     /// if N, insert contig (once) and count stretch => false
-    /// else store and update occurrance kmers, complete ? true : false
-    fn complete_occurance_or_contig(&mut self, n: usize, b2: u8) -> bool {
+    /// else store and update scope kmers, complete ? true : false
+    fn complete_scope_or_contig(&mut self, n: usize, b2: u8) -> bool {
         let mut ret = false;
         let p = self.occ[n].p.pos();
         if b2 < 4 {
@@ -126,12 +126,12 @@ impl<'a> KmerIter<'a> {
     }
 
     /// rebuild occ until occ.mark.p reaches stored position.
-    fn rebuild_kmer_stack(&self, min_index: usize) -> Result<Occurrence<'a>> {
+    fn rebuild_kmer_stack(&self, min_index: usize) -> Result<Scope<'a>> {
         let stored = self.ks.kmp[min_index];
         let x = stored.x();
 
         let plimits = self.get_plimits(stored.pos());
-        let mut occ = Occurrence::new(plimits, self.occ[0].kc, stored.extension());
+        let mut occ = Scope::new(plimits, self.occ[0].kc, stored.extension());
 
         while {
             let p = occ.p.pos();
@@ -149,7 +149,7 @@ impl<'a> KmerIter<'a> {
     }
 
     /// continue occ rebuild
-    fn extend_kmer_stack(&self, occ: &mut Occurrence<'a>) {
+    fn extend_kmer_stack(&self, occ: &mut Scope<'a>) {
         let x = occ.p.x();
         occ.set_mark_after_extension_if_possible(x);
         while occ.p.pos() < occ.plim {
@@ -183,7 +183,7 @@ impl<'a> KmerIter<'a> {
         }
         original_n
     }
-    fn add_newstack(&mut self, next_stack: Occurrence<'a>, n: usize) {
+    fn add_newstack(&mut self, next_stack: Scope<'a>, n: usize) {
         if n < self.occ.len() {
             self.occ[n] = next_stack;
         } else {
@@ -250,7 +250,7 @@ impl<'a> KmerIter<'a> {
         while let Ok(b2) = self.next_b2(seq, n) {
             dbg_print!("=> twobit {:x} (n: {}) <=", b2, n);
 
-            if !self.complete_occurance_or_contig(n, b2) {
+            if !self.complete_scope_or_contig(n, b2) {
                 continue;
             }
             //dbgf!(self.occ[n].p, "{:#x}, mark.p:{:#x}", self.occ[n].mark.p);
@@ -356,7 +356,7 @@ mod tests {
     const READLEN: usize = 16;
     const SEQLEN: usize = 250;
 
-    fn process<'a>(occ: &'a mut Vec<Occurrence<'a>>, ks: &'a mut KmerStore<u64>, seq: Vec<u8>) {
+    fn process<'a>(occ: &'a mut Vec<Scope<'a>>, ks: &'a mut KmerStore<u64>, seq: Vec<u8>) {
         let mut kmi = KmerIter::new(ks, occ);
         kmi.markcontig::<u64>(&mut seq.iter());
     }
@@ -366,7 +366,7 @@ mod tests {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+            let mut occ: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
             process(&mut occ, &mut ks, b"NNNNNNNNNNNNNNNN"[..].to_owned());
         }
         dbg_assert_eq!(ks.contig.len(), 1);
@@ -378,7 +378,7 @@ mod tests {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+            let mut occ: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
             process(&mut occ, &mut ks, b"N"[..].to_owned());
         }
         dbg_assert_eq!(ks.contig.len(), 1);
@@ -390,7 +390,7 @@ mod tests {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+            let mut occ: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
             process(&mut occ, &mut ks, b"NCN"[..].to_owned());
         }
         dbg_assert_eq!(ks.contig.len(), 2);
@@ -404,7 +404,7 @@ mod tests {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+            let mut occ: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
             process(&mut occ, &mut ks, b"CCCCCCCCCCCCCCCCC"[..].to_owned());
         }
         dbg_assert_eq!(ks.kmp.len(), 128);
@@ -417,7 +417,7 @@ mod tests {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+            let mut occ: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
             process(&mut occ, &mut ks, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned());
         }
         for i in 0..ks.kmp.len() {
@@ -429,7 +429,7 @@ mod tests {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+            let mut occ: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
             process(&mut occ, &mut ks, b"NCCCCCCCCCCCCCCCC"[..].to_owned());
         }
         for i in 1..ks.kmp.len() {
@@ -443,7 +443,7 @@ mod tests {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+            let mut occ: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
             process(&mut occ, &mut ks, b"ATATATATATATATATAT"[..].to_owned());
         }
         for i in 0..ks.kmp.len() {
@@ -455,7 +455,7 @@ mod tests {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         let ks_kmp_len = ks.kmp.len();
-        let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+        let mut occ: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
         let mut kmi = KmerIter::new(&mut ks, &mut occ);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
@@ -475,7 +475,7 @@ mod tests {
         let kc = KmerConst::new(4, 15);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         let ks_kmp_len = ks.kmp.len();
-        let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+        let mut occ: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
         let mut kmi = KmerIter::new(&mut ks, &mut occ);
         let seq_vec = b"GGAACCTTCAGAGTG"[..].to_owned();
         let mut seq = seq_vec.iter();
@@ -486,7 +486,7 @@ mod tests {
                 let new_stack = kmi.rebuild_kmer_stack(hash).unwrap();
                 kmi.add_newstack(new_stack, 1);
                 while let Ok(b2) = kmi.next_b2(&mut seq, 1) {
-                    if kmi.complete_occurance_or_contig(1, b2) {
+                    if kmi.complete_scope_or_contig(1, b2) {
                         break;
                     }
                 }
@@ -518,7 +518,7 @@ mod tests {
                 let kc = KmerConst::new(rl, seqlen);
                 let mut ks = KmerStore::<u64>::new(kc.bitlen);
                 let ks_kmp_len = ks.kmp.len();
-                let mut occ: Vec<Occurrence> = vec![Occurrence::new((0, u64::max_value()), &kc, 0)];
+                let mut occ: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
                 let mut kmi = KmerIter::new(&mut ks, &mut occ);
                 let seq_vec: Vec<_> = (0..seqlen)
                     .map(|i| match (gen >> (i << 1)) & 3 {

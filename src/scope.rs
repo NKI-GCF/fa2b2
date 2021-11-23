@@ -7,7 +7,7 @@ use crate::rdbg::STAT_DB;
 use std::fmt;
 
 // rename to Recurrance?
-pub struct Occurrence<'a> {
+pub struct Scope<'a> {
     pub kc: &'a KmerConst,
     pub p: u64,
     d: VecDeque<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
@@ -16,11 +16,11 @@ pub struct Occurrence<'a> {
     pub plim: u64,
 }
 
-impl<'a> Occurrence<'a> {
+impl<'a> Scope<'a> {
     pub fn new(ps: (u64, u64), kc: &'a KmerConst, ext: u64) -> Self {
         let kmp = ext | ps.0;
 
-        Occurrence {
+        Scope {
             kc,
             p: kmp,
             d: VecDeque::from(vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers]),
@@ -180,7 +180,7 @@ impl<'a> Occurrence<'a> {
     }
 }
 
-impl<'a> fmt::Display for Occurrence<'a> {
+impl<'a> fmt::Display for Scope<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let p = self.p.pos() as usize;
         let mp = self.mark.p.pos() as usize;
@@ -223,7 +223,7 @@ mod tests {
     #[test]
     fn test_push_b2() {
         let kc = KmerConst::new(READLEN, SEQLEN);
-        let mut occ = Occurrence::new((0, 100), &kc, 0);
+        let mut occ = Scope::new((0, 100), &kc, 0);
         for _ in 0..6 {
             occ.complete(1, 0);
         }
@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn occurrence() {
         let kc = KmerConst::new(READLEN, SEQLEN);
-        let mut occ = Occurrence::new((0, 100), &kc, 0);
+        let mut occ = Scope::new((0, 100), &kc, 0);
         for _ in 0..8 {
             occ.complete(0, 0);
         }

@@ -25,4 +25,4 @@ pub mod kmerconst;
 pub mod kmerloc;
 pub mod kmerstore;
 pub mod marker;
-pub mod occurrence;
+pub mod scope;

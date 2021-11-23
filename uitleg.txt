@@ -71,9 +71,9 @@ niet werkt wordt de kmer hash met extensie 2 gebruikt voor beide reads om te
 hashen, etc. etc.
 
 
-Als een kmer extend wordt na rebuilden occurance, kan de minimale
-hash niet meer in scope zijn voor latere rotaties. dan moeten die
-ook worden geextend met een eigen minimum.
-
+Als na het rebuilden van een scope behorend bij een opgeslagen positie,
+de kmer hash exted wordt kan de minimale hash out of scope gaan,
+voor latere rotaties. dan moeten die ook worden geextend met een eigen minimum.
+(wat met het laatste bedoelt wordt snap ik niet helemaal - klinkt als uitleg voor een corner-case)
 
 

@@ -85,7 +85,7 @@ impl<'a> KmerIter<'a> {
 
     /// when rebuilding occ for recurrent kmer, and extending take into account contig boundaries
     /// for that site
-    fn get_plimits(&self, p: u64) -> (u64, u64) {
+    fn get_comtig_limits(&self, p: u64) -> (u64, u64) {
         // binary search; limit endp to end of contig
         dbg_assert!(p != 0);
         let i = self.ks.get_contig(p);
@@ -130,8 +130,8 @@ impl<'a> KmerIter<'a> {
         let stored = self.ks.kmp[min_index];
         let x = stored.x();
 
-        let plimits = self.get_plimits(stored.pos());
-        let mut occ = Scope::new(plimits, self.occ[0].kc, stored.extension());
+        let comtig_limits = self.get_comtig_limits(stored.pos());
+        let mut occ = Scope::new(comtig_limits, self.occ[0].kc, stored.extension());
 
         while {
             let p = occ.p.pos();

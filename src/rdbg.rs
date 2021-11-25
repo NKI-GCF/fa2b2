@@ -9,53 +9,53 @@ lazy_static! {
 }
 
 macro_rules! filelinestr {
-	($l:expr$(, $opt:expr)*) => ({
-		concat!("[", file!(), ":", line!(), "] ", $l$(, $opt)*).to_string()
-	});
+    ($l:expr$(, $opt:expr)*) => ({
+        concat!("[", file!(), ":", line!(), "] ", $l$(, $opt)*).to_string()
+    });
 }
 
 /// formatted debug, included in dump but not in stats.
 #[macro_export]
 macro_rules! dbgf {
-	($l:literal) => ({
-		if cfg!(debug_assertions) {
-			STAT_DB.lock().unwrap().add(false, filelinestr!(stringify!($l)), stringify!($l));
-			//eprintln!("[{}:{}] {}", file!(), line!(), stringify!($l));
-		}
-		$l
-	});
-	($expr:expr, $fmt:literal$(, $opt:expr)*) => {
-		match $expr {
-			expr => {
-				if cfg!(debug_assertions) {
-					STAT_DB.lock().unwrap().add(false, filelinestr!(stringify!($expr), " = ", $fmt),
-						format!(concat!("[{}:{}] {} = ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*));
-					//eprintln!(concat!("[{}:{}] {} = ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*);
-				}
-				expr
-			}
-		}
-	}
+    ($l:literal) => ({
+        if cfg!(debug_assertions) {
+            STAT_DB.lock().unwrap().add(false, filelinestr!(stringify!($l)), stringify!($l));
+            //eprintln!("[{}:{}] {}", file!(), line!(), stringify!($l));
+        }
+        $l
+    });
+    ($expr:expr, $fmt:literal$(, $opt:expr)*) => {
+        match $expr {
+            expr => {
+                if cfg!(debug_assertions) {
+                    STAT_DB.lock().unwrap().add(false, filelinestr!(stringify!($expr), " = ", $fmt),
+                        format!(concat!("[{}:{}] {} = ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*));
+                    //eprintln!(concat!("[{}:{}] {} = ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*);
+                }
+                expr
+            }
+        }
+    }
 }
 
 /// begin a new round for logging (may trigger dump if dump_next() occurred)
 #[macro_export]
 macro_rules! dbg_restart {
-	($fmt:literal$(, $arg:expr)*) => ({
-		if cfg!(debug_assertions) {
-			STAT_DB.lock().unwrap().restart(filelinestr!(stringify!($fmt)), format!($fmt$(, $arg)*));
-		}
-	});
+    ($fmt:literal$(, $arg:expr)*) => ({
+        if cfg!(debug_assertions) {
+            STAT_DB.lock().unwrap().restart(filelinestr!(stringify!($fmt)), format!($fmt$(, $arg)*));
+        }
+    });
 }
 
 /// line for dump, not in stats
 #[macro_export]
 macro_rules! dbg_print {
-	($fmt:literal$(, $arg:expr)*) => ({
-		if cfg!(debug_assertions) {
-			STAT_DB.lock().unwrap().add(false, filelinestr!(stringify!($fmt)), format!($fmt$(, $arg)*));
-		}
-	});
+    ($fmt:literal$(, $arg:expr)*) => ({
+        if cfg!(debug_assertions) {
+            STAT_DB.lock().unwrap().add(false, filelinestr!(stringify!($fmt)), format!($fmt$(, $arg)*));
+        }
+    });
 }
 
 /// for dump and in stats, conditionally dump_next()
@@ -129,54 +129,54 @@ macro_rules! dbgx {
 ///trigger dump directly.
 #[macro_export]
 macro_rules! dbg_dump {
-	() => ({
-		STAT_DB.lock().unwrap().dump();
-		"--- end of dump ---\n"
-	});
-	($fmt:literal$(, $arg:expr)*) => ({
-		STAT_DB.lock().unwrap().dump();
-		format!($fmt$(, $arg)*)
-	});
+    () => ({
+        STAT_DB.lock().unwrap().dump();
+        "--- end of dump ---\n"
+    });
+    ($fmt:literal$(, $arg:expr)*) => ({
+        STAT_DB.lock().unwrap().dump();
+        format!($fmt$(, $arg)*)
+    });
 }
 
 #[macro_export]
 macro_rules! dbg_assert {
-	($test:expr) => {{
-		debug_assert!($test, "{}", dbg_dump!("Assert `{}' failed!", stringify!($test)));
-	}};
-	($test:expr, $fmt:literal$(, $arg:expr)*) => {{
-		debug_assert!($test, "{}", dbg_dump!($fmt$(, $arg)*));
-	}};
+    ($test:expr) => {{
+        debug_assert!($test, "{}", dbg_dump!("Assert `{}' failed!", stringify!($test)));
+    }};
+    ($test:expr, $fmt:literal$(, $arg:expr)*) => {{
+        debug_assert!($test, "{}", dbg_dump!($fmt$(, $arg)*));
+    }};
 }
 
 #[macro_export]
 macro_rules! dbg_assert_eq {
-	($a:expr, $b:expr) => {{
-		debug_assert_eq!($a, $b, "{}", dbg_dump!("Assert `{}' == `{}' failed!", stringify!($a), stringify!($b)));
-	}};
-	($a:expr, $b:expr, $fmt:literal$(, $arg:expr)*) => {{
-		debug_assert_eq!($a, $b, "{}", dbg_dump!($fmt$(, $arg)*));
-	}};
+    ($a:expr, $b:expr) => {{
+        debug_assert_eq!($a, $b, "{}", dbg_dump!("Assert `{}' == `{}' failed!", stringify!($a), stringify!($b)));
+    }};
+    ($a:expr, $b:expr, $fmt:literal$(, $arg:expr)*) => {{
+        debug_assert_eq!($a, $b, "{}", dbg_dump!($fmt$(, $arg)*));
+    }};
 }
 
 #[macro_export]
 macro_rules! dbg_assert_ne {
-	($a:expr, $b:expr) => {{
-		debug_assert_ne!($a, $b, "{}", dbg_dump!("Assert `{}' != `{}' failed!", stringify!($a), stringify!($b)));
-	}};
-	($a:expr, $b:expr, $fmt:literal$(, $arg:expr)*) => {{
-		debug_assert_ne!($a, $b, "{}", dbg_dump!($fmt$(, $arg)*));
-	}};
+    ($a:expr, $b:expr) => {{
+        debug_assert_ne!($a, $b, "{}", dbg_dump!("Assert `{}' != `{}' failed!", stringify!($a), stringify!($b)));
+    }};
+    ($a:expr, $b:expr, $fmt:literal$(, $arg:expr)*) => {{
+        debug_assert_ne!($a, $b, "{}", dbg_dump!($fmt$(, $arg)*));
+    }};
 }
 
 #[macro_export]
 macro_rules! dbg_panic {
-	() => {{
-		panic!("{}", dbg_dump!());
-	}};
-	($fmt:literal$(, $arg:expr)*) => {{
-		panic!("{}", dbg_dump!($fmt$(, $arg)*));
-	}};
+    () => {{
+        panic!("{}", dbg_dump!());
+    }};
+    ($fmt:literal$(, $arg:expr)*) => {{
+        panic!("{}", dbg_dump!($fmt$(, $arg)*));
+    }};
 }
 
 pub struct StatDeq {

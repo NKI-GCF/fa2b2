@@ -64,8 +64,7 @@ fn main() -> Result<()> {
     ks.opt |= 1; //
                  //ks.opt |= 2; // if set also non-priority (ext)kmers
     {
-        let mut occ: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
-        let mut kmi = KmerIter::new(&mut ks, &mut occ);
+        let mut kmi = KmerIter::new(&mut ks, &kc);
         println!("Chromosome\trunning unique count");
         for chr in &chrs {
             let mut seq = Vec::with_capacity(chr.len as usize);

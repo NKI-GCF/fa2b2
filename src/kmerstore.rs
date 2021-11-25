@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering::{Equal, Greater, Less};
 
 use crate::kmerloc::PriExtPosOri;
-//use extqueue::ExtQueue;
+use crate::rdbg::STAT_DB;
+
 use anyhow::{anyhow, ensure, Result};
 
 #[derive(Serialize, Deserialize)]
@@ -33,7 +34,7 @@ impl<T: PriExtPosOri> KmerStore<T> {
     }
     pub fn push_contig(&mut self, p: u64, goffs: u64) {
         self.contig.push(Contig {
-            twobit: p, // TODO: bits could mean something about contig.
+            twobit: p.pos(), // TODO: remaining bits could mean something about contig.
             genomic: goffs,
         });
     }
@@ -56,6 +57,16 @@ impl<T: PriExtPosOri> KmerStore<T> {
         }
         base
     }
+    pub fn get_contig_start_end_for_p(&self, p: u64) -> (u64, u64) {
+        let i = self.get_contig(p);
+
+        dbg_assert!(i < self.contig.len());
+        dbg_assert!(self.contig[i].twobit <= p);
+        (
+            self.get_twobit_before(i).unwrap_or(0),
+            self.get_twobit_after(i).unwrap_or(self.p_max),
+        )
+    }
     pub fn get_twobit_after(&self, i: usize) -> Result<u64> {
         ensure!(
             i + 1 < self.contig.len(),
@@ -68,11 +79,10 @@ impl<T: PriExtPosOri> KmerStore<T> {
         Ok(self.contig[i - 1].twobit)
     }
     pub fn b2_for_p(&self, p: u64) -> Result<u8> {
-        let i = p as usize >> 3;
         self.b2
-            .get(i)
+            .get(p.byte_pos())
             .map(|x| (x >> (p & 6)) & 3)
-            .ok_or_else(|| anyhow!("b2_for_p():OOB {:x} {:x}", p, self.b2.len()))
+            .ok_or(anyhow!("stored pos past contig? {:#}", p))
     }
 }
 

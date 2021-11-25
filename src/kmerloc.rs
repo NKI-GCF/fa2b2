@@ -8,6 +8,7 @@ pub trait PriExtPosOri: PrimInt + FromPrimitive + AddAssign + SubAssign {
     fn x(&self) -> usize;
     fn same_ori(&self, p: u64) -> bool;
     fn pos(&self) -> u64;
+    fn byte_pos(&self) -> usize;
     fn blacklist(&mut self);
     fn no_pos(&self) -> bool;
     fn extend(&mut self);
@@ -15,6 +16,8 @@ pub trait PriExtPosOri: PrimInt + FromPrimitive + AddAssign + SubAssign {
     fn clear_extension(&mut self);
     fn is_same(&self, other: u64) -> bool;
     fn with_ext(&self, x: usize) -> u64;
+    fn set_dup(&mut self);
+    fn is_dup(&self) -> bool;
 }
 
 impl PriExtPosOri for u64 {
@@ -28,11 +31,15 @@ impl PriExtPosOri for u64 {
         (self & 1) == (p & 1)
     }
     fn pos(&self) -> u64 {
-        *self & 0x_FFFF_FFFF_FFFE
+        *self & 0x_7FFF_FFFF_FFFE
+    }
+    fn byte_pos(&self) -> usize {
+        // the strand bit and 2b encoded, so 4 twobits per byte.
+        (*self & 0x_7FFF_FFFF_FFF8) as usize >> 3
     }
     fn blacklist(&mut self) {
         if !self.no_pos() {
-            *self &= !0x_FFFF_FFFF_FFFF;
+            *self &= !0x_7FFF_FFFF_FFFF;
             self.extend();
         }
     }
@@ -44,17 +51,23 @@ impl PriExtPosOri for u64 {
     }
     fn set_extension(&mut self, x: u64) {
         dbg_assert!(x <= 0xFFFF);
-        *self &= 0xFFFF_FFFF_FFFF;
+        *self &= 0x7FFF_FFFF_FFFF;
         *self |= x << 48;
     }
     fn clear_extension(&mut self) {
-        *self &= 0x_FFFF_FFFF_FFFF;
+        *self &= 0x_7FFF_FFFF_FFFF;
     }
     fn is_same(&self, other: u64) -> bool {
         *self == other
     }
     fn with_ext(&self, x: usize) -> u64 {
         self.pos() | ((x as u64) << 48)
+    }
+    fn set_dup(&mut self) {
+        *self |= 0x_8000_0000_0000;
+    }
+    fn is_dup(&self) -> bool {
+        *self & 0x_8000_0000_0000 != 0
     }
 }
 
@@ -74,7 +87,8 @@ impl MidPos for u64 {
         }
     }
     fn is_replaceable_by(&self, new_entry: u64) -> bool {
-        *self <= new_entry.extension() || self.has_samepos(new_entry)
+        *self < new_entry.extension()
+            || (*self == new_entry.extension() && self.has_samepos(new_entry))
     }
     fn is_set_and_not(&self, other: u64) -> bool {
         !(self.no_pos() || self.is_same(other))

@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use crate::kmer::{test_template, Kmer};
 pub use crate::kmerconst::KmerConst;
 use crate::kmerloc::{KmerLoc, PriExtPosOri};
+use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use std::fmt;
 
@@ -65,9 +66,12 @@ impl<'a> Scope<'a> {
         self.i >= self.kc.kmerlen
     }
 
+    fn is_in_scope(&self, x: usize) -> bool {
+        self.i < self.kc.kmerlen + self.kc.afstand(x)
+    }
+
     /// add b2 to kmer, move .p according to occ orientation
-    /// return whether required nr of kmers for struct occurance were seen, since contig start.
-    /// adds 2bit to stored sequence
+    /// return whether required nr of kmers for struct occurance were seen.
     pub fn complete(&mut self, b2: u8, x_start: usize) -> bool {
         if !self.complete_kmer(b2) {
             //XXX: hierna is self.i al geincrement.
@@ -77,7 +81,7 @@ impl<'a> Scope<'a> {
         //dbgf!(x_start, "{}..{}", x_end);
 
         for x in x_start..x_end {
-            if self.i < self.kc.kmerlen + self.kc.afstand(x) || self.set_if_extreme(0, x) {
+            if self.is_in_scope(x) || self.set_if_extreme(0, x) {
                 break;
             }
         }
@@ -86,7 +90,9 @@ impl<'a> Scope<'a> {
 
     pub fn set_mark_after_extension_if_possible(&mut self, x: usize) {
         self.mark.reset();
-        let _ = self.i < self.kc.kmerlen + self.kc.afstand(x) || self.set_if_extreme(0, x);
+        if !self.is_in_scope(x) {
+            let _ = self.set_if_extreme(0, x);
+        }
     }
 
     /// geef de current kmer.
@@ -114,7 +120,6 @@ impl<'a> Scope<'a> {
     /// true als voor de occurance de hash een nieuw minimum/optimum is.
     fn hash_is_extreme(&mut self, hash: usize, p: u64) -> bool {
         let xh = hash ^ self.kc.ext_domain(p.x());
-        //dbgf!(p < self.mark.p, "{:?}, p:{:x}, mark.p:{:#x}", p, self.mark.p))
         xh < self.mark.idx || (xh == self.mark.idx && p < self.mark.p)
     }
 
@@ -123,7 +128,6 @@ impl<'a> Scope<'a> {
         //let afs = self.kc.afstand(self.mark.p.x());
         let p_pos = self.p.pos();
         let dist = (self.kc.no_kmers << 1) as u64;
-        //dbgf!(p_pos, "{} - ({} << 1) == {} ?", self.kc.no_kmers, self.mark.p.pos());
         p_pos == self.mark.p.pos() + dist
     }
 
@@ -132,16 +136,33 @@ impl<'a> Scope<'a> {
         self.mark.reset();
         let x = self.p.x();
         let afs = self.kc.afstand(x);
-        //dbg_print!("no_kmers: {}, x:{}, afstand: {}", self.kc.no_kmers, x, afs);
         if self.kc.no_kmers <= afs {
             return dbgx!(false);
         }
         for i in 0..(self.kc.no_kmers - afs) {
             let _ = self.set_if_extreme(i, x);
         }
-        //dbg_print!("mark was set: [{:#x}]:{:#x}", self.mark.idx, self.mark.p);
         dbg_assert!(self.mark.is_set());
         true
+    }
+
+    /// continue rebuild
+    pub fn extend_kmer_stack<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) {
+        let x = self.p.x();
+        self.set_mark_after_extension_if_possible(x);
+
+        while self.p.pos() < self.plim {
+            let p = self.p.pos();
+            let b2 = ks.b2_for_p(p).unwrap();
+            if self.complete(b2, x) && self.mark_is_leaving() {
+                let mark_is_set = self.set_next_mark();
+                dbg_assert!(mark_is_set);
+                if ks.kmp[self.mark.idx].is_same(self.mark.p) {
+                    // retracked => finished
+                    break;
+                }
+            }
+        }
     }
 
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als extreme.
@@ -150,21 +171,17 @@ impl<'a> Scope<'a> {
         let afs = self.kc.afstand(x);
         let d_i = base.wrapping_sub(i) % self.kc.no_kmers;
         let mut kmer = self.d[d_i];
-        //dbg_print!("base:{}, i:{} d_i:{} idx:{:#x}, x:{}", base, i, d_i, self.d[d_i].get_idx(true), x);
         if x > 0 {
             let d_i2 = base.wrapping_sub(afs + i) % self.kc.no_kmers;
             dbg_print!("dna:{:#x}, dna2:{:#x}", self.d[d_i2].dna, kmer.dna);
-            //dbgf!(base.wrapping_sub(afs + i) % self.kc.no_kmers, "[{}] ^ [{}] (afs: {})", i % self.kc.no_kmers, afs);
             kmer.hash(self.d[d_i2]);
         }
         let hash = kmer.get_idx(true);
         let mut p = self.p.with_ext(x) - ((afs + i) << 1) as u64;
-        //dbg_print!("p:{:#x}, afs:{:#x}, i:{:#x} dna:{:#x}, rc:{:#x}", p, afs, i, kmer.dna, kmer.rc);
         if test_template(kmer.dna, kmer.rc) {
             p |= 1;
         }
         if self.hash_is_extreme(hash, p) {
-            //dbgf!(hash, "[{:x}] = {:x} = {:x} - (({:x} + {:x}) << 1) | 1?", p, self.p, afs, i);
             dbgf!(
                 self.mark.set(hash, p, x),
                 "{:?} [{:x}] = {:x} | {} << x",
@@ -172,7 +189,6 @@ impl<'a> Scope<'a> {
                 p,
                 x
             );
-            //dbgf!(self.mark.set(hash, p, x), "{:?} [{:#x}]: {:#x}", self.mark.idx, self.mark.p);
             true
         } else {
             false

@@ -58,6 +58,18 @@ impl KmerConst {
         min(afstand(x, self.kmerlen), self.readlen)
     }
 
+    pub fn get_kmer_boundaries(&self, p: u64, contig_start: u64, contig_end: u64) -> (u64, u64) {
+        let p_rl = (self.readlen << 1) as u64;
+
+        let left = if p >= contig_start + p_rl {
+            p - p_rl
+        } else {
+            contig_start
+        };
+        let right = min(p + ((self.readlen - self.kmerlen) << 1) as u64, contig_end);
+        (left, right)
+    }
+
     /// with given extension, create bitmask to flip high bits before extreme minimization
     /// with this each extension minimizes in its own domain, decreasing ks.kmp sparsity.
     // one added because index is shortened (kmer index top bit flipped, if set)

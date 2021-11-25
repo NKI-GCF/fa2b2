@@ -182,124 +182,125 @@ impl<'a> KmerIter<'a> {
 mod tests {
     use super::*;
     use crate::kmerconst::KmerConst;
+    use anyhow::Result;
     const READLEN: usize = 16;
     const SEQLEN: usize = 250;
 
-    fn process<'a>(scp: &'a mut Vec<Scope<'a>>, ks: &'a mut KmerStore<u64>, seq: Vec<u8>) {
-        let mut kmi = KmerIter::new(ks, scp);
-        kmi.markcontig::<u64>(&mut seq.iter());
+    fn process<'a>(ks: &'a mut KmerStore<u64>, kc: &'a KmerConst, seq: Vec<u8>) -> Result<u64> {
+        let mut kmi = KmerIter::new(ks, kc);
+        kmi.markcontig::<u64>(&mut seq.iter())
     }
 
     #[test]
-    fn test_16n() {
+    fn test_16n() -> Result<()> {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut scp: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
-            process(&mut scp, &mut ks, b"NNNNNNNNNNNNNNNN"[..].to_owned());
+            process(&mut ks, &kc, b"NNNNNNNNNNNNNNNN"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.contig.len(), 1);
         dbg_assert_eq!(ks.contig[0].twobit, 0);
         dbg_assert_eq!(ks.contig[0].genomic, 16);
+        Ok(())
     }
     #[test]
-    fn test_1n() {
+    fn test_1n() -> Result<()> {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut scp: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
-            process(&mut scp, &mut ks, b"N"[..].to_owned());
+            process(&mut ks, &kc, b"N"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.contig.len(), 1);
         dbg_assert_eq!(ks.contig[0].twobit, 0);
         dbg_assert_eq!(ks.contig[0].genomic, 1);
+        Ok(())
     }
     #[test]
-    fn test_1n1c1n() {
+    fn test_1n1c1n() -> Result<()> {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut scp: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
-            process(&mut scp, &mut ks, b"NCN"[..].to_owned());
+            process(&mut ks, &kc, b"NCN"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.contig.len(), 2);
         dbg_assert_eq!(ks.contig[0].twobit, 0);
         dbg_assert_eq!(ks.contig[0].genomic, 1);
         dbg_assert_eq!(ks.contig[1].twobit, 2);
         dbg_assert_eq!(ks.contig[1].genomic, 3);
+        Ok(())
     }
     #[test]
-    fn test_17c() {
+    fn test_17c() -> Result<()> {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut scp: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
-            process(&mut scp, &mut ks, b"CCCCCCCCCCCCCCCCC"[..].to_owned());
+            process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.kmp.len(), 128);
         for i in 0..ks.kmp.len() {
             dbg_assert!(ks.kmp[i].no_pos(), "[{}], {:x}", i, ks.kmp[i]);
         }
+        Ok(())
     }
     #[test]
-    fn test_1n18c1n() {
+    fn test_1n18c1n() -> Result<()> {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut scp: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
-            process(&mut scp, &mut ks, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned());
+            process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
         }
         for i in 0..ks.kmp.len() {
             dbg_assert!(ks.kmp[i].no_pos(), "[{}], {:x}", i, ks.kmp[i]);
         }
+        Ok(())
     }
     #[test]
-    fn test_1n16c() {
+    fn test_1n16c() -> Result<()> {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut scp: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
-            process(&mut scp, &mut ks, b"NCCCCCCCCCCCCCCCC"[..].to_owned());
+            process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         for i in 1..ks.kmp.len() {
             dbg_assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);
         }
         let first_pos = (1 << 63) | ((kc.kmerlen as u64) << 1);
         dbg_assert_eq!(ks.kmp[0], first_pos);
+        Ok(())
     }
     #[test]
-    fn test_18at() {
+    fn test_18at() -> Result<()> {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
-            let mut scp: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
-            process(&mut scp, &mut ks, b"ATATATATATATATATAT"[..].to_owned());
+            process(&mut ks, &kc, b"ATATATATATATATATAT"[..].to_owned())?;
         }
         for i in 0..ks.kmp.len() {
             dbg_assert!(ks.kmp[i].no_pos(), "[{}], {:x}", i, ks.kmp[i]);
         }
+        Ok(())
     }
     #[test]
-    fn test_reconstruct1() {
+    fn test_reconstruct1() -> Result<()> {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         let ks_kmp_len = ks.kmp.len();
-        let mut scp: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
-        let mut kmi = KmerIter::new(&mut ks, &mut scp);
+        let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
         let mut seq = seq_vec.iter();
-        kmi.markcontig::<u64>(&mut seq);
+        kmi.markcontig::<u64>(&mut seq)?;
         for hash in 0..ks_kmp_len {
-            let mut p = kmi.ks.kmp[hash];
+            let p = kmi.ks.kmp[hash];
             if !p.no_pos() {
                 let new_stack = kmi.rebuild_kmer_stack(p).unwrap();
                 dbg_assert_eq!(new_stack.mark.p, p);
             }
         }
+        Ok(())
     }
     #[test]
-    fn test_reconstruct_gs4_rl1to4_all() {
+    fn test_reconstruct_gs4_rl1to4_all() -> Result<()> {
         // all mappable.
         let seqlen: usize = 6; //8;
 
@@ -315,8 +316,7 @@ mod tests {
                 let kc = KmerConst::new(rl, seqlen);
                 let mut ks = KmerStore::<u64>::new(kc.bitlen);
                 let ks_kmp_len = ks.kmp.len();
-                let mut scp: Vec<Scope> = vec![Scope::new((0, u64::max_value()), &kc, 0)];
-                let mut kmi = KmerIter::new(&mut ks, &mut scp);
+                let mut kmi = KmerIter::new(&mut ks, &kc);
                 let seq_vec: Vec<_> = (0..seqlen)
                     .map(|i| match (gen >> (i << 1)) & 3 {
                         0 => 'A',
@@ -330,10 +330,10 @@ mod tests {
 
                 let vv: Vec<u8> = seq_vec.iter().map(|&c| c as u8).collect();
                 let mut seq = vv.iter();
-                kmi.markcontig::<u64>(&mut seq);
+                kmi.markcontig::<u64>(&mut seq)?;
                 dbg_print!("-- testing hashes --");
                 for hash in 0..ks_kmp_len {
-                    let mut p = kmi.ks.kmp[hash];
+                    let p = kmi.ks.kmp[hash];
                     if !p.no_pos() {
                         dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
                         dbg_assert_eq!(kmi.rebuild_kmer_stack(p).unwrap().mark.p, p);
@@ -341,5 +341,6 @@ mod tests {
                 }
             }
         }
+        Ok(())
     }
 }

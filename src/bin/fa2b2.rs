@@ -22,7 +22,6 @@ use fa2b2::kmerconst::KmerConst;
 use fa2b2::kmerloc::PriExtPosOri;
 use fa2b2::kmerstore::KmerStore;
 use fa2b2::marker::KmerIter;
-use fa2b2::scope::Scope;
 
 fn main() -> Result<()> {
     let matches = App::new("fa2b2")

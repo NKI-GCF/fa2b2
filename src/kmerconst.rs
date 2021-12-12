@@ -18,7 +18,8 @@ fn afstand(x: usize, kmerlen: usize) -> usize {
         t
     } else {
         let n = kmerlen.next_power_of_two().trailing_zeros() as usize;
-        n + (x - n) * kmerlen
+        // (x - log2(kmerlen)) * kmerlen
+        (x - n) * kmerlen
     }
 }
 

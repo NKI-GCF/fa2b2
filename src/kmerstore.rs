@@ -27,9 +27,10 @@ impl<T: PriExtPosOri> KmerStore<T> {
         KmerStore {
             p_max: 0,
             opt: 0,
-            b2: vec![0; 1 << shift], // sequence (4 per u8).
-            kmp: vec![T::from_u64(0).unwrap(); 1 << (shift + 1)], // kmer positions
-            contig: Vec::new(),      // contig info
+            b2: vec![0; 1 << shift],                  // sequence (4 per u8).
+            kmp: vec![T::no_pos(); 1 << (shift + 1)], // kmer positions
+            //kmp,
+            contig: Vec::new(), // contig info
         }
     }
     pub fn push_contig(&mut self, p: u64, goffs: u64) {

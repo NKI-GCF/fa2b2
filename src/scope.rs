@@ -5,93 +5,134 @@ pub use crate::kmerconst::KmerConst;
 use crate::kmerloc::{KmerLoc, PriExtPosOri};
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
+use anyhow::{anyhow, ensure, Result};
 use std::fmt;
 
-// rename to Recurrance?
 pub struct Scope<'a> {
     pub kc: &'a KmerConst,
     pub p: u64,
     d: VecDeque<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
     pub mark: KmerLoc<u64>,
     pub i: usize,
-    pub plim: u64,
+    pub plim: (u64, u64),
 }
 
 impl<'a> Scope<'a> {
-    pub fn new(ps: (u64, u64), kc: &'a KmerConst, ext: u64) -> Self {
-        let kmp = ext | ps.0;
+    pub fn new(plim: (u64, u64), kc: &'a KmerConst, ext: u64) -> Self {
+        let p = ext | plim.0;
 
         Scope {
             kc,
-            p: kmp,
+            p,
             d: VecDeque::from(vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers]),
             mark: KmerLoc::new(usize::max_value(), ext),
             i: 0,
-            plim: ps.1,
+            plim,
         }
     }
 
     /// hierin vinden .i & .p increments and kmer .d[] update plaats. 1+ kmers ? true.
     fn complete_kmer(&mut self, b2: u8) -> bool {
         // ori == true if kmer is for template, then we want 1 in self.p
-        let new_idx = match self
-            .i
-            .checked_sub(self.kc.kmerlen)
-            .map(|i| i % self.kc.no_kmers)
-        {
-            Some(old_idx) => {
-                let new_idx = if old_idx + 1 != self.kc.no_kmers {
-                    old_idx + 1
-                } else {
-                    0
-                };
-                self.d[new_idx] = self.d[old_idx];
-                new_idx
+        let mut kmx = 0;
+        if let Some(i) = self.i.checked_sub(self.kc.kmerlen) {
+            let old_idx = i % self.kc.no_kmers;
+            if old_idx + 1 != self.kc.no_kmers {
+                kmx = old_idx + 1;
             }
-            None => 0,
-        };
-        dbg_assert!(
-            new_idx < self.d.len(),
-            "new_idx >= self.d.len(), {} >= {}",
-            new_idx,
-            self.d.len()
-        );
-        self.p += if self.d[new_idx].update(b2, true) {
-            3
-        } else {
-            2
-        } - (1 & self.p);
-        //dbgf!(self.p, "p_add:{} i:{}, d[i]:{:#x} rc:{:#x} p:{:#x}", new_idx, self.d[new_idx].dna, self.d[new_idx].rc, self.p);
+            self.d[kmx] = self.d[old_idx];
+        }
+        // first bit is strand bit, set according to kmer deviant bit.
+        self.p += if self.d[kmx].update(b2, true) { 3 } else { 2 } - (1 & self.p);
         self.i += 1;
         self.i >= self.kc.kmerlen
     }
 
-    fn is_in_scope(&self, x: usize) -> bool {
+    fn is_xmer_complete(&self, x: usize) -> bool {
+        /*dbgf!(
+            self.i < self.kc.kmerlen + self.kc.afstand(x),
+            "{}: {} < {} + {}?",
+            self.i,
+            self.kc.kmerlen,
+            self.kc.afstand(x)
+        )*/
         self.i < self.kc.kmerlen + self.kc.afstand(x)
     }
 
+    pub fn downstream_on_contig(&self, p: u64) -> bool {
+        // linked must be on the same contig and can only be upstream (1st is kept)
+        let pos = p.pos();
+        pos >= self.plim.0 && pos < self.mark.p.pos()
+    }
+
+    pub fn in_linked_scope<T: PriExtPosOri>(
+        &mut self,
+        ks: &KmerStore<T>,
+        endp: u64,
+        idx: usize,
+    ) -> Result<bool> {
+        let x = endp.x();
+        let afs = self.kc.afstand(x);
+        let extension = self.kc.readlen - self.kc.kmerlen - afs;
+        let mut remain = extension;
+        let endp_is_template = endp & 1 != 0;
+
+        while remain > 0 {
+            let b2 = ks.b2_for_p(self.p).unwrap();
+            ensure!(self.complete_kmer(b2));
+            let (hash, is_template) = self.get_xmer_and_strand(0, afs);
+
+            if dbgx!(hash == idx) {
+                if dbgx!(is_template == endp_is_template) {
+                    self.mark.p = self.p.with_ext(x) - (afs << 1) as u64;
+                    if is_template {
+                        self.mark.p |= 1;
+                    }
+                    if dbgx!(self.mark.p == endp) {
+                        return Ok(true);
+                    }
+                }
+                remain = extension;
+            } else {
+                remain -= 1;
+            }
+            ensure!(self.p.pos() < endp.pos());
+        }
+        Ok(false)
+    }
+
     /// add b2 to kmer, move .p according to occ orientation
-    /// return whether required nr of kmers for struct occurance were seen.
-    pub fn complete(&mut self, b2: u8, x_start: usize) -> bool {
+    /// return whether required nr of kmers for struct scope were seen.
+    fn complete(&mut self, b2: u8, x_start: usize) -> bool {
+        //XXX: hierna is self.i al geincrement.
         if !self.complete_kmer(b2) {
-            //XXX: hierna is self.i al geincrement.
             return false;
         }
-        let x_end = self.p.x() + 1;
-        //dbgf!(x_start, "{}..{}", x_end);
 
-        for x in x_start..x_end {
-            if self.is_in_scope(x) || self.set_if_extreme(0, x) {
+        for x in x_start..=self.p.x() {
+            if self.is_xmer_complete(x) || self.set_if_optimum(0, x) {
                 break;
             }
         }
         self.mark.is_set() && self.all_kmers()
     }
 
-    pub fn set_mark_after_extension_if_possible(&mut self, x: usize) {
+    pub fn complete_and_update_mark(&mut self, b2: u8, x_start: usize) -> Result<bool> {
+        if self.complete(b2, x_start) {
+            if self.mark_remains() || dbgx!(self.set_next_mark()) {
+                Ok(true)
+            } else {
+                Err(anyhow!("Couldn't obtain new mark."))
+            }
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn set_mark_after_extension_if_possible(&mut self, x: usize) {
         self.mark.reset();
-        if !self.is_in_scope(x) {
-            let _ = self.set_if_extreme(0, x);
+        if !self.is_xmer_complete(x) {
+            let _ = self.set_if_optimum(0, x);
         }
     }
 
@@ -118,8 +159,17 @@ impl<'a> Scope<'a> {
     }
 
     /// true als voor de occurance de hash een nieuw minimum/optimum is.
-    fn hash_is_extreme(&mut self, hash: usize, p: u64) -> bool {
+    fn hash_is_optimum(&mut self, hash: usize, p: u64) -> bool {
         let xh = hash ^ self.kc.ext_domain(p.x());
+        /*dbg_print!(
+            "{:x} ^ {:x} = {:x} < {:x}? || (== && {:x} < {:x})",
+            hash,
+            self.kc.ext_domain(p.x()),
+            xh,
+            self.mark.idx,
+            p,
+            self.mark.p
+        );*/
         xh < self.mark.idx || (xh == self.mark.idx && p < self.mark.p)
     }
 
@@ -131,6 +181,10 @@ impl<'a> Scope<'a> {
         p_pos == self.mark.p.pos() + dist
     }
 
+    pub fn mark_remains(&self) -> bool {
+        !self.mark_is_leaving()
+    }
+
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)
     pub fn set_next_mark(&mut self) -> bool {
         self.mark.reset();
@@ -140,7 +194,7 @@ impl<'a> Scope<'a> {
             return dbgx!(false);
         }
         for i in 0..(self.kc.no_kmers - afs) {
-            let _ = self.set_if_extreme(i, x);
+            let _ = self.set_if_optimum(i, x);
         }
         dbg_assert!(self.mark.is_set());
         true
@@ -151,9 +205,8 @@ impl<'a> Scope<'a> {
         let x = self.p.x();
         self.set_mark_after_extension_if_possible(x);
 
-        while self.p.pos() < self.plim {
-            let p = self.p.pos();
-            let b2 = ks.b2_for_p(p).unwrap();
+        while self.p.pos() < self.plim.1 {
+            let b2 = ks.b2_for_p(self.p).unwrap();
             if self.complete(b2, x) && self.mark_is_leaving() {
                 let mark_is_set = self.set_next_mark();
                 dbg_assert!(mark_is_set);
@@ -164,27 +217,30 @@ impl<'a> Scope<'a> {
             }
         }
     }
-
-    /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als extreme.
-    fn set_if_extreme(&mut self, i: usize, x: usize) -> bool {
+    fn get_xmer_and_strand(&self, i: usize, afs: usize) -> (usize, bool) {
         let base = self.i - self.kc.kmerlen;
-        let afs = self.kc.afstand(x);
         let d_i = base.wrapping_sub(i) % self.kc.no_kmers;
         let mut kmer = self.d[d_i];
-        if x > 0 {
+        if afs > 0 {
             let d_i2 = base.wrapping_sub(afs + i) % self.kc.no_kmers;
             dbg_print!("dna:{:#x}, dna2:{:#x}", self.d[d_i2].dna, kmer.dna);
             kmer.hash(self.d[d_i2]);
         }
-        let hash = kmer.get_idx(true);
+        (kmer.get_idx(true), test_template(kmer.dna, kmer.rc))
+    }
+
+    /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
+    fn set_if_optimum(&mut self, i: usize, x: usize) -> bool {
+        let afs = self.kc.afstand(x);
+        let (hash, is_template) = self.get_xmer_and_strand(i, afs);
         let mut p = self.p.with_ext(x) - ((afs + i) << 1) as u64;
-        if test_template(kmer.dna, kmer.rc) {
+        if is_template {
             p |= 1;
         }
-        if self.hash_is_extreme(hash, p) {
+        if self.hash_is_optimum(hash, p) {
             dbgf!(
                 self.mark.set(hash, p, x),
-                "{:?} [{:x}] = {:x} | {} << x",
+                "{:?} [{:x}] = {:x} | x({})",
                 hash,
                 p,
                 x

@@ -29,8 +29,8 @@ macro_rules! dbgf {
             expr => {
                 if cfg!(debug_assertions) {
                     STAT_DB.lock().unwrap().add(false, filelinestr!(stringify!($expr), " = ", $fmt),
-                        format!(concat!("[{}:{}] {} = ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*));
-                    //eprintln!(concat!("[{}:{}] {} = ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*);
+                        format!(concat!("[{}:{}] {} => ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*));
+                    //eprintln!(concat!("[{}:{}] {} => ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*);
                 }
                 expr
             }
@@ -68,14 +68,14 @@ macro_rules! dbg_dump_if {
                     db.add(
                         true,
                         format!(
-                            "[{}:{}] {} = {}",
+                            "[{}:{}] {} => {}",
                             file!(),
                             line!(),
                             stringify!($expr),
                             &expr
                         ),
                         format!(
-                            "[{}:{}] {} = {}",
+                            "[{}:{}] {} => {}",
                             file!(),
                             line!(),
                             stringify!($expr),
@@ -104,14 +104,14 @@ macro_rules! dbgx {
                     STAT_DB.lock().unwrap().add(
                         true,
                         format!(
-                            "[{}:{}] {} = {:?}",
+                            "[{}:{}] {} => {:?}",
                             file!(),
                             line!(),
                             stringify!($expr),
                             &expr
                         ),
                         format!(
-                            "[{}:{}] {} = {:?}",
+                            "[{}:{}] {} => {:?}",
                             file!(),
                             line!(),
                             stringify!($expr),
@@ -130,11 +130,11 @@ macro_rules! dbgx {
 #[macro_export]
 macro_rules! dbg_dump {
     () => ({
-        STAT_DB.lock().unwrap().dump();
+        STAT_DB.lock().unwrap().dump(false);
         "--- end of dump ---\n"
     });
     ($fmt:literal$(, $arg:expr)*) => ({
-        STAT_DB.lock().unwrap().dump();
+        STAT_DB.lock().unwrap().dump(false);
         format!($fmt$(, $arg)*)
     });
 }
@@ -202,7 +202,7 @@ impl StatDeq {
     }
     pub fn restart(&mut self, fmt: String, msg: String) {
         if self.dump_next {
-            self.dump();
+            self.dump(false);
             self.dump_next = false;
         }
         self.d.clear();
@@ -232,15 +232,17 @@ impl StatDeq {
     pub fn dump_next(&mut self) {
         self.dump_next = true;
     }
-    pub fn dump(&mut self) {
+    pub fn dump(&mut self, show_msg_counts: bool) {
         self.add(false, String::new(), String::new()); // to flush last message
-        eprintln!("--- Total file:line:message & counts: ---");
-        let mut count_vec: Vec<_> = self.h.iter().collect();
-        count_vec.sort_by(|a, b| a.0.cmp(b.0));
-        for (msg, ct) in count_vec {
-            eprintln!("{}\t{}", msg, ct);
+        if show_msg_counts {
+            eprintln!("--- Total file:line:message & counts: ---");
+            let mut count_vec: Vec<_> = self.h.iter().collect();
+            count_vec.sort_by(|a, b| a.0.cmp(b.0));
+            for (msg, ct) in count_vec {
+                eprintln!("{}\t{}", msg, ct);
+            }
+            eprintln!("--- Dump (last iteration): ---");
         }
-        eprintln!("--- Dump (last iteration): ---");
         for msg in &self.d {
             eprintln!("{}", msg);
         }

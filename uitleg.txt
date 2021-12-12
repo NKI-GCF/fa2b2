@@ -62,6 +62,17 @@ xmers als index, totdat of een lege index, of vervangbare - met
 minder extensie - gevonden wordt of totdat de maximale extensie,
 maximale readlengte of de contig extensie niet toestaat.
 
+Als twee xmers binnen de scope van een readlengte vallen krijgt
+wordt de xmer met hogere positie genegeerd en verlengt de scope
+vanaf de tweede xmer met de xmer positie min kmerlen. Hiermee
+vergroot het bereik voo
+
+
+soms geeft hashen van kmers met extensie een zelfde kmer als
+met zonder, of met minder extensie. Bijvoorbeeld een sequentie
+met herhaling van CCCC.. extensie zou een bitmask om te flippen
+kunnen krijgen. aan de andere kant blijven zulke sequenties
+toch wel dubieus.
 
 
 Wijziging van het optimum per extensie is om index botsingen te

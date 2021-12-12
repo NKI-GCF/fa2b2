@@ -10,11 +10,12 @@ extern crate fa2b2;
 //
 // target/release/fa2b2 /home/roel/Downloads/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz test
 
-//use std::fs::File;
+use std::fs::File;
 //use std::io::BufReader;
-//use std::io::prelude::*;
 use bio::io::fasta::IndexedReader;
+//use std::io::prelude::*;
 //use flate2::bufread::MultiGzDecoder;
+use bincode::serialize_into;
 use clap::{App, Arg};
 
 use anyhow::Result;
@@ -22,6 +23,7 @@ use fa2b2::kmerconst::KmerConst;
 use fa2b2::kmerloc::PriExtPosOri;
 use fa2b2::kmerstore::KmerStore;
 use fa2b2::marker::KmerIter;
+use std::io::BufWriter;
 
 fn main() -> Result<()> {
     let matches = App::new("fa2b2")
@@ -55,11 +57,12 @@ fn main() -> Result<()> {
         .unwrap_or_else(|_| panic!("Error opening reference genome"));
     let chrs = idxr.index.sequences();
 
-    let outfile = matches.value_of("out").unwrap();
+    let out_file_name = matches.value_of("out").unwrap();
+    let mut out_file = BufWriter::new(File::create(out_file_name).unwrap());
 
     let readlen = 64;
     let kc = KmerConst::new(readlen, chrs.iter().map(|x| x.len as usize).sum());
-    let mut ks = KmerStore::<u64>::new(kc.bitlen);
+    let mut ks = KmerStore::new(kc.bitlen);
     ks.opt |= 1; //
                  //ks.opt |= 2; // if set also non-priority (ext)kmers
     {
@@ -78,8 +81,8 @@ fn main() -> Result<()> {
         }
     }
     let mut stat = [[0; 8]; 2];
-    for k in ks.kmp {
-        stat[if k.no_pos() { 0 } else { 1 }][k.x()] += 1;
+    for k in ks.kmp.iter() {
+        stat[if k.is_no_pos() { 0 } else { 1 }][k.x()] += 1;
     }
     println!("Unset: {}", stat[0][0]);
     for j in 1..8 {
@@ -90,6 +93,6 @@ fn main() -> Result<()> {
     }
 
     println!("Writing first occurances per kmer to disk");
-    //ks.serialize().unwrap();
+    serialize_into(&mut out_file, &ks).unwrap();
     Ok(())
 }

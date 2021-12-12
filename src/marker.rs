@@ -19,6 +19,7 @@ pub struct KmerIter<'a> {
     goffs: u64,
     pub(super) scp: Scope<'a>,
     pub(super) ks: &'a mut KmerStore<u64>,
+    pub(super) kc: &'a KmerConst,
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
@@ -29,6 +30,7 @@ impl<'a> KmerIter<'a> {
             goffs: 0,
             scp,
             ks,
+            kc,
         }
     }
 
@@ -43,29 +45,26 @@ impl<'a> KmerIter<'a> {
         }
     }
 
-    fn get_scope(&mut self, seq: &mut Iter<u8>, past: Option<&mut Scope<'a>>) -> Result<bool> {
+    // false
+    fn build_scope(&mut self, seq: &mut Iter<u8>, past: Option<&mut Scope<'a>>) -> Result<bool> {
         if let Some(scp) = past {
             return self.ks.b2_for_p(scp.p).and_then(|b2| {
                 dbg_print!("=> twobit {:x} (past) <=", b2);
-                if scp.complete(b2, 0) {
-                    Ok(true)
-                } else {
-                    Err(anyhow!("cannot complete "))
-                }
+                scp.complete_and_update_mark(b2, 0)
             });
+            // false: cannot complete scope (contig end?) or find next mark after leaving mark.
         }
         while let Some(b2) = seq.next().map(|c| (c >> 1) & 0x7) {
             dbg_print!("=> twobit {:x} (head) <=", b2);
             let p = self.scp.p;
             if b2 < 4 {
+                self.finalize_n_stretch_if_pending();
                 // new sequence is also stored, to enable lookup later.
                 if let Some(qb) = self.ks.b2.get_mut(p.byte_pos()) {
                     *qb |= b2 << (p & 6);
                 }
                 self.ks.p_max = p.pos() + 4;
-                if self.scp.complete(b2, 0) {
-                    return Ok(true);
-                }
+                return self.scp.complete_and_update_mark(b2, 0);
             } else {
                 if self.scp.i != 0 {
                     dbg_print!("started N-stretch at {}.", p);
@@ -79,32 +78,34 @@ impl<'a> KmerIter<'a> {
                 self.n_stretch += 1;
             }
         }
-        Ok(false) // end of contig
+        Err(anyhow!("end of contig."))
     }
 
     /// When rebuilding and exteniding scp for recurrent kmer, mind contig boundaries
     fn get_contig_limits(&self, p: u64) -> (u64, u64) {
         let (contig_start, contig_end) = self.ks.get_contig_start_end_for_p(p);
-        self.scp.kc.get_kmer_boundaries(p, contig_start, contig_end)
+        self.kc.get_kmer_boundaries(p, contig_start, contig_end)
     }
 
     /// rebuild scp until scp.mark.p reaches stored position.
-    fn rebuild_kmer_stack(&self, stored: u64) -> Result<Scope<'a>> {
+    fn rebuild_scope(&self, stored: u64) -> Result<Scope<'a>> {
+        ensure!(stored.pos() != PriExtPosOri::no_pos());
         let x = stored.x();
 
         let contig_limits = self.get_contig_limits(stored.pos());
-        let mut scp = Scope::new(contig_limits, self.scp.kc, stored.extension());
+        let mut scp = Scope::new(contig_limits, self.kc, stored.extension());
 
-        while {
+        loop {
             let b2 = self.ks.b2_for_p(scp.p).unwrap();
             dbg_print!("=> b2 {:x}, p: {:#x} <=", b2, scp.p);
-            if scp.complete(b2, x) && scp.mark_is_leaving() {
+            if scp.complete_and_update_mark(b2, x)? {
                 // komt voor aangezien start p soms te vroeg is. e.g. 2/3:C<AA|A>AA.
                 scp.set_next_mark();
             }
-            scp.mark.p != stored
-        } {
-            ensure!(scp.p.pos() < scp.plim, "{:#x}, {:#x}", scp.mark.p, stored);
+            if scp.mark.p == stored {
+                break;
+            }
+            ensure!(scp.p.pos() < scp.plim.1, "{:#x}, {:#x}", scp.mark.p, stored);
         }
         Ok(scp)
     }
@@ -114,44 +115,74 @@ impl<'a> KmerIter<'a> {
         self.ks.push_contig(self.scp.p.pos(), self.goffs);
         let mut past = None;
 
-        while self.get_scope(seq, past.as_mut())? {
+        loop {
+            match self.build_scope(seq, past.as_mut()) {
+                Ok(true) => {}
+                Ok(false) => continue,
+                Err(e) => {
+                    // fixme: use thiserror?
+                    if e.to_string() == "end of contig." {
+                        break;
+                    }
+                    if past.is_some() {
+                        dbg_print!("{} for past (p:{:x})", e, past.unwrap().mark.p);
+                        past = None;
+                    } else {
+                        dbg_print!("{} (p:{:x})", e, self.scp.mark.p);
+                    }
+                    continue;
+                }
+            }
             loop {
                 dbg_print!("---------[ past:{:?} ]-------------", past.is_some());
-                let (min_index, min_pos) = if let Some(scp) = past.as_ref() {
+                let (min_idx, min_p) = if let Some(scp) = past.as_ref() {
                     (scp.mark.idx, scp.mark.p)
                 } else {
                     (self.scp.mark.idx, self.scp.mark.p)
                 };
-                dbg_assert!(
-                    min_index < self.ks.kmp.len(),
-                    "{:x}, {:x}",
-                    min_pos,
-                    self.scp.p
-                );
-                dbg_assert!(min_index < self.ks.kmp.len(), "{:x}", min_pos);
-                let stored_at_index = self.ks.kmp[min_index];
+                dbg_assert!(min_idx < self.ks.kmp.len(), "{:x}, {:x}", min_p, self.scp.p);
+                dbg_assert!(min_idx < self.ks.kmp.len(), "{:x}", min_p);
+                let stored_p = self.ks.kmp[min_idx];
 
-                if dbgx!(stored_at_index.is_replaceable_by(min_pos)) {
-                    //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_index, stored_at_index, min_pos);
-                    if let Some(scp) = past {
+                if dbgx!(stored_p.is_replaceable_by(min_p)) {
+                    //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
+                    /*if let Some(scp) = past {
                         dbg_print!("{}", scp);
                     } else {
                         dbg_print!("{}", self.scp);
-                    }
-                    if dbgx!(stored_at_index.is_set_and_not(min_pos)) {
-                        let mut new_scope = self.rebuild_kmer_stack(stored_at_index)?;
+                    }*/
+                    if dbgx!(stored_p.is_set_and_not(min_p)) {
+                        let mut new_scope = self.rebuild_scope(stored_p)?;
                         new_scope.extend_kmer_stack(self.ks);
-                        self.ks.kmp[min_index] = min_pos;
+                        //dbgx!(self.ks.kmp[min_idx].set(min_p));
+                        dbgx!(self.ks.kmp[min_idx] = min_p);
                         past = Some(new_scope);
                         // go back and extend
                     } else {
-                        // If already set it was minpos. Then leave dupbit state, else it was zero.
-                        self.ks.kmp[min_index] |= min_pos;
+                        // If already set it was min_p. Then leave dupbit state.
+                        if self.ks.kmp[min_idx].is_no_pos() {
+                            self.ks.kmp[min_idx].set(min_p);
+                        }
                         past = None;
                         break;
                     }
-                } else if dbgx!(stored_at_index.extension() == min_pos.extension()) {
-                    self.ks.kmp[min_index].set_dup();
+                } else if dbgx!(stored_p.extension() == min_p.extension()) {
+                    // If a kmer occurs multiple times within an extending readlength, only
+                    // the first gets a position. During mapping this rule also should apply.
+                    let check_linked = if let Some(scp) = past.as_mut() {
+                        scp.downstream_on_contig(stored_p)
+                    } else {
+                        self.scp.downstream_on_contig(stored_p)
+                    };
+                    if check_linked
+                        && self
+                            .rebuild_scope(stored_p)?
+                            .in_linked_scope(self.ks, min_p, min_idx)?
+                    {
+                        past = None;
+                        break;
+                    }
+                    self.ks.kmp[min_idx].set_dup();
                 } else {
                     dbg_print!("\t\t<!>");
                 }
@@ -167,7 +198,7 @@ impl<'a> KmerIter<'a> {
                 }
             }
             if let Some(scp) = past.as_ref() {
-                if dbgx!(scp.p.pos() >= scp.plim) {
+                if dbgx!(scp.p.pos() >= scp.plim.1) {
                     // extension requires bases, but we're at contig limit, just leave it.
                     past = None;
                 }
@@ -237,9 +268,12 @@ mod tests {
             process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.kmp.len(), 128);
-        for i in 0..ks.kmp.len() {
-            dbg_assert!(ks.kmp[i].no_pos(), "[{}], {:x}", i, ks.kmp[i]);
+        let mut observed_first = false;
+        for i in 1..ks.kmp.len() {
+            dbg_assert!(ks.kmp[i].is_no_pos(), "[{}], {:x}", i, ks.kmp[i]);
         }
+        let first_pos = (kc.kmerlen as u64) << 1;
+        dbg_assert_eq!(ks.kmp[0], first_pos);
         Ok(())
     }
     #[test]
@@ -249,9 +283,11 @@ mod tests {
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
         }
-        for i in 0..ks.kmp.len() {
-            dbg_assert!(ks.kmp[i].no_pos(), "[{}], {:x}", i, ks.kmp[i]);
+        for i in 1..ks.kmp.len() {
+            dbg_assert!(ks.kmp[i].is_no_pos(), "[{}], {:x}", i, ks.kmp[i]);
         }
+        let first_pos = (kc.kmerlen as u64) << 1;
+        dbg_assert_eq!(ks.kmp[0], first_pos);
         Ok(())
     }
     #[test]
@@ -262,9 +298,9 @@ mod tests {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         for i in 1..ks.kmp.len() {
-            dbg_assert_eq!(ks.kmp[i], 0, "[{}], {:x}", i, ks.kmp[i]);
+            dbg_assert!(ks.kmp[i].is_no_pos(), "[{}], {:x}", i, ks.kmp[i]);
         }
-        let first_pos = (1 << 63) | ((kc.kmerlen as u64) << 1);
+        let first_pos = (kc.kmerlen as u64) << 1;
         dbg_assert_eq!(ks.kmp[0], first_pos);
         Ok(())
     }
@@ -276,7 +312,12 @@ mod tests {
             process(&mut ks, &kc, b"ATATATATATATATATAT"[..].to_owned())?;
         }
         for i in 0..ks.kmp.len() {
-            dbg_assert!(ks.kmp[i].no_pos(), "[{}], {:x}", i, ks.kmp[i]);
+            dbg_assert!(
+                ks.kmp[i].is_no_pos() || !ks.kmp[i].is_dup(),
+                "[{}], {:x}",
+                i,
+                ks.kmp[i]
+            );
         }
         Ok(())
     }
@@ -292,9 +333,9 @@ mod tests {
         kmi.markcontig::<u64>(&mut seq)?;
         for hash in 0..ks_kmp_len {
             let p = kmi.ks.kmp[hash];
-            if !p.no_pos() {
-                let new_stack = kmi.rebuild_kmer_stack(p).unwrap();
-                dbg_assert_eq!(new_stack.mark.p, p);
+            if !p.is_no_pos() {
+                let scope = kmi.rebuild_scope(p).unwrap();
+                dbg_assert_eq!(scope.mark.p, p);
             }
         }
         Ok(())
@@ -334,9 +375,9 @@ mod tests {
                 dbg_print!("-- testing hashes --");
                 for hash in 0..ks_kmp_len {
                     let p = kmi.ks.kmp[hash];
-                    if !p.no_pos() {
+                    if !p.is_no_pos() {
                         dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
-                        dbg_assert_eq!(kmi.rebuild_kmer_stack(p).unwrap().mark.p, p);
+                        dbg_assert_eq!(kmi.rebuild_scope(p).unwrap().mark.p, p);
                     }
                 }
             }

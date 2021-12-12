@@ -1,16 +1,22 @@
 use crate::rdbg::STAT_DB;
-use num::FromPrimitive;
-use num_traits::PrimInt;
-use std::ops::{AddAssign, SubAssign};
+use std::clone::Clone;
 
-pub trait PriExtPosOri: PrimInt + FromPrimitive + AddAssign + SubAssign {
+pub trait PriExtPosOri: Clone {
+    fn no_pos() -> Self;
+    fn clear(&mut self);
+    fn set_ori(&mut self, p: u64);
+    fn get_ori(&self) -> u64;
+    fn set(&mut self, p: u64);
+    fn get(&self) -> u64;
+    fn incr(&mut self);
+    fn decr(&mut self);
     fn extension(&self) -> u64;
     fn x(&self) -> usize;
     fn same_ori(&self, p: u64) -> bool;
     fn pos(&self) -> u64;
     fn byte_pos(&self) -> usize;
     fn blacklist(&mut self);
-    fn no_pos(&self) -> bool;
+    fn is_no_pos(&self) -> bool;
     fn extend(&mut self);
     fn set_extension(&mut self, x: u64);
     fn clear_extension(&mut self);
@@ -21,6 +27,30 @@ pub trait PriExtPosOri: PrimInt + FromPrimitive + AddAssign + SubAssign {
 }
 
 impl PriExtPosOri for u64 {
+    fn no_pos() -> Self {
+        0x_7FFF_FFFF_FFFE
+    }
+    fn clear(&mut self) {
+        *self = PriExtPosOri::no_pos();
+    }
+    fn set_ori(&mut self, p: u64) {
+        *self ^= (*self ^ p) & 1
+    }
+    fn get_ori(&self) -> u64 {
+        self & 1
+    }
+    fn set(&mut self, p: u64) {
+        *self = p;
+    }
+    fn get(&self) -> u64 {
+        *self
+    }
+    fn incr(&mut self) {
+        *self += 0x2;
+    }
+    fn decr(&mut self) {
+        *self -= 0x2;
+    }
     fn extension(&self) -> u64 {
         self & 0xFFFF_0000_0000_0000
     }
@@ -28,7 +58,7 @@ impl PriExtPosOri for u64 {
         (self.extension() >> 48) as usize
     }
     fn same_ori(&self, p: u64) -> bool {
-        (self & 1) == (p & 1)
+        self.get_ori() == (p & 1)
     }
     fn pos(&self) -> u64 {
         *self & 0x_7FFF_FFFF_FFFE
@@ -38,13 +68,13 @@ impl PriExtPosOri for u64 {
         (*self & 0x_7FFF_FFFF_FFF8) as usize >> 3
     }
     fn blacklist(&mut self) {
-        if !self.no_pos() {
+        if !self.is_no_pos() {
             *self &= !0x_7FFF_FFFF_FFFF;
             self.extend();
         }
     }
-    fn no_pos(&self) -> bool {
-        self.pos() == 0
+    fn is_no_pos(&self) -> bool {
+        (*self & 0x_7FFF_FFFF_FFFE) == PriExtPosOri::no_pos()
     }
     fn extend(&mut self) {
         *self += 1 << 48;
@@ -87,11 +117,14 @@ impl MidPos for u64 {
         }
     }
     fn is_replaceable_by(&self, new_entry: u64) -> bool {
-        *self < new_entry.extension()
-            || (*self == new_entry.extension() && self.has_samepos(new_entry))
+        // blacklisting for smaller extension is setting only extension bits. a value with this
+        // extension can be written.
+        self.is_no_pos()
+            || *self <= new_entry.extension()
+            || (self.extension() == new_entry.extension() && self.has_samepos(new_entry))
     }
     fn is_set_and_not(&self, other: u64) -> bool {
-        !(self.no_pos() || self.is_same(other))
+        !(self.is_no_pos() || self.is_same(other))
     }
 }
 
@@ -103,7 +136,7 @@ pub struct KmerLoc<T> {
 impl<T: PriExtPosOri> KmerLoc<T> {
     pub fn reset(&mut self) {
         self.idx = usize::max_value();
-        self.p = T::from_u64(0).unwrap();
+        self.p.clear();
     }
 
     pub fn is_set(&self) -> bool {
@@ -119,14 +152,15 @@ impl<T: PriExtPosOri> KmerLoc<T> {
     /*pub fn priority(&self) -> u64 {
         self.p.to_u64().unwrap() & 0x8000_0000_0000_0000
     }*/
-    pub fn next(&mut self, ori: bool, is_template: bool) {
-        // ori == true if kmer is for template, then we want 1 in self.p
-        let p = self.p.to_u64().unwrap();
+    /*pub fn next(&mut self, ori: bool, is_template: bool) {
+    self.p.set_ori(if ori {1} else {0});*/
+    pub fn next(&mut self, p: u64, is_template: bool) {
         if is_template {
-            self.p += T::from_u64(if ori { 3 } else { 2 } - (1 & p)).unwrap();
+            self.p.incr()
         } else {
-            self.p -= T::from_u64(if ori { 1 } else { 2 } + (1 & p)).unwrap();
+            self.p.decr()
         }
+        self.p.set_ori(p);
     }
 }
 
@@ -141,7 +175,7 @@ mod tests {
         let pick = rng.gen_range(20, 50);
         for _ in 0..pick {
             let ori = rng.gen_range(0, 2);
-            kl.next(ori != 0, true);
+            kl.next(ori, true);
             dbg_assert_eq!(ori, kl.p & 1);
         }
         dbg_assert_eq!(kl.p & !1, 100 + (pick << 1));
@@ -153,7 +187,7 @@ mod tests {
         let pick = rng.gen_range(20, 50);
         for _ in 0..pick {
             let ori = rng.gen_range(0, 2);
-            kl.next(ori != 0, false);
+            kl.next(ori, false);
             dbg_assert_eq!(ori, kl.p & 1);
         }
         dbg_assert_eq!(kl.p & !1, 100 - (pick << 1));

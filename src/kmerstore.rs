@@ -45,7 +45,8 @@ impl<T: PriExtPosOri> KmerStore<T> {
             ctg.genomic += offset;
         }
     }
-    pub fn get_contig(&self, p: u64) -> usize {
+    /// binary search contig lower boundary
+    fn get_contig(&self, p: u64) -> usize {
         let mut size = self.contig.len();
         let mut base = 0;
         while size > 0 {

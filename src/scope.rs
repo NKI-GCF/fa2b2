@@ -96,7 +96,11 @@ impl<'a> Scope<'a> {
             } else {
                 remain -= 1;
             }
-            ensure!(self.p.pos() < endp.pos());
+            if self.p.pos() >= endp.pos() {
+                // No solution, but only with true the past is shed
+                dbg_print!("Unresolved: {:#x}", idx);
+                return Ok(false);
+            }
         }
         Ok(false)
     }

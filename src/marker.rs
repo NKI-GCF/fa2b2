@@ -15,9 +15,10 @@ use crate::scope::Scope;
 use anyhow::{anyhow, ensure, Result};
 
 pub struct KmerIter<'a> {
-    steekproefi: u32,
+    //steekproefi: u32,
     n_stretch: u64,
     goffs: u64,
+    repetitive: Option<u64>,
     pub(super) scp: Scope<'a>,
     pub(super) ks: &'a mut KmerStore<u64>,
     pub(super) kc: &'a KmerConst,
@@ -27,9 +28,10 @@ impl<'a> KmerIter<'a> {
     pub fn new(ks: &'a mut KmerStore<u64>, kc: &'a KmerConst) -> Self {
         let scp = Scope::new((0, u64::max_value()), &kc, 0);
         KmerIter {
-            steekproefi: 10_000,
+            //steekproefi: 10_000,
             n_stretch: 0,
             goffs: 0,
+            repetitive: None,
             scp,
             ks,
             kc,
@@ -118,12 +120,12 @@ impl<'a> KmerIter<'a> {
     }
 
     fn set_idx_pos(&mut self, idx: usize, p: u64) {
-        self.steekproefi -= 1;
+        /*self.steekproefi -= 1;
         if self.steekproefi == 0 {
             self.steekproefi = 10_000;
             // XXX waarom geeft dit telkens een p met dupbit set en ext == 3 ???
             eprintln!("[{:#x}] = {:#x}", idx, p);
-        }
+        }*/
         self.ks.kmp[idx].set(p);
     }
 
@@ -151,33 +153,31 @@ impl<'a> KmerIter<'a> {
                 }
             }
             loop {
-                dbg_print!("---------[ past:{:?} ]-------------", past.is_some());
+                /*dbg_print!(
+                    "---------[ past:{:?} ]-------------",
+                    self.scp[1].p.is_set()
+                );*/
                 let (min_idx, min_p) = if let Some(scp) = past.as_ref() {
                     (scp.mark.idx, scp.mark.p)
                 } else {
                     (self.scp.mark.idx, self.scp.mark.p)
                 };
-                dbg_assert!(min_idx < self.ks.kmp.len(), "{:x}, {:x}", min_p, self.scp.p);
-                dbg_assert!(min_idx < self.ks.kmp.len(), "{:x}", min_p);
+                dbg_assert!(min_idx < self.ks.kmp.len(), "{:x}, {:x}", min_idx, min_p);
                 let stored_p = self.ks.kmp[min_idx];
 
                 if dbgx!(stored_p.is_replaceable_by(min_p)) {
                     //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
-                    /*if let Some(scp) = past {
-                        dbg_print!("{}", scp);
-                    } else {
-                        dbg_print!("{}", self.scp);
-                    }*/
+                    // dbg_print!("{}", self.get_scp());
                     if dbgx!(stored_p.is_set_and_not(min_p)) {
                         if let Some(mut new_scope) = self.rebuild_scope(stored_p)? {
                             new_scope.extend_kmer_stack(self.ks);
-                            //dbgx!(self.ks.kmp[min_idx].set(min_p));
                             dbgx!(self.set_idx_pos(min_idx, min_p));
                             past = Some(new_scope);
                         } else {
                             past = None;
                             break;
                         }
+                        //dbgx!(self.ks.kmp[min_idx].set(min_p));
                         // go back and extend
                     } else {
                         // If already set it was min_p. Then leave dupbit state.
@@ -211,12 +211,11 @@ impl<'a> KmerIter<'a> {
                     if dbgx!(!scp.extend()) {
                         break;
                     }
-                    // includes check for readlength
                     ensure!(scp.set_next_mark());
                 } else if dbgx!(!self.scp.extend()) {
-                    // TODO: could add to blacklisted in unmappable regions.
                     break;
                 }
+                // includes check for readlength
             }
             if let Some(scp) = past.as_ref() {
                 if dbgx!(scp.p.pos() >= scp.plim.1) {
@@ -354,7 +353,7 @@ mod tests {
         kmi.markcontig::<u64>(&mut seq)?;
         for hash in 0..ks_kmp_len {
             let p = kmi.ks.kmp[hash];
-            if !p.is_no_pos() {
+            if p.is_set() {
                 let scope = kmi.rebuild_scope(p).unwrap();
                 dbg_assert_eq!(scope.mark.p, p);
             }
@@ -396,7 +395,7 @@ mod tests {
                 dbg_print!("-- testing hashes --");
                 for hash in 0..ks_kmp_len {
                     let p = kmi.ks.kmp[hash];
-                    if !p.is_no_pos() {
+                    if p.is_set() {
                         dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
                         dbg_assert_eq!(kmi.rebuild_scope(p).unwrap().mark.p, p);
                     }

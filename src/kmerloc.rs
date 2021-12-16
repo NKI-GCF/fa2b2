@@ -8,6 +8,7 @@ pub trait PriExtPosOri: Clone {
     fn get_ori(&self) -> u64;
     fn set(&mut self, p: u64);
     fn get(&self) -> u64;
+    fn is_set(&self) -> bool;
     fn incr(&mut self);
     fn decr(&mut self);
     fn extension(&self) -> u64;
@@ -45,6 +46,9 @@ impl PriExtPosOri for u64 {
     fn get(&self) -> u64 {
         *self
     }
+    fn is_set(&self) -> bool {
+        (*self & 0x_7FFF_FFFF_FFFE) != PriExtPosOri::no_pos()
+    }
     fn incr(&mut self) {
         *self += 0x2;
     }
@@ -68,7 +72,7 @@ impl PriExtPosOri for u64 {
         (*self & 0x_7FFF_FFFF_FFF8) as usize >> 3
     }
     fn blacklist(&mut self) {
-        if !self.is_no_pos() {
+        if self.is_set() {
             *self &= !0x_7FFF_FFFF_FFFF;
             self.extend();
         }
@@ -124,7 +128,7 @@ impl MidPos for u64 {
             || (self.extension() == new_entry.extension() && self.has_samepos(new_entry))
     }
     fn is_set_and_not(&self, other: u64) -> bool {
-        !(self.is_no_pos() || self.is_same(other))
+        self.is_set() && !self.is_same(other)
     }
 }
 

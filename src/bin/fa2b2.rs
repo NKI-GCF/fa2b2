@@ -82,7 +82,7 @@ fn main() -> Result<()> {
     }
     let mut stat = [[0; 8]; 2];
     for k in ks.kmp.iter() {
-        stat[if k.is_no_pos() { 0 } else { 1 }][k.x()] += 1;
+        stat[if k.is_set() { 1 } else { 0 }][k.x()] += 1;
     }
     println!("Unset: {}", stat[0][0]);
     for j in 1..8 {

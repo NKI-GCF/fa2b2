@@ -31,6 +31,14 @@ impl<'a> Scope<'a> {
         }
     }
 
+    pub fn set(&mut self, plim: (u64, u64), ext: u64) {
+        self.p = ext | plim.0;
+        self.plim = plim;
+        self.i = 0;
+        self.mark.idx = usize::max_value();
+        self.mark.p = ext;
+    }
+
     /// hierin vinden .i & .p increments and kmer .d[] update plaats. 1+ kmers ? true.
     fn complete_kmer(&mut self, b2: u8) -> bool {
         // ori == true if kmer is for template, then we want 1 in self.p

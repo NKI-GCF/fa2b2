@@ -18,7 +18,7 @@ pub struct KmerIter<'a> {
     //steekproefi: u32,
     n_stretch: u64,
     goffs: u64,
-    repetitive: Option<u64>,
+    period: Option<u64>,
     pub(super) scp: [Scope<'a>; 2],
     pub(super) ks: &'a mut KmerStore<u64>,
     pub(super) kc: &'a KmerConst,
@@ -34,25 +34,22 @@ impl<'a> KmerIter<'a> {
             //steekproefi: 10_000,
             n_stretch: 0,
             goffs: 0,
-            repetitive: None,
+            period: None,
             scp,
             ks,
             kc,
         }
     }
 
-    /// indien we een n-stretch aan het verlengen waren, sluit deze af.
-    // XXX de n_stretch logica hier lijkt borked.
-    fn finalize_n_stretch_if_pending(&mut self) {
-        if self.n_stretch > 0 {
-            dbg_print!("added new contig. Ns:{}", self.n_stretch);
-            self.ks.offset_contig(self.n_stretch);
-            self.goffs += self.n_stretch;
-            self.n_stretch = 0;
-        }
+    /// sluit een n-stretch af, die we aan het verlengen waren.
+    fn finalize_n_stretch(&mut self) {
+        dbg_print!("added new contig. Ns:{}", self.n_stretch);
+        self.ks.offset_contig(self.n_stretch);
+        self.goffs += self.n_stretch;
+        self.n_stretch = 0;
     }
 
-    // false
+    // false means not yet complete
     fn build_scope(&mut self, seq: &mut Iter<u8>) -> Result<bool> {
         if self.scp[1].p.is_set() {
             return self.ks.b2_for_p(self.scp[1].p).and_then(|b2| {
@@ -65,29 +62,72 @@ impl<'a> KmerIter<'a> {
             dbg_print!("=> twobit {:x} (head) <=", b2);
             let p = self.scp[0].p;
             if b2 < 4 {
-                self.finalize_n_stretch_if_pending();
                 // new sequence is also stored, to enable lookup later.
                 if let Some(qb) = self.ks.b2.get_mut(p.byte_pos()) {
                     *qb |= b2 << (p & 6);
                 }
                 self.ks.p_max = p.pos() + 4;
-                // ext cannot be unset downstream: scp funcs also used for scope rebuild.
+                if self.n_stretch > 0 {
+                    self.finalize_n_stretch();
+                    // If a repetition ends in an N-strectch, thereafter offset to period
+                    // may differ or the repetition could be different or entirely gone.
+                    self.period = None;
+                } else if self
+                    .period
+                    .and_then(|d| self.ks.b2_for_p(self.scp[0].p - d).ok())
+                    .filter(|&old_b2| old_b2 == b2)
+                    .is_some()
+                {
+                    //everything that needs to be done.
+                    self.scp[0].increment(b2);
+                    continue;
+                } else {
+                    self.period = None;
+                }
+                // scp funcs also used for scope rebuild, therefore ext is set here.
                 self.scp[0].p.set_extension(0);
                 return self.scp[0].complete_and_update_mark(b2, 0);
-            } else {
-                if self.scp[0].i != 0 {
-                    dbg_print!("started N-stretch at {}.", p);
-                    self.goffs += self.scp[0].i as u64;
-                    self.ks.push_contig(p, self.goffs);
-
-                    // clear all except orientation and position to rebuild at the start of a new contig.
-                    self.scp[0].i = 0;
-                    self.n_stretch = 0;
-                }
-                self.n_stretch += 1;
             }
+            if self.scp[0].i != 0 {
+                dbg_print!("started N-stretch at {}.", p);
+                self.goffs += self.scp[0].i as u64;
+                self.ks.push_contig(p, self.goffs);
+
+                // clear all except orientation and position to rebuild at the start of a new contig.
+                self.scp[0].i = 0;
+                self.n_stretch = 0;
+            }
+            self.n_stretch += 1;
         }
         Err(anyhow!("end of contig."))
+    }
+
+    /// Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
+    fn recurrance_is_skippable(&mut self, p: u64, min_idx: usize) -> bool {
+        let scp = self.get_scp();
+        let pos = p.pos();
+        if pos >= scp.plim.0 {
+            let dist = scp.mark.p.pos() - pos;
+            if let Some(period) = self.period {
+                // Repeats can be more complex than a regular repetition. e.g.
+                // if a transposon is inserted + inserted inverted, and this is the
+                // repeat, then an xmers could recur at irregular intervals.
+                // but then the xmer out of line is extended and gets its own period,
+                // so it resolves that way too.
+                if dist % period == 0 {
+                    // XXX A xmer could recur exacly on period but not be a(n exact) repeat.
+                    self.ks.extend_repetitive(min_idx, dist as u32);
+                    return true;
+                }
+            } else {
+                self.period = Some(dist);
+                return true;
+            }
+        } else {
+            self.period = None;
+        }
+        self.ks.kmp[min_idx].set_dup();
+        false
     }
 
     /// When rebuilding and exteniding scp for recurrent kmer, mind contig boundaries
@@ -111,7 +151,7 @@ impl<'a> KmerIter<'a> {
             dbg_print!("=> b2 {:x}, p: {:#x} <=", b2, scp.p);
             if scp.complete_and_update_mark(b2, x)? {
                 // komt voor aangezien start p soms te vroeg is. e.g. 2/3:C<AA|A>AA.
-                scp.set_next_mark();
+                scp.set_next_mark()?;
             }
             if scp.mark.p == stored {
                 break;
@@ -175,7 +215,7 @@ impl<'a> KmerIter<'a> {
                             self.scp[1].p.clear();
                             break;
                         }
-                        self.scp[1].extend_kmer_stack(self.ks);
+                        self.scp[1].extend_kmer_stack(self.ks)?;
                         //dbgx!(self.ks.kmp[min_idx].set(min_p));
                         dbgx!(self.set_idx_pos(min_idx, min_p));
                         // go back and extend
@@ -190,15 +230,9 @@ impl<'a> KmerIter<'a> {
                 } else if dbgx!(stored_p.extension() == min_p.extension()) {
                     // If a kmer occurs multiple times within an extending readlength, only
                     // the first gets a position. During mapping this rule also should apply.
-                    if self.get_scp().downstream_on_contig(stored_p) {
-                        if self.rebuild_scope(stored_p)? {
-                            if self.scp[1].in_linked_scope(self.ks, min_p, min_idx)? {
-                                self.scp[1].p.clear();
-                                break;
-                            }
-                        }
+                    if self.recurrance_is_skippable(stored_p, min_idx) {
+                        break;
                     }
-                    self.ks.kmp[min_idx].set_dup();
                 } else {
                     dbg_print!("\t\t<!>");
                 }
@@ -207,7 +241,7 @@ impl<'a> KmerIter<'a> {
                 }
                 if self.scp[1].p.is_set() {
                     // includes check for readlength
-                    ensure!(self.scp[1].set_next_mark());
+                    self.scp[1].set_next_mark()?;
                 }
             }
             if self.scp[1].p.is_set() {
@@ -217,7 +251,9 @@ impl<'a> KmerIter<'a> {
                 }
             }
         }
-        dbgx!(self.finalize_n_stretch_if_pending());
+        if self.n_stretch > 0 {
+            dbgx!(self.finalize_n_stretch());
+        }
         Ok(self.scp[0].p.pos() as u64)
     }
 }

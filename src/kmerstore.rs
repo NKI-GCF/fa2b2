@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering::{Equal, Greater, Less};
+use std::collections::HashMap;
 
 use crate::kmerloc::PriExtPosOri;
 use crate::rdbg::STAT_DB;
@@ -19,6 +20,7 @@ pub struct KmerStore<T> {
     pub b2: Vec<u8>,
     pub kmp: Vec<T>, // position + strand per k-mer.
     pub contig: Vec<Contig>,
+    repeat: HashMap<usize, u32>,
 }
 
 impl<T: PriExtPosOri> KmerStore<T> {
@@ -31,6 +33,7 @@ impl<T: PriExtPosOri> KmerStore<T> {
             kmp: vec![T::no_pos(); 1 << (shift + 1)], // kmer positions
             //kmp,
             contig: Vec::new(), // contig info
+            repeat: HashMap::new(),
         }
     }
     pub fn push_contig(&mut self, p: u64, goffs: u64) {
@@ -85,6 +88,10 @@ impl<T: PriExtPosOri> KmerStore<T> {
             .get(p.byte_pos())
             .map(|x| (x >> (p & 6)) & 3)
             .ok_or(anyhow!("stored pos past contig? {:#}", p))
+    }
+    pub fn extend_repetitive(&mut self, min_idx: usize, dist: u32) {
+        let repeat = self.repeat.entry(min_idx).or_insert(0);
+        *repeat = dist;
     }
 }
 

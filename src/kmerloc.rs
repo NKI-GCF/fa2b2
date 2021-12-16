@@ -25,11 +25,13 @@ pub trait PriExtPosOri: Clone {
     fn with_ext(&self, x: usize) -> u64;
     fn set_dup(&mut self);
     fn is_dup(&self) -> bool;
+    fn set_repetitive(&mut self);
+    fn is_repetitive(&self) -> bool;
 }
 
 impl PriExtPosOri for u64 {
     fn no_pos() -> Self {
-        0x_7FFF_FFFF_FFFE
+        0x_3FFF_FFFF_FFFE
     }
     fn clear(&mut self) {
         *self = PriExtPosOri::no_pos();
@@ -47,7 +49,7 @@ impl PriExtPosOri for u64 {
         *self
     }
     fn is_set(&self) -> bool {
-        (*self & 0x_7FFF_FFFF_FFFE) != PriExtPosOri::no_pos()
+        (*self & 0x_3FFF_FFFF_FFFE) != PriExtPosOri::no_pos()
     }
     fn incr(&mut self) {
         *self += 0x2;
@@ -65,31 +67,31 @@ impl PriExtPosOri for u64 {
         self.get_ori() == (p & 1)
     }
     fn pos(&self) -> u64 {
-        *self & 0x_7FFF_FFFF_FFFE
+        *self & 0x_3FFF_FFFF_FFFE
     }
     fn byte_pos(&self) -> usize {
         // the strand bit and 2b encoded, so 4 twobits per byte.
-        (*self & 0x_7FFF_FFFF_FFF8) as usize >> 3
+        (*self & 0x_3FFF_FFFF_FFF8) as usize >> 3
     }
     fn blacklist(&mut self) {
         if self.is_set() {
-            *self &= !0x_7FFF_FFFF_FFFF;
+            *self &= !0x_3FFF_FFFF_FFFF;
             self.extend();
         }
     }
     fn is_no_pos(&self) -> bool {
-        (*self & 0x_7FFF_FFFF_FFFE) == PriExtPosOri::no_pos()
+        (*self & 0x_3FFF_FFFF_FFFE) == PriExtPosOri::no_pos()
     }
     fn extend(&mut self) {
         *self += 1 << 48;
     }
     fn set_extension(&mut self, x: u64) {
         dbg_assert!(x <= 0xFFFF);
-        *self &= 0x7FFF_FFFF_FFFF;
+        *self &= 0x3FFF_FFFF_FFFF;
         *self |= x << 48;
     }
     fn clear_extension(&mut self) {
-        *self &= 0x_7FFF_FFFF_FFFF;
+        *self &= 0x_3FFF_FFFF_FFFF;
     }
     fn is_same(&self, other: u64) -> bool {
         *self == other
@@ -102,6 +104,12 @@ impl PriExtPosOri for u64 {
     }
     fn is_dup(&self) -> bool {
         *self & 0x_8000_0000_0000 != 0
+    }
+    fn set_repetitive(&mut self) {
+        *self |= 0x_4000_0000_0000;
+    }
+    fn is_repetitive(&self) -> bool {
+        *self & 0x_4000_0000_0000 != 0
     }
 }
 

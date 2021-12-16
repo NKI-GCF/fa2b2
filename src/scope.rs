@@ -5,7 +5,7 @@ pub use crate::kmerconst::KmerConst;
 use crate::kmerloc::{KmerLoc, PriExtPosOri};
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{ensure, Result};
 use std::fmt;
 
 pub struct Scope<'a> {
@@ -37,23 +37,6 @@ impl<'a> Scope<'a> {
         self.mark.p = ext;
     }
 
-    /// hierin vinden .i & .p increments and kmer .d[] update plaats. 1+ kmers ? true.
-    fn complete_kmer(&mut self, b2: u8) -> bool {
-        // ori == true if kmer is for template, then we want 1 in self.p
-        let mut kmx = 0;
-        if let Some(i) = self.i.checked_sub(self.kc.kmerlen) {
-            let old_idx = i % self.kc.no_kmers;
-            if old_idx + 1 != self.kc.no_kmers {
-                kmx = old_idx + 1;
-            }
-            self.d[kmx] = self.d[old_idx];
-        }
-        // first bit is strand bit, set according to kmer deviant bit.
-        self.p += if self.d[kmx].update(b2, true) { 3 } else { 2 } - (1 & self.p);
-        self.i += 1;
-        self.i >= self.kc.kmerlen
-    }
-
     fn is_xmer_complete(&self, x: usize) -> bool {
         /*dbgf!(
             self.i < self.kc.kmerlen + self.kc.afstand(x),
@@ -65,84 +48,45 @@ impl<'a> Scope<'a> {
         self.i < self.kc.kmerlen + self.kc.afstand(x)
     }
 
-    pub fn downstream_on_contig(&self, p: u64) -> bool {
-        // linked must be on the same contig and can only be upstream (1st is kept)
-        let pos = p.pos();
-        pos >= self.plim.0 && pos < self.mark.p.pos()
-    }
-
-    pub fn in_linked_scope<T: PriExtPosOri>(
-        &mut self,
-        ks: &KmerStore<T>,
-        endp: u64,
-        idx: usize,
-    ) -> Result<bool> {
-        let x = endp.x();
-        let afs = self.kc.afstand(x);
-        let extension = self.kc.readlen - self.kc.kmerlen - afs;
-        let mut remain = extension;
-        let endp_is_template = endp & 1 != 0;
-
-        while remain > 0 {
-            let b2 = ks.b2_for_p(self.p).unwrap();
-            ensure!(self.complete_kmer(b2));
-            let (hash, is_template) = self.get_xmer_and_strand(0, afs);
-
-            if dbgx!(hash == idx) {
-                if dbgx!(is_template == endp_is_template) {
-                    self.mark.p = self.p.with_ext(x) - (afs << 1) as u64;
-                    if is_template {
-                        self.mark.p |= 1;
-                    }
-                    if dbgx!(self.mark.p == endp) {
-                        return Ok(true);
-                    }
-                }
-                remain = extension;
-            } else {
-                remain -= 1;
+    pub fn increment(&mut self, b2: u8) {
+        let mut kmx = 0;
+        if let Some(i) = self.i.checked_sub(self.kc.kmerlen) {
+            let old_idx = i % self.kc.no_kmers;
+            if old_idx + 1 != self.kc.no_kmers {
+                kmx = old_idx + 1;
             }
-            if self.p.pos() >= endp.pos() {
-                // No solution, but only with true the past is shed
-                dbg_print!("Unresolved: {:#x}", idx);
-                return Ok(false);
-            }
+            self.d[kmx] = self.d[old_idx];
         }
-        Ok(false)
+        // first bit is strand bit, set according to kmer deviant bit.
+        self.p += if self.d[kmx].update(b2, true) { 3 } else { 2 } - (1 & self.p);
+        self.i += 1;
     }
 
     /// add b2 to kmer, move .p according to occ orientation
     /// return whether required nr of kmers for struct scope were seen.
+    // hierin vinden .i & .p increments and kmer .d[] update plaats. geen kmer ? false.
     fn complete(&mut self, b2: u8, x_start: usize) -> bool {
-        //XXX: hierna is self.i al geincrement.
-        if !self.complete_kmer(b2) {
-            return false;
-        }
-
-        for x in x_start..=self.p.x() {
-            if self.is_xmer_complete(x) || self.set_if_optimum(0, x) {
-                break;
+        self.increment(b2);
+        if self.i >= self.kc.kmerlen {
+            for x in x_start..=self.p.x() {
+                if self.is_xmer_complete(x) || self.set_if_optimum(0, x) {
+                    break;
+                }
             }
+            self.mark.is_set() && self.all_kmers()
+        } else {
+            false
         }
-        self.mark.is_set() && self.all_kmers()
     }
 
     pub fn complete_and_update_mark(&mut self, b2: u8, x_start: usize) -> Result<bool> {
         if self.complete(b2, x_start) {
-            if self.mark_remains() || dbgx!(self.set_next_mark()) {
-                Ok(true)
-            } else {
-                Err(anyhow!("Couldn't obtain new mark."))
+            if !self.mark_remains() {
+                self.set_next_mark()?;
             }
+            Ok(true)
         } else {
             Ok(false)
-        }
-    }
-
-    fn set_mark_after_extension_if_possible(&mut self, x: usize) {
-        self.mark.reset();
-        if !self.is_xmer_complete(x) {
-            let _ = self.set_if_optimum(0, x);
         }
     }
 
@@ -155,12 +99,11 @@ impl<'a> Scope<'a> {
     /// extend positie (als kmer/hash niet replaceble was); true indien mogelijk.
     // waar wordt dit ongedaan gemaakt??
     pub fn extend(&mut self) -> bool {
-        if self.p.x() + 1 < self.kc.ext_max {
+        let ret = self.p.x() + 1 < self.kc.ext_max;
+        if ret {
             self.p.extend();
-            true
-        } else {
-            false
         }
+        ret
     }
 
     /// is occ complete? call na complete_kmer() - self.i increment.
@@ -196,36 +139,39 @@ impl<'a> Scope<'a> {
     }
 
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)
-    pub fn set_next_mark(&mut self) -> bool {
+    pub fn set_next_mark(&mut self) -> Result<()> {
         self.mark.reset();
         let x = self.p.x();
         let afs = self.kc.afstand(x);
-        if self.kc.no_kmers <= afs {
-            return dbgx!(false);
-        }
+        ensure!(self.kc.no_kmers <= afs, "Couldn't obtain new mark.");
         for i in 0..(self.kc.no_kmers - afs) {
             let _ = self.set_if_optimum(i, x);
         }
         dbg_assert!(self.mark.is_set());
-        true
+        Ok(())
     }
 
     /// continue rebuild
-    pub fn extend_kmer_stack<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) {
+    pub fn extend_kmer_stack<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) -> Result<()> {
         let x = self.p.x();
-        self.set_mark_after_extension_if_possible(x);
+
+        // set mark after extension, if possible
+        self.mark.reset();
+        if !self.is_xmer_complete(x) {
+            let _ = self.set_if_optimum(0, x);
+        }
 
         while self.p.pos() < self.plim.1 {
             let b2 = ks.b2_for_p(self.p).unwrap();
             if self.complete(b2, x) && self.mark_is_leaving() {
-                let mark_is_set = self.set_next_mark();
-                dbg_assert!(mark_is_set);
+                self.set_next_mark()?;
                 if ks.kmp[self.mark.idx].is_same(self.mark.p) {
                     // retracked => finished
                     break;
                 }
             }
         }
+        Ok(())
     }
     fn get_xmer_and_strand(&self, i: usize, afs: usize) -> (usize, bool) {
         let base = self.i - self.kc.kmerlen;
@@ -247,7 +193,8 @@ impl<'a> Scope<'a> {
         if is_template {
             p |= 1;
         }
-        if self.hash_is_optimum(hash, p) {
+        let ret = self.hash_is_optimum(hash, p);
+        if ret {
             dbgf!(
                 self.mark.set(hash, p, x),
                 "{:?} [{:x}] = {:x} | x({})",
@@ -255,10 +202,8 @@ impl<'a> Scope<'a> {
                 p,
                 x
             );
-            true
-        } else {
-            false
         }
+        ret
     }
 }
 

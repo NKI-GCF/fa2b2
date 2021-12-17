@@ -199,27 +199,27 @@ mod tests {
     #[test]
     fn test_revcmp() {
         let mut rng = thread_rng();
-        let kmerlen = rng.gen_range(2, 32);
+        let kmerlen = rng.gen_range(2..32);
         let mut kmer: Kmer<u64> = Kmer::new(kmerlen);
         for _ in 0..32 {
-            kmer.add(rng.gen_range(0, 4));
+            kmer.add(rng.gen_range(0..4));
         }
         dbg_assert_eq!(kmer.dna.revcmp(kmerlen as usize), kmer.rc);
     }
     #[test]
     fn test_from_idx() {
         let mut rng = thread_rng();
-        let kmerlen = rng.gen_range(12, 32);
+        let kmerlen = rng.gen_range(12..32);
         let mut test_dna = 0;
         let mut test_rc = 0;
         let mut test_ori = false;
         let mut test_idx = 0xffffffffffffffff;
-        let last = rng.gen_range(kmerlen + 1, 102);
-        let pick = rng.gen_range(kmerlen, cmp::max(last - 1, kmerlen + 1));
+        let last = rng.gen_range((kmerlen + 1)..102);
+        let pick = rng.gen_range(kmerlen..cmp::max(last - 1, kmerlen + 1));
 
         let mut kmer: Kmer<u64> = Kmer::new(kmerlen);
         for i in 0..last {
-            kmer.add(rng.gen_range(0, 4));
+            kmer.add(rng.gen_range(0..4));
             if i == pick {
                 test_dna = kmer.dna;
                 test_rc = kmer.rc;

@@ -354,8 +354,8 @@ mod tests {
         for hash in 0..ks_kmp_len {
             let p = kmi.ks.kmp[hash];
             if p.is_set() {
-                let scope = kmi.rebuild_scope(p).unwrap();
-                dbg_assert_eq!(scope.mark.p, p);
+                let scope = kmi.rebuild_scope(p)?;
+                dbg_assert_eq!(scope.unwrap().mark.p, p);
             }
         }
         Ok(())
@@ -397,7 +397,8 @@ mod tests {
                     let p = kmi.ks.kmp[hash];
                     if p.is_set() {
                         dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
-                        dbg_assert_eq!(kmi.rebuild_scope(p).unwrap().mark.p, p);
+                        let scope = kmi.rebuild_scope(p)?;
+                        dbg_assert_eq!(scope.unwrap().mark.p, p);
                     }
                 }
             }

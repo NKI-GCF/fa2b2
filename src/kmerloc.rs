@@ -176,9 +176,9 @@ mod tests {
     fn forward() {
         let mut rng = thread_rng();
         let mut kl = KmerLoc::new(10, 100);
-        let pick = rng.gen_range(20, 50);
+        let pick = rng.gen_range(20..50);
         for _ in 0..pick {
-            let ori = rng.gen_range(0, 2);
+            let ori = rng.gen_range(0..2);
             kl.next(ori, true);
             dbg_assert_eq!(ori, kl.p & 1);
         }
@@ -188,9 +188,9 @@ mod tests {
     fn reverse() {
         let mut rng = thread_rng();
         let mut kl = KmerLoc::new(10, 100);
-        let pick = rng.gen_range(20, 50);
+        let pick = rng.gen_range(20..50);
         for _ in 0..pick {
-            let ori = rng.gen_range(0, 2);
+            let ori = rng.gen_range(0..2);
             kl.next(ori, false);
             dbg_assert_eq!(ori, kl.p & 1);
         }

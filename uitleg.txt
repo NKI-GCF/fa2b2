@@ -13,7 +13,10 @@ dient de xmer. De x staat voor extensie en de xor hash operaties.
 Een xmer is de kmer van een template of reverse complement strand
 of een bitwise complement van een van de twee. Strand keuze wordt
 bepaald door te kijken naar de eerste bit die verschilt tussen de
-twee. De kmer met de bit gezet wordt de xmer, tenzij de hoogste
+twee.
+=> neem de kleinste van de twee, werkt evengoed.
+
+De kmer met de bit gezet wordt de xmer, tenzij de hoogste
 bit van deze kmer gezet is, dan het bitwise complement ervan. Een
 index 1 bit kleiner betekent dat 2x minder ruimte nodig is bij de
 opslag.

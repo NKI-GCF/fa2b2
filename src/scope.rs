@@ -58,7 +58,7 @@ impl<'a> Scope<'a> {
             self.d[kmx] = self.d[old_idx];
         }
         // first bit is strand bit, set according to kmer deviant bit.
-        self.p += if self.d[kmx].update(b2, true) { 3 } else { 2 } - (1 & self.p);
+        self.p += if self.d[kmx].update(b2) { 3 } else { 2 } - (1 & self.p);
         self.i += 1;
     }
 
@@ -143,7 +143,7 @@ impl<'a> Scope<'a> {
         self.mark.reset();
         let x = self.p.x();
         let afs = self.kc.afstand(x);
-        ensure!(self.kc.no_kmers <= afs, "Couldn't obtain new mark.");
+        ensure!(self.kc.no_kmers > afs, "Couldn't obtain new mark.");
         for i in 0..(self.kc.no_kmers - afs) {
             let _ = self.set_if_optimum(i, x);
         }
@@ -182,7 +182,7 @@ impl<'a> Scope<'a> {
             dbg_print!("dna:{:#x}, dna2:{:#x}", self.d[d_i2].dna, kmer.dna);
             kmer.hash(self.d[d_i2]);
         }
-        (kmer.get_idx(true), test_template(kmer.dna, kmer.rc))
+        (kmer.get_idx(), test_template(kmer.dna, kmer.rc))
     }
 
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
@@ -264,7 +264,7 @@ mod tests {
         dbg_assert_eq!(kmer.dna, 0x95);
         dbg_assert_eq!(kmer.rc, 0xfc);
         dbg_assert_eq!(occ.p, 0xf);
-        dbg_assert_eq!(kmer.get_idx(true), 0x6a);
+        dbg_assert_eq!(kmer.get_idx(), 0x6a);
     }
     #[test]
     fn occurrence() {

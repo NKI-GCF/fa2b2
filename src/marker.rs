@@ -19,14 +19,17 @@ pub struct KmerIter<'a> {
     n_stretch: u64,
     goffs: u64,
     repetitive: Option<u64>,
-    pub(super) scp: Scope<'a>,
+    pub(super) scp: [Scope<'a>; 2],
     pub(super) ks: &'a mut KmerStore<u64>,
     pub(super) kc: &'a KmerConst,
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
     pub fn new(ks: &'a mut KmerStore<u64>, kc: &'a KmerConst) -> Self {
-        let scp = Scope::new((0, u64::max_value()), &kc, 0);
+        let scp = [
+            Scope::new((0, u64::max_value()), &kc, 0),
+            Scope::new((0, u64::max_value()), &kc, PriExtPosOri::no_pos()),
+        ];
         KmerIter {
             //steekproefi: 10_000,
             n_stretch: 0,
@@ -50,17 +53,17 @@ impl<'a> KmerIter<'a> {
     }
 
     // false
-    fn build_scope(&mut self, seq: &mut Iter<u8>, past: Option<&mut Scope<'a>>) -> Result<bool> {
-        if let Some(scp) = past {
-            return self.ks.b2_for_p(scp.p).and_then(|b2| {
+    fn build_scope(&mut self, seq: &mut Iter<u8>) -> Result<bool> {
+        if self.scp[1].p.is_set() {
+            return self.ks.b2_for_p(self.scp[1].p).and_then(|b2| {
                 dbg_print!("=> twobit {:x} (past) <=", b2);
-                scp.complete_and_update_mark(b2, 0)
+                self.scp[1].complete_and_update_mark(b2, 0)
             });
             // false: cannot complete scope (contig end?) or find next mark after leaving mark.
         }
         while let Some(b2) = seq.next().map(|c| (c >> 1) & 0x7) {
             dbg_print!("=> twobit {:x} (head) <=", b2);
-            let p = self.scp.p;
+            let p = self.scp[0].p;
             if b2 < 4 {
                 self.finalize_n_stretch_if_pending();
                 // new sequence is also stored, to enable lookup later.
@@ -69,16 +72,16 @@ impl<'a> KmerIter<'a> {
                 }
                 self.ks.p_max = p.pos() + 4;
                 // ext cannot be unset downstream: scp funcs also used for scope rebuild.
-                self.scp.p.set_extension(0);
-                return self.scp.complete_and_update_mark(b2, 0);
+                self.scp[0].p.set_extension(0);
+                return self.scp[0].complete_and_update_mark(b2, 0);
             } else {
-                if self.scp.i != 0 {
+                if self.scp[0].i != 0 {
                     dbg_print!("started N-stretch at {}.", p);
-                    self.goffs += self.scp.i as u64;
+                    self.goffs += self.scp[0].i as u64;
                     self.ks.push_contig(p, self.goffs);
 
                     // clear all except orientation and position to rebuild at the start of a new contig.
-                    self.scp.i = 0;
+                    self.scp[0].i = 0;
                     self.n_stretch = 0;
                 }
                 self.n_stretch += 1;
@@ -95,12 +98,13 @@ impl<'a> KmerIter<'a> {
     }
 
     /// rebuild scp until scp.mark.p reaches stored position.
-    fn rebuild_scope(&self, stored: u64) -> Result<Option<Scope<'a>>> {
+    fn rebuild_scope(&mut self, stored: u64) -> Result<bool> {
         ensure!(stored.pos() != PriExtPosOri::no_pos());
         let x = stored.x();
-
         let contig_limits = self.get_contig_limits(stored);
-        let mut scp = Scope::new(contig_limits, self.kc, stored.extension());
+        let scp = &mut self.scp[1];
+
+        scp.set(contig_limits, stored.extension());
 
         loop {
             let b2 = self.ks.b2_for_p(scp.p).unwrap();
@@ -113,10 +117,11 @@ impl<'a> KmerIter<'a> {
                 break;
             }
             if scp.p.pos() >= scp.plim.1 {
-                return Ok(None);
+                scp.p.clear();
+                return Ok(false);
             }
         }
-        Ok(Some(scp))
+        Ok(true)
     }
 
     fn set_idx_pos(&mut self, idx: usize, p: u64) {
@@ -129,13 +134,16 @@ impl<'a> KmerIter<'a> {
         self.ks.kmp[idx].set(p);
     }
 
+    fn get_scp(&mut self) -> &mut Scope<'a> {
+        &mut self.scp[if self.scp[1].p.is_set() { 1 } else { 0 }]
+    }
+
     pub fn markcontig<T: MidPos>(&mut self, seq: &mut Iter<u8>) -> Result<u64> {
         self.goffs = 0;
-        self.ks.push_contig(self.scp.p.pos(), self.goffs);
-        let mut past = None;
+        self.ks.push_contig(self.scp[0].p.pos(), self.goffs);
 
         loop {
-            match self.build_scope(seq, past.as_mut()) {
+            match self.build_scope(seq) {
                 Ok(true) => {}
                 Ok(false) => continue,
                 Err(e) => {
@@ -143,25 +151,19 @@ impl<'a> KmerIter<'a> {
                     if e.to_string() == "end of contig." {
                         break;
                     }
-                    if past.is_some() {
-                        dbg_print!("{} for past (p:{:x})", e, past.unwrap().mark.p);
-                        past = None;
-                    } else {
-                        dbg_print!("{} (p:{:x})", e, self.scp.mark.p);
+                    dbg_print!("{} (p:{:x})", e, self.get_scp().mark.p);
+                    if self.scp[1].p.is_set() {
+                        self.scp[1].p.clear();
                     }
                     continue;
                 }
             }
             loop {
-                /*dbg_print!(
+                dbg_print!(
                     "---------[ past:{:?} ]-------------",
                     self.scp[1].p.is_set()
-                );*/
-                let (min_idx, min_p) = if let Some(scp) = past.as_ref() {
-                    (scp.mark.idx, scp.mark.p)
-                } else {
-                    (self.scp.mark.idx, self.scp.mark.p)
-                };
+                );
+                let (min_idx, min_p) = (self.get_scp().mark.idx, self.get_scp().mark.p);
                 dbg_assert!(min_idx < self.ks.kmp.len(), "{:x}, {:x}", min_idx, min_p);
                 let stored_p = self.ks.kmp[min_idx];
 
@@ -169,36 +171,29 @@ impl<'a> KmerIter<'a> {
                     //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
                     // dbg_print!("{}", self.get_scp());
                     if dbgx!(stored_p.is_set_and_not(min_p)) {
-                        if let Some(mut new_scope) = self.rebuild_scope(stored_p)? {
-                            new_scope.extend_kmer_stack(self.ks);
-                            dbgx!(self.set_idx_pos(min_idx, min_p));
-                            past = Some(new_scope);
-                        } else {
-                            past = None;
+                        if !self.rebuild_scope(stored_p)? {
+                            self.scp[1].p.clear();
                             break;
                         }
+                        self.scp[1].extend_kmer_stack(self.ks);
                         //dbgx!(self.ks.kmp[min_idx].set(min_p));
+                        dbgx!(self.set_idx_pos(min_idx, min_p));
                         // go back and extend
                     } else {
                         // If already set it was min_p. Then leave dupbit state.
                         if self.ks.kmp[min_idx].is_no_pos() {
                             self.set_idx_pos(min_idx, min_p);
                         }
-                        past = None;
+                        self.scp[1].p.clear();
                         break;
                     }
                 } else if dbgx!(stored_p.extension() == min_p.extension()) {
                     // If a kmer occurs multiple times within an extending readlength, only
                     // the first gets a position. During mapping this rule also should apply.
-                    let check_linked = if let Some(scp) = past.as_mut() {
-                        scp.downstream_on_contig(stored_p)
-                    } else {
-                        self.scp.downstream_on_contig(stored_p)
-                    };
-                    if check_linked {
-                        if let Some(mut new_scope) = self.rebuild_scope(stored_p)? {
-                            if new_scope.in_linked_scope(self.ks, min_p, min_idx)? {
-                                past = None;
+                    if self.get_scp().downstream_on_contig(stored_p) {
+                        if self.rebuild_scope(stored_p)? {
+                            if self.scp[1].in_linked_scope(self.ks, min_p, min_idx)? {
+                                self.scp[1].p.clear();
                                 break;
                             }
                         }
@@ -207,25 +202,23 @@ impl<'a> KmerIter<'a> {
                 } else {
                     dbg_print!("\t\t<!>");
                 }
-                if let Some(scp) = past.as_mut() {
-                    if dbgx!(!scp.extend()) {
-                        break;
-                    }
-                    ensure!(scp.set_next_mark());
-                } else if dbgx!(!self.scp.extend()) {
+                if dbgx!(!self.get_scp().extend()) {
                     break;
                 }
-                // includes check for readlength
+                if self.scp[1].p.is_set() {
+                    // includes check for readlength
+                    ensure!(self.scp[1].set_next_mark());
+                }
             }
-            if let Some(scp) = past.as_ref() {
-                if dbgx!(scp.p.pos() >= scp.plim.1) {
+            if self.scp[1].p.is_set() {
+                if dbgx!(self.scp[1].p.pos() >= self.scp[1].plim.1) {
                     // extension requires bases, but we're at contig limit, just leave it.
-                    past = None;
+                    self.scp[1].p.clear();
                 }
             }
         }
         dbgx!(self.finalize_n_stretch_if_pending());
-        Ok(self.scp.p.pos() as u64)
+        Ok(self.scp[0].p.pos() as u64)
     }
 }
 
@@ -354,8 +347,8 @@ mod tests {
         for hash in 0..ks_kmp_len {
             let p = kmi.ks.kmp[hash];
             if p.is_set() {
-                let scope = kmi.rebuild_scope(p)?;
-                dbg_assert_eq!(scope.unwrap().mark.p, p);
+                kmi.rebuild_scope(p)?;
+                dbg_assert_eq!(kmi.scp[1].mark.p, p);
             }
         }
         Ok(())
@@ -397,8 +390,8 @@ mod tests {
                     let p = kmi.ks.kmp[hash];
                     if p.is_set() {
                         dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
-                        let scope = kmi.rebuild_scope(p)?;
-                        dbg_assert_eq!(scope.unwrap().mark.p, p);
+                        kmi.rebuild_scope(p)?;
+                        dbg_assert_eq!(kmi.scp[1].mark.p, p);
                     }
                 }
             }

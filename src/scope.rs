@@ -18,14 +18,12 @@ pub struct Scope<'a> {
 }
 
 impl<'a> Scope<'a> {
-    pub fn new(plim: (u64, u64), kc: &'a KmerConst, ext: u64) -> Self {
-        let p = ext | plim.0;
-
+    pub fn new(plim: (u64, u64), kc: &'a KmerConst, p: u64) -> Self {
         Scope {
             kc,
             p,
             d: VecDeque::from(vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers]),
-            mark: KmerLoc::new(usize::max_value(), ext),
+            mark: KmerLoc::new(usize::max_value(), p.extension()),
             i: 0,
             plim,
         }

@@ -2,22 +2,22 @@ use crate::rdbg::STAT_DB;
 use std::clone::Clone;
 
 pub trait PriExtPosOri: Clone {
-    fn no_pos() -> Self;
-    fn clear(&mut self);
-    fn set_ori(&mut self, p: u64);
-    fn get_ori(&self) -> u64;
     fn set(&mut self, p: u64);
     fn get(&self) -> u64;
+    fn pos(&self) -> u64;
+    fn no_pos() -> Self;
+    fn clear(&mut self);
     fn is_set(&self) -> bool;
+    fn is_no_pos(&self) -> bool;
+    fn set_ori(&mut self, p: u64);
+    fn get_ori(&self) -> u64;
     fn incr(&mut self);
     fn decr(&mut self);
     fn extension(&self) -> u64;
     fn x(&self) -> usize;
     fn same_ori(&self, p: u64) -> bool;
-    fn pos(&self) -> u64;
     fn byte_pos(&self) -> usize;
     fn blacklist(&mut self);
-    fn is_no_pos(&self) -> bool;
     fn extend(&mut self);
     fn set_extension(&mut self, x: u64);
     fn clear_extension(&mut self);
@@ -30,26 +30,32 @@ pub trait PriExtPosOri: Clone {
 }
 
 impl PriExtPosOri for u64 {
-    fn no_pos() -> Self {
-        0x_3FFF_FFFF_FFFE
-    }
-    fn clear(&mut self) {
-        *self = PriExtPosOri::no_pos();
-    }
-    fn set_ori(&mut self, p: u64) {
-        *self ^= (*self ^ p) & 1
-    }
-    fn get_ori(&self) -> u64 {
-        self & 1
-    }
     fn set(&mut self, p: u64) {
         *self = p;
     }
     fn get(&self) -> u64 {
         *self
     }
+    fn pos(&self) -> u64 {
+        *self & 0x_3FFF_FFFF_FFFE
+    }
+    fn no_pos() -> Self {
+        0x_3FFF_FFFF_FFFE
+    }
+    fn clear(&mut self) {
+        *self = PriExtPosOri::no_pos();
+    }
     fn is_set(&self) -> bool {
-        (*self & 0x_3FFF_FFFF_FFFE) != PriExtPosOri::no_pos()
+        self.pos() != PriExtPosOri::no_pos()
+    }
+    fn is_no_pos(&self) -> bool {
+        self.pos() == PriExtPosOri::no_pos()
+    }
+    fn set_ori(&mut self, p: u64) {
+        *self ^= (*self ^ p) & 1
+    }
+    fn get_ori(&self) -> u64 {
+        self & 1
     }
     fn incr(&mut self) {
         *self += 0x2;
@@ -66,21 +72,15 @@ impl PriExtPosOri for u64 {
     fn same_ori(&self, p: u64) -> bool {
         self.get_ori() == (p & 1)
     }
-    fn pos(&self) -> u64 {
-        *self & 0x_3FFF_FFFF_FFFE
-    }
     fn byte_pos(&self) -> usize {
         // the strand bit and 2b encoded, so 4 twobits per byte.
-        (*self & 0x_3FFF_FFFF_FFF8) as usize >> 3
+        self.pos() as usize >> 3
     }
     fn blacklist(&mut self) {
         if self.is_set() {
             *self &= !0x_3FFF_FFFF_FFFF;
             self.extend();
         }
-    }
-    fn is_no_pos(&self) -> bool {
-        (*self & 0x_3FFF_FFFF_FFFE) == PriExtPosOri::no_pos()
     }
     fn extend(&mut self) {
         *self += 1 << 48;

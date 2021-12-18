@@ -11,15 +11,18 @@ zijn. Van de twee strands zou ook een moeten volstaan. Hiervoor
 dient de xmer. De x staat voor extensie en de xor hash operaties.
 
 Een xmer is de kmer van een template of reverse complement strand
-of een bitwise complement van een van de twee. Strand keuze wordt
-bepaald door te kijken naar de eerste bit die verschilt tussen de
-twee.
-=> neem de kleinste van de twee, werkt evengoed.
+of een bitwise complement van een van de twee. Orientatie wordt
+bepaald door welke van de twee de kleinste waarde heeft. De index
+wordt deze sequentie, tenzij de hoogste bit van de kmer is
+gezet, anders het bitwise complement. Een index met 1 bit minder
+betekent 2x minder ruimte nodig voor de opslag.
 
-De kmer met de bit gezet wordt de xmer, tenzij de hoogste
-bit van deze kmer gezet is, dan het bitwise complement ervan. Een
-index 1 bit kleiner betekent dat 2x minder ruimte nodig is bij de
-opslag.
+Na bitwise complementatie is de index niet meer het kleinste van
+de twee, zo moet he zijn, want deze index komt niet overeen met
+een andere index - na het kiezen van de andere strand en dan de
+bitwise complement nemen namelijk wel. Een uitzondering zijn de
+palindrome kmers, daarbij wordt gekeken naar de staat van de
+eerste bit.
 
 Onafhankelijk van de strand wordt zo dezelfde xmer gekozen. Ook
 bij palidrome kmers die voor beide strands resulteren in dezelfde

@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::kmer::{test_template, Kmer};
+use crate::kmer::Kmer;
 pub use crate::kmerconst::KmerConst;
 use crate::kmerloc::{KmerLoc, PriExtPosOri};
 use crate::kmerstore::KmerStore;
@@ -182,7 +182,7 @@ impl<'a> Scope<'a> {
             dbg_print!("dna:{:#x}, dna2:{:#x}", self.d[d_i2].dna, kmer.dna);
             kmer.hash(self.d[d_i2]);
         }
-        (kmer.get_idx(), test_template(kmer.dna, kmer.rc))
+        (kmer.get_idx(), kmer.is_template())
     }
 
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
@@ -257,7 +257,7 @@ mod tests {
         let mut kmer = occ.kmer();
         dbg_assert_eq!(kmer.dna, 0x55);
         dbg_assert_eq!(kmer.rc, 0xff);
-        dbg_assert_eq!(occ.p, 0xc);
+        dbg_assert_eq!(occ.p, 0xd);
 
         occ.complete(2, 0);
         kmer = occ.kmer();

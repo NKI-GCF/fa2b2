@@ -1,6 +1,7 @@
 use crate::rdbg::STAT_DB;
 use num::{FromPrimitive, ToPrimitive, Unsigned};
 use num_traits::PrimInt;
+use std::cmp;
 use std::mem::size_of;
 use std::ops::BitXorAssign;
 
@@ -11,18 +12,6 @@ pub struct Kmer<T> {
     pub rc: T,
     topb2: T,
 } //^-^\\
-
-/// return true if dna sequence has the bit set for the first bit that differs between complements
-pub fn test_template(dna: u64, rc: u64) -> bool {
-    // The first bit that differs between complements, isolated with the '& wrapping_neg()',
-    // the devbit, dictates the orientation. If none is set, a palindrome, use bit 1.
-    let deviant = dna ^ rc;
-    (dna & if deviant != 0 {
-        deviant.wrapping_neg() & deviant
-    } else {
-        1
-    }) != 0
-}
 
 pub trait RevCmp<T: PrimInt + FromPrimitive> {
     fn revcmp(self, kmerlen: usize) -> T;
@@ -53,7 +42,7 @@ implement_revcmp!(u8, u16, u32, u64, u128, usize);
 
 impl<T> Kmer<T>
 where
-    T: Unsigned + FromPrimitive + ToPrimitive + BitXorAssign,
+    T: Unsigned + FromPrimitive + ToPrimitive + BitXorAssign + cmp::Ord,
 {
     /// get a kmer for this length
     pub fn new(kmerlen: u32) -> Self {
@@ -65,25 +54,7 @@ where
             topb2: T::from_u32(topb2).unwrap(),
         }
     }
-    /// return a new kmer for given index, length and orientation.
-    pub fn from_idx(index: usize, kmerlen: u32, ori: bool) -> Self {
-        let bitlen = kmerlen * 2;
-        let topb2 = bitlen - 2;
-        let mut dna = usize::to_u64(&index).unwrap();
-        let mut rc = dna.revcmp(kmerlen as usize);
-        if !test_template(dna, rc) {
-            let overbit = 1 << (topb2 + 1);
-            let overmask = overbit | (overbit - 1);
-            dna ^= overmask;
-            rc ^= overmask;
-        }
-        let (dna, rc) = if ori { (dna, rc) } else { (rc, dna) };
-        Kmer {
-            dna: T::from_u64(dna).unwrap(),
-            rc: T::from_u64(rc).unwrap(),
-            topb2: T::from_u32(topb2).unwrap(),
-        }
-    }
+
     pub fn hash(&mut self, other: Kmer<T>) {
         self.dna ^= other.rc;
         self.rc ^= other.dna;
@@ -99,9 +70,9 @@ where
         self.dna = T::from_u64(dna | (u64::from(b2) << topb2)).unwrap();
         self.rc = T::from_u64(rc ^ 2 ^ u64::from(b2)).unwrap();
     }
-    /// true if the kmer is from the template.
+    /// true if the kmer is from the template. Palindromes are special.
     pub fn is_template(&self) -> bool {
-        test_template(T::to_u64(&self.dna).unwrap(), T::to_u64(&self.rc).unwrap())
+        self.dna < self.rc || (self.dna == self.rc && (T::to_u64(&self.dna).unwrap() & 1) != 0)
     }
     /// return whether orientation needs to be changed
     pub fn update(&mut self, b2: u8) -> bool {
@@ -111,12 +82,7 @@ where
     }
     /// return an index specific per sequence but the same for the other orientation
     pub fn get_idx(&self) -> usize {
-        let seq = T::to_usize(if self.is_template() {
-            &self.dna
-        } else {
-            &self.rc
-        })
-        .unwrap();
+        let seq = T::to_usize(cmp::min(&self.dna, &self.rc)).unwrap();
 
         // flipped if the top bit is set, to reduce size.
         let overbit = 1 << (T::to_u64(&self.topb2).unwrap() + 1);
@@ -132,7 +98,26 @@ where
 mod tests {
     use super::*;
     use rand::{thread_rng, Rng};
-    use std::{cmp, iter::once};
+
+    /// return a new kmer for given index, length and orientation.
+    fn kmer_from_idx<T: FromPrimitive>(index: usize, kmerlen: u32, ori: bool) -> Kmer<T> {
+        let bitlen = kmerlen * 2;
+        let topb2 = bitlen - 2;
+        let mut dna = usize::to_u64(&index).unwrap();
+        let mut rc = dna.revcmp(kmerlen as usize);
+        if dna > rc || (dna == rc && (dna & 1) == 0) {
+            let overbit = 1 << (topb2 + 1);
+            let overmask = overbit | (overbit - 1);
+            dna ^= overmask;
+            rc ^= overmask;
+        }
+        let (dna, rc) = if ori { (dna, rc) } else { (rc, dna) };
+        Kmer {
+            dna: T::from_u64(dna).unwrap(),
+            rc: T::from_u64(rc).unwrap(),
+            topb2: T::from_u32(topb2).unwrap(),
+        }
+    }
     #[test]
     fn test_u64() {
         let mut kmer: Kmer<u64> = Kmer::new(32);
@@ -141,7 +126,6 @@ mod tests {
         }
         dbg_assert_eq!(kmer.dna, 0xE4E4E4E4E4E4E4E4); // GTCAGTCAGTCAGTCA => 3210321032103210 (in 2bits)
         dbg_assert_eq!(kmer.rc, 0xB1B1B1B1B1B1B1B1); // xor 0xaaaaaaaa and reverse per 2bit
-        dbg_assert_eq!(kmer.is_template(), false); // first devbit is 1, ori is set in rc, so false
         dbg_assert_eq!(kmer.get_idx(), 0x4E4E4E4E4E4E4E4E); // highest bit is set, so flipped.
     }
     #[test]
@@ -152,7 +136,6 @@ mod tests {
         }
         dbg_assert_eq!(kmer.dna, 0xE4E4E4E4);
         dbg_assert_eq!(kmer.rc, 0xB1B1B1B1);
-        dbg_assert_eq!(kmer.is_template(), false);
         dbg_assert_eq!(kmer.get_idx(), 0x4E4E4E4E);
     }
     #[test]
@@ -163,7 +146,6 @@ mod tests {
         }
         dbg_assert_eq!(kmer.dna, 0xE4);
         dbg_assert_eq!(kmer.rc, 0xB1);
-        dbg_assert_eq!(kmer.is_template(), false);
         dbg_assert_eq!(kmer.get_idx(), 0x4E);
     }
     #[test]
@@ -174,14 +156,13 @@ mod tests {
         }
         dbg_assert_eq!(kmer.dna, 0xE4E4E4E4E4E4E4E4);
         dbg_assert_eq!(kmer.rc, 0xB1B1B1B1B1B1B1B1);
-        dbg_assert_eq!(kmer.is_template(), false);
         dbg_assert_eq!(kmer.get_idx(), 0x4E4E4E4E4E4E4E4E);
     }
     #[test]
     fn unique() {
         let mut seen = vec![false; 256];
         let mut kmer: Kmer<u8> = Kmer::new(4);
-        for i in (0..255).chain(once(255)) {
+        for i in 0..=255 {
             for j in 0..4 {
                 kmer.add((i >> (j << 1)) & 3);
             }
@@ -219,16 +200,16 @@ mod tests {
                 test_dna = kmer.dna;
                 test_rc = kmer.rc;
                 test_idx = kmer.get_idx();
-                test_ori = kmer.is_template();
+                test_ori = kmer.dna < kmer.rc;
             }
         }
         dbg_assert_ne!(test_idx, 0xffffffffffffffff);
-        let kmer2 = Kmer::from_idx(test_idx, kmerlen, test_ori);
+        let kmer2 = kmer_from_idx(test_idx, kmerlen, test_ori);
 
         dbg_assert_eq!(test_dna, kmer2.dna);
         dbg_assert_eq!(test_rc, kmer2.rc);
 
-        let kmer3 = Kmer::from_idx(test_idx, kmerlen, !test_ori);
+        let kmer3 = kmer_from_idx(test_idx, kmerlen, !test_ori);
 
         dbg_assert_eq!(test_dna, kmer3.rc);
         dbg_assert_eq!(test_rc, kmer3.dna);

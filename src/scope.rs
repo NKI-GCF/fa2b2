@@ -71,7 +71,7 @@ impl<'a> Scope<'a> {
     /// return whether required nr of kmers for struct scope were seen.
     // hierin vinden .i & .p increments and kmer .d[] update plaats. geen kmer ? false.
     fn complete(&mut self, b2: u8, x_start: usize) -> bool {
-        // XXX: function is hot
+        // XXX: function is very hot
         self.increment(b2);
         if self.i >= self.kc.kmerlen {
             for x in x_start..=self.p.x() {
@@ -86,9 +86,9 @@ impl<'a> Scope<'a> {
     }
 
     pub fn complete_and_update_mark(&mut self, b2: u8, x_start: usize) -> Result<bool> {
-        // XXX: function is hot
+        // XXX: function is very hot
         let is_complete = self.complete(b2, x_start);
-        if is_complete && !self.mark_remains() {
+        if is_complete && self.mark_is_leaving() {
             self.set_next_mark()?;
         }
         Ok(is_complete)
@@ -136,10 +136,6 @@ impl<'a> Scope<'a> {
         let p_pos = self.p.pos();
         let dist = (self.kc.no_kmers << 1) as u64;
         p_pos == self.mark.p.pos() + dist
-    }
-
-    pub fn mark_remains(&self) -> bool {
-        !self.mark_is_leaving()
     }
 
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)

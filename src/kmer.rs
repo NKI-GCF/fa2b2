@@ -76,6 +76,7 @@ where
     }
     /// return whether orientation needs to be changed
     pub fn update(&mut self, b2: u8) -> u64 {
+        // XXX function is hot
         // 2 is added for next pos; orientation is set in first bit.
         self.add(b2);
         if self.dna < self.rc {

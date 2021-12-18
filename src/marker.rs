@@ -195,8 +195,8 @@ impl<'a> KmerIter<'a> {
             if let Some(b2) = self.next_past_b2() {
                 dbg_print!("=> twobit {:x} (past) <=", b2);
                 match self.scp[1].complete_and_update_mark(b2, 0) {
-                    Ok(true) => {}
-                    Ok(false) => continue,
+                    Ok(true) => self.extend_until_writable_optimum()?,
+                    Ok(false) => {}
                     Err(e) => {
                         // fixme: use thiserror?
                         if e.to_string() == "end of contig." {
@@ -204,71 +204,67 @@ impl<'a> KmerIter<'a> {
                         }
                         dbg_print!("{} (p:{:x})", e, self.scp[1].mark.p);
                         self.scp[1].p.clear();
+                    }
+                }
+                continue;
+                // false: cannot complete scope (contig end?) or find next mark after leaving mark.
+            }
+            while let Some(b2) = seq.next().map(|c| (c >> 1) & 0x7) {
+                dbg_print!("=> twobit {:x} (head) <=", b2);
+                let p = self.scp[0].p;
+                if b2 < 4 {
+                    // new sequence is also stored, to enable lookup later.
+                    if let Some(qb) = self.ks.b2.get_mut(p.byte_pos()) {
+                        *qb |= b2 << (p & 6);
+                    }
+                    self.ks.p_max = p.pos() + 4;
+                    if self.n_stretch > 0 {
+                        self.finalize_n_stretch();
+                        // If a repetition ends in an N-strectch, thereafter offset to period
+                        // may differ or the repetition could be different or entirely gone.
+                    } else if self
+                        .period
+                        .and_then(|d| self.ks.b2_for_p(self.scp[0].p - d).ok())
+                        .filter(|&old_b2| old_b2 == b2)
+                        .is_some()
+                    {
+                        //everything that needs to be done.
+                        self.scp[0].increment(b2);
                         continue;
                     }
-                }
-                // false: cannot complete scope (contig end?) or find next mark after leaving mark.
-            } else {
-                let mut end_of_contig = true;
-                while let Some(b2) = seq.next().map(|c| (c >> 1) & 0x7) {
-                    dbg_print!("=> twobit {:x} (head) <=", b2);
-                    let p = self.scp[0].p;
-                    if b2 < 4 {
-                        // new sequence is also stored, to enable lookup later.
-                        if let Some(qb) = self.ks.b2.get_mut(p.byte_pos()) {
-                            *qb |= b2 << (p & 6);
-                        }
-                        self.ks.p_max = p.pos() + 4;
-                        if self.n_stretch > 0 {
-                            self.finalize_n_stretch();
-                            // If a repetition ends in an N-strectch, thereafter offset to period
-                            // may differ or the repetition could be different or entirely gone.
-                        } else if self
-                            .period
-                            .and_then(|d| self.ks.b2_for_p(self.scp[0].p - d).ok())
-                            .filter(|&old_b2| old_b2 == b2)
-                            .is_some()
-                        {
-                            //everything that needs to be done.
-                            self.scp[0].increment(b2);
+                    self.period = None;
+
+                    // scp funcs also used for scope rebuild, therefore ext is set here.
+                    self.scp[0].p.set_extension(0);
+                    match self.scp[0].complete_and_update_mark(b2, 0) {
+                        Ok(true) => {
+                            self.extend_until_writable_optimum()?;
                             continue;
                         }
-                        self.period = None;
-
-                        // scp funcs also used for scope rebuild, therefore ext is set here.
-                        self.scp[0].p.set_extension(0);
-                        match self.scp[0].complete_and_update_mark(b2, 0) {
-                            Ok(true) => {
-                                end_of_contig = false;
-                                break;
+                        Ok(false) => continue 'outer,
+                        Err(e) => {
+                            if e.to_string() != "end of contig." {
+                                // FIXME: assert?
+                                dbg_print!("unexpected end of contig");
+                                break 'outer;
                             }
-                            Ok(false) => continue 'outer,
-                            Err(e) => {
-                                // fixme: use thiserror?
-                                if e.to_string() != "end of contig." {
-                                    break 'outer;
-                                }
-                                dbg_print!("{} (p:{:x})", e, self.scp[0].mark.p);
-                                continue 'outer;
-                            }
+                            dbg_print!("{} (p:{:x})", e, self.scp[0].mark.p);
+                            continue 'outer;
                         }
                     }
-                    if self.scp[0].i != 0 {
-                        dbg_print!("started N-stretch at {}.", p);
-                        self.goffs += self.scp[0].i as u64;
-                        self.ks.push_contig(p, self.goffs);
+                }
+                if self.scp[0].i != 0 {
+                    dbg_print!("started N-stretch at {}.", p);
+                    self.goffs += self.scp[0].i as u64;
+                    self.ks.push_contig(p, self.goffs);
 
-                        // clear all except orientation and position to rebuild at the start of a new contig.
-                        self.scp[0].i = 0;
-                        self.n_stretch = 0;
-                    }
-                    self.n_stretch += 1;
+                    // clear all except orientation and position to rebuild at the start of a new contig.
+                    self.scp[0].i = 0;
+                    self.n_stretch = 0;
                 }
-                if end_of_contig {
-                    break;
-                }
+                self.n_stretch += 1;
             }
-            self.extend_until_writable_optimum()?;
+            break;
         }
         if self.n_stretch > 0 {
             dbgx!(self.finalize_n_stretch());

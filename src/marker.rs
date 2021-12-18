@@ -49,59 +49,6 @@ impl<'a> KmerIter<'a> {
         self.n_stretch = 0;
     }
 
-    // false means not yet complete
-    fn build_scope(&mut self, seq: &mut Iter<u8>) -> Result<bool> {
-        if self.scp[1].p.is_set() {
-            return self.ks.b2_for_p(self.scp[1].p).and_then(|b2| {
-                dbg_print!("=> twobit {:x} (past) <=", b2);
-                self.scp[1].complete_and_update_mark(b2, 0)
-            });
-            // false: cannot complete scope (contig end?) or find next mark after leaving mark.
-        }
-        while let Some(b2) = seq.next().map(|c| (c >> 1) & 0x7) {
-            dbg_print!("=> twobit {:x} (head) <=", b2);
-            let p = self.scp[0].p;
-            if b2 < 4 {
-                // new sequence is also stored, to enable lookup later.
-                if let Some(qb) = self.ks.b2.get_mut(p.byte_pos()) {
-                    *qb |= b2 << (p & 6);
-                }
-                self.ks.p_max = p.pos() + 4;
-                if self.n_stretch > 0 {
-                    self.finalize_n_stretch();
-                    // If a repetition ends in an N-strectch, thereafter offset to period
-                    // may differ or the repetition could be different or entirely gone.
-                    self.period = None;
-                } else if self
-                    .period
-                    .and_then(|d| self.ks.b2_for_p(self.scp[0].p - d).ok())
-                    .filter(|&old_b2| old_b2 == b2)
-                    .is_some()
-                {
-                    //everything that needs to be done.
-                    self.scp[0].increment(b2);
-                    continue;
-                } else {
-                    self.period = None;
-                }
-                // scp funcs also used for scope rebuild, therefore ext is set here.
-                self.scp[0].p.set_extension(0);
-                return self.scp[0].complete_and_update_mark(b2, 0);
-            }
-            if self.scp[0].i != 0 {
-                dbg_print!("started N-stretch at {}.", p);
-                self.goffs += self.scp[0].i as u64;
-                self.ks.push_contig(p, self.goffs);
-
-                // clear all except orientation and position to rebuild at the start of a new contig.
-                self.scp[0].i = 0;
-                self.n_stretch = 0;
-            }
-            self.n_stretch += 1;
-        }
-        Err(anyhow!("end of contig."))
-    }
-
     /// Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
     fn recurrance_is_skippable(&mut self, p: u64, min_idx: usize) -> bool {
         let scp = self.get_scp();
@@ -191,7 +138,59 @@ impl<'a> KmerIter<'a> {
         self.ks.push_contig(self.scp[0].p.pos(), self.goffs);
 
         loop {
-            match self.build_scope(seq) {
+            let mut test;
+            if self.scp[1].p.is_set() {
+                test = self.ks.b2_for_p(self.scp[1].p).and_then(|b2| {
+                    dbg_print!("=> twobit {:x} (past) <=", b2);
+                    self.scp[1].complete_and_update_mark(b2, 0)
+                });
+                // false: cannot complete scope (contig end?) or find next mark after leaving mark.
+            } else {
+                test = Err(anyhow!("end of contig."));
+                while let Some(b2) = seq.next().map(|c| (c >> 1) & 0x7) {
+                    dbg_print!("=> twobit {:x} (head) <=", b2);
+                    let p = self.scp[0].p;
+                    if b2 < 4 {
+                        // new sequence is also stored, to enable lookup later.
+                        if let Some(qb) = self.ks.b2.get_mut(p.byte_pos()) {
+                            *qb |= b2 << (p & 6);
+                        }
+                        self.ks.p_max = p.pos() + 4;
+                        if self.n_stretch > 0 {
+                            self.finalize_n_stretch();
+                            // If a repetition ends in an N-strectch, thereafter offset to period
+                            // may differ or the repetition could be different or entirely gone.
+                            self.period = None;
+                        } else if self
+                            .period
+                            .and_then(|d| self.ks.b2_for_p(self.scp[0].p - d).ok())
+                            .filter(|&old_b2| old_b2 == b2)
+                            .is_some()
+                        {
+                            //everything that needs to be done.
+                            self.scp[0].increment(b2);
+                            continue;
+                        } else {
+                            self.period = None;
+                        }
+                        // scp funcs also used for scope rebuild, therefore ext is set here.
+                        self.scp[0].p.set_extension(0);
+                        test = self.scp[0].complete_and_update_mark(b2, 0);
+                        break;
+                    }
+                    if self.scp[0].i != 0 {
+                        dbg_print!("started N-stretch at {}.", p);
+                        self.goffs += self.scp[0].i as u64;
+                        self.ks.push_contig(p, self.goffs);
+
+                        // clear all except orientation and position to rebuild at the start of a new contig.
+                        self.scp[0].i = 0;
+                        self.n_stretch = 0;
+                    }
+                    self.n_stretch += 1;
+                }
+            }
+            match test {
                 Ok(true) => {}
                 Ok(false) => continue,
                 Err(e) => {

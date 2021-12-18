@@ -15,7 +15,7 @@ use crate::scope::Scope;
 use anyhow::{anyhow, ensure, Result};
 
 pub struct KmerIter<'a> {
-    //steekproefi: u32,
+    //steekproefi: u64,
     n_stretch: u64,
     goffs: u64,
     period: Option<u64>,
@@ -189,18 +189,21 @@ impl<'a> KmerIter<'a> {
 
     fn is_repetitive(&self, b2: u8) -> bool {
         let i = if self.scp[1].p.is_set() { 1 } else { 0 };
-        match self
-            .period
-            .and_then(|d| self.ks.b2_for_p(self.scp[i].p - d).ok())
-        {
-            Some(old_b2) if old_b2 == b2 => true,
+        match self.period.and_then(|d| {
+            dbg_assert!(d != 0);
+            self.ks.b2_for_p(self.scp[i].p - d).ok()
+        }) {
+            Some(old_b2) => old_b2 == b2,
             _ => false,
         }
     }
 
-    pub fn markcontig<T: MidPos>(&mut self, seq: &mut Iter<u8>) -> Result<u64> {
+    pub fn markcontig<T: MidPos>(&mut self, chrname: &str, seq: &mut Iter<u8>) -> Result<()> {
         self.goffs = 0;
         self.ks.push_contig(self.scp[0].p.pos(), self.goffs);
+        let mut repetitive = 0_u64;
+        let mut n_count = 0_u64;
+        let mut tot = 0_u64;
 
         'outer: loop {
             if let Some(b2) = self.next_past_b2() {
@@ -226,6 +229,7 @@ impl<'a> KmerIter<'a> {
                 dbg_print!("{}: {:x}", c as char, b2);
                 b2
             }) {
+                tot += 1;
                 let p = self.scp[0].p;
                 if b2 < 4 {
                     // new sequence is also stored, to enable lookup later.
@@ -238,6 +242,7 @@ impl<'a> KmerIter<'a> {
                         // If a repetition ends in an N-stretch, thereafter offset to period
                         // may differ or the repetition could be different or entirely gone.
                     } else if self.is_repetitive(b2) {
+                        repetitive += 1;
                         // everything but optimum re-evaluation.
                         self.scp[0].increment(b2);
                         continue;
@@ -273,6 +278,7 @@ impl<'a> KmerIter<'a> {
                         self.n_stretch = 0;
                     }
                     self.n_stretch += 1;
+                    n_count += 1;
                 }
             }
             break;
@@ -280,7 +286,18 @@ impl<'a> KmerIter<'a> {
         if self.n_stretch > 0 {
             dbgx!(self.finalize_n_stretch());
         }
-        Ok(self.scp[0].p.pos() as u64)
+        println!(
+            "chromosome {}\ttot:{}(complex dna:{:.2}%)\trepetitive:{}({:.2}%)\tN-count:{}({:.2}%)\t",
+            chrname,
+            tot,
+            100.0 * (tot - repetitive - n_count) as f64 / tot as f64,
+            repetitive,
+            100.0 * repetitive as f64 / tot as f64,
+            n_count,
+            100.0 * n_count as f64 / tot as f64,
+        );
+        self.period = None;
+        Ok(())
     }
 }
 

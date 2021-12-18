@@ -57,7 +57,7 @@ impl<'a> Scope<'a> {
             }
             self.d[kmx] = self.d[old_idx];
         }
-        // first bit is strand bit, set according to kmer deviant bit.
+        // first bit is strand bit, set according to kmer orientation bit.
         self.p += if self.d[kmx].update(b2) { 3 } else { 2 } - (1 & self.p);
         self.i += 1;
     }

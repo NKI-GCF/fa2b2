@@ -75,10 +75,16 @@ where
         self.dna < self.rc || (self.dna == self.rc && (T::to_u64(&self.dna).unwrap() & 1) != 0)
     }
     /// return whether orientation needs to be changed
-    pub fn update(&mut self, b2: u8) -> bool {
+    pub fn update(&mut self, b2: u8) -> u64 {
         // 2 is added for next pos; orientation is set in first bit.
         self.add(b2);
-        self.is_template()
+        if self.dna < self.rc {
+            1
+        } else if self.dna > self.rc {
+            0
+        } else {
+            T::to_u64(&self.dna).unwrap() & 1
+        }
     }
     /// return an index specific per sequence but the same for the other orientation
     pub fn get_idx(&self) -> usize {

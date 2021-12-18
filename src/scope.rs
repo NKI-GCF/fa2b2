@@ -14,6 +14,7 @@ pub struct Scope<'a> {
     d: VecDeque<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
     pub mark: KmerLoc<u64>,
     pub i: usize,
+    pub mod_i: usize,
     pub plim: (u64, u64),
 }
 
@@ -25,6 +26,7 @@ impl<'a> Scope<'a> {
             d: VecDeque::from(vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers]),
             mark: KmerLoc::new(usize::max_value(), p.extension()),
             i: 0,
+            mod_i: 0,
             plim,
         }
     }
@@ -33,6 +35,7 @@ impl<'a> Scope<'a> {
         self.p = ext | plim.0;
         self.plim = plim;
         self.i = 0;
+        self.mod_i = 0;
         self.mark.idx = usize::max_value();
         self.mark.p = ext;
     }
@@ -49,16 +52,18 @@ impl<'a> Scope<'a> {
     }
 
     pub fn increment(&mut self, b2: u8) {
-        let mut kmx = 0;
-        if let Some(i) = self.i.checked_sub(self.kc.kmerlen) {
-            let old_idx = i % self.kc.no_kmers;
-            if old_idx + 1 != self.kc.no_kmers {
-                kmx = old_idx + 1;
+        // XXX: function is hot
+        if self.i >= self.kc.kmerlen {
+            let old_d = self.d[self.mod_i];
+            self.mod_i += 1;
+            if self.mod_i == self.kc.no_kmers {
+                self.mod_i = 0;
             }
-            self.d[kmx] = self.d[old_idx];
+            self.d[self.mod_i] = old_d;
         }
         // first bit is strand bit, set according to kmer orientation bit.
-        self.p += if self.d[kmx].update(b2) { 3 } else { 2 } - (1 & self.p);
+        self.p += 2;
+        self.p ^= 1 & (self.p ^ self.d[self.mod_i].update(b2));
         self.i += 1;
     }
 
@@ -66,11 +71,12 @@ impl<'a> Scope<'a> {
     /// return whether required nr of kmers for struct scope were seen.
     // hierin vinden .i & .p increments and kmer .d[] update plaats. geen kmer ? false.
     fn complete(&mut self, b2: u8, x_start: usize) -> bool {
+        // XXX: function is hot
         self.increment(b2);
         if self.i >= self.kc.kmerlen {
             for x in x_start..=self.p.x() {
                 if self.is_xmer_complete(x) && self.set_if_optimum(0, x) {
-                    break;
+                    return self.all_kmers();
                 }
             }
             self.mark.is_set() && self.all_kmers()
@@ -80,6 +86,7 @@ impl<'a> Scope<'a> {
     }
 
     pub fn complete_and_update_mark(&mut self, b2: u8, x_start: usize) -> Result<bool> {
+        // XXX: function is hot
         let is_complete = self.complete(b2, x_start);
         if is_complete && !self.mark_remains() {
             self.set_next_mark()?;

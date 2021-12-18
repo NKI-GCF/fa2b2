@@ -278,6 +278,7 @@ impl<'a> KmerIter<'a> {
 
                         // clear all except orientation and position to rebuild at the start of a new contig.
                         self.scp[0].i = 0;
+                        self.scp[0].mod_i = 0;
                         self.n_stretch = 0;
                     }
                     self.n_stretch += 1;

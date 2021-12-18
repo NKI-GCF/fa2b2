@@ -222,7 +222,8 @@ impl<'a> KmerIter<'a> {
             }
             while let Some(b2) = seq.next().map(|&c| {
                 let b2 = (c >> 1) & 0x7;
-                dbg_print!("[{}, {}]: {:x}", self.scp[0].p.pos() >> 1, c as char, b2);
+                // dbg_print!("[{}, {}]: {:x}", self.scp[0].p.pos() >> 1, c as char, b2);
+                dbg_print!("{}: {:x}", c as char, b2);
                 b2
             }) {
                 let p = self.scp[0].p;

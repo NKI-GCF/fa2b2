@@ -133,6 +133,60 @@ impl<'a> KmerIter<'a> {
         &mut self.scp[if self.scp[1].p.is_set() { 1 } else { 0 }]
     }
 
+    fn extend_until_writable_optimum(&mut self) -> Result<()> {
+        loop {
+            dbg_print!(
+                "---------[ past:{:?} ]-------------",
+                self.scp[1].p.is_set()
+            );
+            let (min_idx, min_p) = (self.get_scp().mark.idx, self.get_scp().mark.p);
+            dbg_assert!(min_idx < self.ks.kmp.len(), "{:x}, {:x}", min_idx, min_p);
+            let stored_p = self.ks.kmp[min_idx];
+
+            if dbgx!(stored_p.is_replaceable_by(min_p)) {
+                //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
+                // dbg_print!("{}", self.get_scp());
+                if dbgx!(stored_p.is_set_and_not(min_p)) {
+                    if !self.rebuild_scope(stored_p)? {
+                        self.scp[1].p.clear();
+                        break;
+                    }
+                    self.scp[1].extend_kmer_stack(self.ks)?;
+                    //dbgx!(self.ks.kmp[min_idx].set(min_p));
+                    dbgx!(self.set_idx_pos(min_idx, min_p));
+                    // go back and extend
+                } else {
+                    // If already set it was min_p. Then leave dupbit state.
+                    if self.ks.kmp[min_idx].is_no_pos() {
+                        self.set_idx_pos(min_idx, min_p);
+                    }
+                    self.scp[1].p.clear();
+                    break;
+                }
+            } else if dbgx!(stored_p.extension() == min_p.extension()) {
+                // If a kmer occurs multiple times within an extending readlength, only
+                // the first gets a position. During mapping this rule also should apply.
+                if self.recurrance_is_skippable(stored_p, min_idx) {
+                    break;
+                }
+            } else {
+                dbg_print!("\t\t<!>");
+            }
+            if dbgx!(!self.get_scp().extend()) {
+                break;
+            }
+            if self.scp[1].p.is_set() {
+                // includes check for readlength
+                self.scp[1].set_next_mark()?;
+            }
+        }
+        if self.scp[1].p.is_set() && dbgx!(self.scp[1].p.pos() >= self.scp[1].plim.1) {
+            // extension requires bases, but we're at contig limit, just leave it.
+            self.scp[1].p.clear();
+        }
+        Ok(())
+    }
+
     pub fn markcontig<T: MidPos>(&mut self, seq: &mut Iter<u8>) -> Result<u64> {
         self.goffs = 0;
         self.ks.push_contig(self.scp[0].p.pos(), self.goffs);
@@ -214,56 +268,7 @@ impl<'a> KmerIter<'a> {
                     break;
                 }
             }
-            loop {
-                dbg_print!(
-                    "---------[ past:{:?} ]-------------",
-                    self.scp[1].p.is_set()
-                );
-                let (min_idx, min_p) = (self.get_scp().mark.idx, self.get_scp().mark.p);
-                dbg_assert!(min_idx < self.ks.kmp.len(), "{:x}, {:x}", min_idx, min_p);
-                let stored_p = self.ks.kmp[min_idx];
-
-                if dbgx!(stored_p.is_replaceable_by(min_p)) {
-                    //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
-                    // dbg_print!("{}", self.get_scp());
-                    if dbgx!(stored_p.is_set_and_not(min_p)) {
-                        if !self.rebuild_scope(stored_p)? {
-                            self.scp[1].p.clear();
-                            break;
-                        }
-                        self.scp[1].extend_kmer_stack(self.ks)?;
-                        //dbgx!(self.ks.kmp[min_idx].set(min_p));
-                        dbgx!(self.set_idx_pos(min_idx, min_p));
-                        // go back and extend
-                    } else {
-                        // If already set it was min_p. Then leave dupbit state.
-                        if self.ks.kmp[min_idx].is_no_pos() {
-                            self.set_idx_pos(min_idx, min_p);
-                        }
-                        self.scp[1].p.clear();
-                        break;
-                    }
-                } else if dbgx!(stored_p.extension() == min_p.extension()) {
-                    // If a kmer occurs multiple times within an extending readlength, only
-                    // the first gets a position. During mapping this rule also should apply.
-                    if self.recurrance_is_skippable(stored_p, min_idx) {
-                        break;
-                    }
-                } else {
-                    dbg_print!("\t\t<!>");
-                }
-                if dbgx!(!self.get_scp().extend()) {
-                    break;
-                }
-                if self.scp[1].p.is_set() {
-                    // includes check for readlength
-                    self.scp[1].set_next_mark()?;
-                }
-            }
-            if self.scp[1].p.is_set() && dbgx!(self.scp[1].p.pos() >= self.scp[1].plim.1) {
-                // extension requires bases, but we're at contig limit, just leave it.
-                self.scp[1].p.clear();
-            }
+            self.extend_until_writable_optimum()?;
         }
         if self.n_stretch > 0 {
             dbgx!(self.finalize_n_stretch());

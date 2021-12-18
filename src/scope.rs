@@ -80,14 +80,11 @@ impl<'a> Scope<'a> {
     }
 
     pub fn complete_and_update_mark(&mut self, b2: u8, x_start: usize) -> Result<bool> {
-        if self.complete(b2, x_start) {
-            if !self.mark_remains() {
-                self.set_next_mark()?;
-            }
-            Ok(true)
-        } else {
-            Ok(false)
+        let is_complete = self.complete(b2, x_start);
+        if is_complete && !self.mark_remains() {
+            self.set_next_mark()?;
         }
+        Ok(is_complete)
     }
 
     /// geef de current kmer.

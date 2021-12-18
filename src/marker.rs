@@ -137,16 +137,27 @@ impl<'a> KmerIter<'a> {
         self.goffs = 0;
         self.ks.push_contig(self.scp[0].p.pos(), self.goffs);
 
-        loop {
-            let mut test;
+        'outer: loop {
             if self.scp[1].p.is_set() {
-                test = self.ks.b2_for_p(self.scp[1].p).and_then(|b2| {
+                match self.ks.b2_for_p(self.scp[1].p).and_then(|b2| {
                     dbg_print!("=> twobit {:x} (past) <=", b2);
                     self.scp[1].complete_and_update_mark(b2, 0)
-                });
+                }) {
+                    Ok(true) => {}
+                    Ok(false) => continue,
+                    Err(e) => {
+                        // fixme: use thiserror?
+                        if e.to_string() == "end of contig." {
+                            break;
+                        }
+                        dbg_print!("{} (p:{:x})", e, self.scp[1].mark.p);
+                        self.scp[1].p.clear();
+                        continue;
+                    }
+                }
                 // false: cannot complete scope (contig end?) or find next mark after leaving mark.
             } else {
-                test = Err(anyhow!("end of contig."));
+                let mut end_of_contig = true;
                 while let Some(b2) = seq.next().map(|c| (c >> 1) & 0x7) {
                     dbg_print!("=> twobit {:x} (head) <=", b2);
                     let p = self.scp[0].p;
@@ -175,8 +186,21 @@ impl<'a> KmerIter<'a> {
                         }
                         // scp funcs also used for scope rebuild, therefore ext is set here.
                         self.scp[0].p.set_extension(0);
-                        test = self.scp[0].complete_and_update_mark(b2, 0);
-                        break;
+                        match self.scp[0].complete_and_update_mark(b2, 0) {
+                            Ok(true) => {
+                                end_of_contig = false;
+                                break;
+                            }
+                            Ok(false) => continue 'outer,
+                            Err(e) => {
+                                // fixme: use thiserror?
+                                if e.to_string() != "end of contig." {
+                                    break 'outer;
+                                }
+                                dbg_print!("{} (p:{:x})", e, self.scp[0].mark.p);
+                                continue 'outer;
+                            }
+                        }
                     }
                     if self.scp[0].i != 0 {
                         dbg_print!("started N-stretch at {}.", p);
@@ -189,20 +213,8 @@ impl<'a> KmerIter<'a> {
                     }
                     self.n_stretch += 1;
                 }
-            }
-            match test {
-                Ok(true) => {}
-                Ok(false) => continue,
-                Err(e) => {
-                    // fixme: use thiserror?
-                    if e.to_string() == "end of contig." {
-                        break;
-                    }
-                    dbg_print!("{} (p:{:x})", e, self.get_scp().mark.p);
-                    if self.scp[1].p.is_set() {
-                        self.scp[1].p.clear();
-                    }
-                    continue;
+                if end_of_contig {
+                    break;
                 }
             }
             loop {

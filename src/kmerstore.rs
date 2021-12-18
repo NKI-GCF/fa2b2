@@ -20,7 +20,7 @@ pub struct KmerStore<T> {
     pub b2: Vec<u8>,
     pub kmp: Vec<T>, // position + strand per k-mer.
     pub contig: Vec<Contig>,
-    repeat: HashMap<usize, u32>,
+    repeat: HashMap<usize, (u32, u32)>,
 }
 
 impl<T: PriExtPosOri> KmerStore<T> {
@@ -87,11 +87,11 @@ impl<T: PriExtPosOri> KmerStore<T> {
         self.b2
             .get(p.byte_pos())
             .map(|x| (x >> (p & 6)) & 3)
-            .ok_or(anyhow!("stored pos past contig? {:#}", p))
+            .ok_or_else(|| anyhow!("stored pos past contig? {:#}", p))
     }
     pub fn extend_repetitive(&mut self, min_idx: usize, dist: u32) {
-        let repeat = self.repeat.entry(min_idx).or_insert(0);
-        *repeat = dist;
+        let repeat = self.repeat.entry(min_idx).or_insert((dist, 0));
+        repeat.1 = dist;
     }
 }
 

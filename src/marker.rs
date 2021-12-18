@@ -27,8 +27,8 @@ pub struct KmerIter<'a> {
 impl<'a> KmerIter<'a> {
     pub fn new(ks: &'a mut KmerStore<u64>, kc: &'a KmerConst) -> Self {
         let scp = [
-            Scope::new((0, u64::max_value()), &kc, 0),
-            Scope::new((0, u64::max_value()), &kc, PriExtPosOri::no_pos()),
+            Scope::new((0, u64::max_value()), kc, 0),
+            Scope::new((0, u64::max_value()), kc, PriExtPosOri::no_pos()),
         ];
         KmerIter {
             //steekproefi: 10_000,
@@ -244,11 +244,9 @@ impl<'a> KmerIter<'a> {
                     self.scp[1].set_next_mark()?;
                 }
             }
-            if self.scp[1].p.is_set() {
-                if dbgx!(self.scp[1].p.pos() >= self.scp[1].plim.1) {
-                    // extension requires bases, but we're at contig limit, just leave it.
-                    self.scp[1].p.clear();
-                }
+            if self.scp[1].p.is_set() && dbgx!(self.scp[1].p.pos() >= self.scp[1].plim.1) {
+                // extension requires bases, but we're at contig limit, just leave it.
+                self.scp[1].p.clear();
             }
         }
         if self.n_stretch > 0 {

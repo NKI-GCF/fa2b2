@@ -169,7 +169,6 @@ impl<'a> KmerIter<'a> {
                             self.finalize_n_stretch();
                             // If a repetition ends in an N-strectch, thereafter offset to period
                             // may differ or the repetition could be different or entirely gone.
-                            self.period = None;
                         } else if self
                             .period
                             .and_then(|d| self.ks.b2_for_p(self.scp[0].p - d).ok())
@@ -179,9 +178,9 @@ impl<'a> KmerIter<'a> {
                             //everything that needs to be done.
                             self.scp[0].increment(b2);
                             continue;
-                        } else {
-                            self.period = None;
                         }
+                        self.period = None;
+
                         // scp funcs also used for scope rebuild, therefore ext is set here.
                         self.scp[0].p.set_extension(0);
                         match self.scp[0].complete_and_update_mark(b2, 0) {

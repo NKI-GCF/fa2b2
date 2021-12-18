@@ -79,12 +79,10 @@ where
         // XXX function is hot
         // 2 is added for next pos; orientation is set in first bit.
         self.add(b2);
-        if self.dna < self.rc {
-            1
-        } else if self.dna > self.rc {
-            0
-        } else {
-            T::to_u64(&self.dna).unwrap() & 1
+        match self.dna.cmp(&self.rc) {
+            cmp::Ordering::Greater => 0,
+            cmp::Ordering::Less => 1,
+            cmp::Ordering::Equal => T::to_u64(&self.dna).unwrap() & 1,
         }
     }
     /// return an index specific per sequence but the same for the other orientation

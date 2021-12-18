@@ -20,7 +20,7 @@ pub struct KmerStore<T> {
     pub b2: Vec<u8>,
     pub kmp: Vec<T>, // position + strand per k-mer.
     pub contig: Vec<Contig>,
-    repeat: HashMap<usize, (u32, u32)>,
+    pub repeat: HashMap<usize, (u32, u32)>,
 }
 
 impl<T: PriExtPosOri> KmerStore<T> {

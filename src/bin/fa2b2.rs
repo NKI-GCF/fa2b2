@@ -17,6 +17,7 @@ use bio::io::fasta::IndexedReader;
 //use flate2::bufread::MultiGzDecoder;
 use bincode::serialize_into;
 use clap::{App, Arg};
+use std::collections::HashMap;
 
 use anyhow::Result;
 use fa2b2::kmerconst::KmerConst;
@@ -79,23 +80,59 @@ fn main() -> Result<()> {
             //break;
         }
     }
-    let mut stat = [[0; 0x10_000]; 2];
-    for k in ks.kmp.iter() {
-        stat[if k.is_set() { 1 } else { 0 }][k.x()] += 1;
-    }
-    println!("Unset: {}", stat[0][0]);
-    /*for j in 1..8 {
-        println!("Blacklisted for extension {}: {}", j, stat[0][j]);
-    }*/
-    for j in 0..=0xFFFF {
-        if stat[1][j] != 0 {
-            println!("Set for extension {}: {}", j, stat[1][j]);
-        }
-    }
+    dump_stats(&ks);
 
     if let Some(f) = out_file.as_mut() {
         println!("Writing first occurances per kmer to disk");
         serialize_into(f, &ks).unwrap();
     }
     Ok(())
+}
+
+fn dump_stats(ks: &KmerStore<u64>) {
+    let mut stat = [[0; 0x1_0000]; 2];
+    for k in ks.kmp.iter() {
+        stat[if k.is_set() { 1 } else { 0 }][k.x()] += 1;
+    }
+    println!(
+        "Unset: {} of {} \t{:.2}%",
+        stat[0][0],
+        ks.kmp.len(),
+        100.0 * stat[0][0] as f64 / ks.kmp.len() as f64
+    );
+    for j in 1..=0xFFFF {
+        if stat[1][j] != 0 {
+            println!(
+                "Blacklisted for extension {}: {}\t{:.2}%",
+                j,
+                stat[0][j],
+                100.0 * stat[0][j] as f64 / ks.kmp.len() as f64
+            );
+        }
+    }
+    for j in 0..=0xFFFF {
+        if stat[1][j] != 0 {
+            println!(
+                "Set for extension {}: {}\t{:.2}%",
+                j,
+                stat[1][j],
+                100.0 * stat[1][j] as f64 / ks.kmp.len() as f64
+            );
+        }
+    }
+    println!("{} sections of non-ambiguous code", ks.contig.len());
+    println!("{} sections of repetitive code", ks.repeat.len());
+
+    let mut period_counter = HashMap::new();
+    for v in ks.repeat.values() {
+        let entry = period_counter.entry(v.0).or_insert(0);
+        *entry += 1;
+    }
+    let mut count_vec: Vec<(&u32, &u32)> = period_counter.iter().collect();
+    count_vec.sort_by(|a, b| b.1.cmp(a.1));
+    println!("repetition period and count (top 20 at most)");
+    for cv in count_vec.iter().take(20) {
+        println!("{}\t{}", cv.0, cv.1);
+    }
+    println!("..");
 }

@@ -50,7 +50,7 @@ impl<'a> KmerIter<'a> {
     }
 
     /// Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
-    fn recurrance_is_skippable(&mut self, p: u64, min_idx: usize) -> bool {
+    fn recurrence_is_skippable(&mut self, p: u64, min_idx: usize) -> bool {
         let scp = self.get_scp();
         let pos = p.pos();
         if pos >= scp.plim.0 {
@@ -166,7 +166,7 @@ impl<'a> KmerIter<'a> {
             } else if dbgx!(stored_p.extension() == min_p.extension()) {
                 // If a kmer occurs multiple times within an extending readlength, only
                 // the first gets a position. During mapping this rule also should apply.
-                if self.recurrance_is_skippable(stored_p, min_idx) {
+                if self.recurrence_is_skippable(stored_p, min_idx) {
                     break;
                 }
             } else {

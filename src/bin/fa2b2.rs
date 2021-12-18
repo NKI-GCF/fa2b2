@@ -46,7 +46,7 @@ fn main() -> Result<()> {
                 .value_name("OUTPUT")
                 .help("The output file")
                 .index(2)
-                .required(true)
+                //.required(true)
                 .takes_value(true),
         )
         .get_matches();
@@ -57,8 +57,9 @@ fn main() -> Result<()> {
         .unwrap_or_else(|_| panic!("Error opening reference genome"));
     let chrs = idxr.index.sequences();
 
-    let out_file_name = matches.value_of("out").unwrap();
-    let mut out_file = BufWriter::new(File::create(out_file_name).unwrap());
+    let mut out_file = matches
+        .value_of("out")
+        .map(|f| BufWriter::new(File::create(f).unwrap()));
 
     let readlen = 64;
     let kc = KmerConst::new(readlen, chrs.iter().map(|x| x.len as usize).sum());
@@ -78,19 +79,23 @@ fn main() -> Result<()> {
             //break;
         }
     }
-    let mut stat = [[0; 8]; 2];
+    let mut stat = [[0; 0x10_000]; 2];
     for k in ks.kmp.iter() {
         stat[if k.is_set() { 1 } else { 0 }][k.x()] += 1;
     }
     println!("Unset: {}", stat[0][0]);
-    for j in 1..8 {
+    /*for j in 1..8 {
         println!("Blacklisted for extension {}: {}", j, stat[0][j]);
-    }
-    for j in 0..8 {
-        println!("Set for extension {}: {}", j, stat[1][j]);
+    }*/
+    for j in 0..=0xFFFF {
+        if stat[1][j] != 0 {
+            println!("Set for extension {}: {}", j, stat[1][j]);
+        }
     }
 
-    println!("Writing first occurances per kmer to disk");
-    serialize_into(&mut out_file, &ks).unwrap();
+    if let Some(f) = out_file.as_mut() {
+        println!("Writing first occurances per kmer to disk");
+        serialize_into(f, &ks).unwrap();
+    }
     Ok(())
 }

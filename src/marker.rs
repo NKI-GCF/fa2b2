@@ -187,8 +187,7 @@ impl<'a> KmerIter<'a> {
         Ok(())
     }
 
-    fn is_repetitive(&self, b2: u8) -> bool {
-        let i = if self.scp[1].p.is_set() { 1 } else { 0 };
+    fn is_repetitive(&self, b2: u8, i: usize) -> bool {
         match self.period.and_then(|d| {
             dbg_assert!(d != 0);
             self.ks.b2_for_p(self.scp[i].p - d).ok()
@@ -241,7 +240,7 @@ impl<'a> KmerIter<'a> {
                         self.finalize_n_stretch();
                         // If a repetition ends in an N-stretch, thereafter offset to period
                         // may differ or the repetition could be different or entirely gone.
-                    } else if self.is_repetitive(b2) {
+                    } else if self.is_repetitive(b2, 0) {
                         repetitive += 1;
                         // everything but optimum re-evaluation.
                         self.scp[0].increment(b2);

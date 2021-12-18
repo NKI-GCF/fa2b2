@@ -13,6 +13,7 @@ use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
 use anyhow::{anyhow, ensure, Result};
+use std::cmp;
 
 pub struct KmerIter<'a> {
     //steekproefi: u64,
@@ -219,8 +220,11 @@ impl<'a> KmerIter<'a> {
                         self.scp[1].p.clear();
                     }
                 }
-                continue;
-                // false: cannot complete scope (contig end?) or find next mark after leaving mark.
+                // er mist een check of we tegen het einde van de contig aanlopen.
+                if self.scp[1].p.pos() != cmp::min(self.scp[1].plim.1, self.scp[0].p.pos()) {
+                    continue;
+                }
+                self.scp[1].p.clear();
             }
             while let Some(b2) = seq.next().map(|&c| {
                 let b2 = (c >> 1) & 0x7;
@@ -285,16 +289,18 @@ impl<'a> KmerIter<'a> {
         if self.n_stretch > 0 {
             dbgx!(self.finalize_n_stretch());
         }
-        println!(
-            "chromosome {}\ttot:{}(complex dna:{:.2}%)\trepetitive:{}({:.2}%)\tN-count:{}({:.2}%)\t",
-            chrname,
-            tot,
-            100.0 * (tot - repetitive - n_count) as f64 / tot as f64,
-            repetitive,
-            100.0 * repetitive as f64 / tot as f64,
-            n_count,
-            100.0 * n_count as f64 / tot as f64,
-        );
+        if chrname != "test" {
+            println!(
+                "chromosome {}\ttot:{}(complex dna:{:.2}%)\trepetitive:{}({:.2}%)\tN-count:{}({:.2}%)\t",
+                chrname,
+                tot,
+                100.0 * (tot - repetitive - n_count) as f64 / tot as f64,
+                repetitive,
+                100.0 * repetitive as f64 / tot as f64,
+                n_count,
+                100.0 * n_count as f64 / tot as f64,
+            );
+        }
         self.period = None;
         Ok(())
     }
@@ -308,9 +314,9 @@ mod tests {
     const READLEN: usize = 16;
     const SEQLEN: usize = 250;
 
-    fn process<'a>(ks: &'a mut KmerStore<u64>, kc: &'a KmerConst, seq: Vec<u8>) -> Result<u64> {
+    fn process<'a>(ks: &'a mut KmerStore<u64>, kc: &'a KmerConst, seq: Vec<u8>) -> Result<()> {
         let mut kmi = KmerIter::new(ks, kc);
-        kmi.markcontig::<u64>(&mut seq.iter())
+        kmi.markcontig::<u64>("test", &mut seq.iter())
     }
 
     #[test]
@@ -432,7 +438,7 @@ mod tests {
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
         let mut seq = seq_vec.iter();
-        kmi.markcontig::<u64>(&mut seq)?;
+        kmi.markcontig::<u64>("test", &mut seq)?;
         let mut seen = 0;
         for hash in 0..ks_kmp_len {
             let p = kmi.ks.kmp[hash];
@@ -476,7 +482,7 @@ mod tests {
 
                 let vv: Vec<u8> = seq_vec.iter().map(|&c| c as u8).collect();
                 let mut seq = vv.iter();
-                kmi.markcontig::<u64>(&mut seq)?;
+                kmi.markcontig::<u64>("test", &mut seq)?;
                 dbg_print!("-- testing hashes --");
                 for hash in 0..ks_kmp_len {
                     let p = kmi.ks.kmp[hash];

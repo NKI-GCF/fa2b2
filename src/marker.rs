@@ -187,6 +187,17 @@ impl<'a> KmerIter<'a> {
         Ok(())
     }
 
+    fn is_repetitive(&self, b2: u8) -> bool {
+        let i = if self.scp[1].p.is_set() { 1 } else { 0 };
+        match self
+            .period
+            .and_then(|d| self.ks.b2_for_p(self.scp[i].p - d).ok())
+        {
+            Some(old_b2) if old_b2 == b2 => true,
+            _ => false,
+        }
+    }
+
     pub fn markcontig<T: MidPos>(&mut self, seq: &mut Iter<u8>) -> Result<u64> {
         self.goffs = 0;
         self.ks.push_contig(self.scp[0].p.pos(), self.goffs);
@@ -209,8 +220,11 @@ impl<'a> KmerIter<'a> {
                 continue;
                 // false: cannot complete scope (contig end?) or find next mark after leaving mark.
             }
-            while let Some(b2) = seq.next().map(|c| (c >> 1) & 0x7) {
-                dbg_print!("=> twobit {:x} (head) <=", b2);
+            while let Some(b2) = seq.next().map(|&c| {
+                let b2 = (c >> 1) & 0x7;
+                dbg_print!("[{}, {}]: {:x}", self.scp[0].p.pos() >> 1, c as char, b2);
+                b2
+            }) {
                 let p = self.scp[0].p;
                 if b2 < 4 {
                     // new sequence is also stored, to enable lookup later.
@@ -220,15 +234,10 @@ impl<'a> KmerIter<'a> {
                     self.ks.p_max = p.pos() + 4;
                     if self.n_stretch > 0 {
                         self.finalize_n_stretch();
-                        // If a repetition ends in an N-strectch, thereafter offset to period
+                        // If a repetition ends in an N-stretch, thereafter offset to period
                         // may differ or the repetition could be different or entirely gone.
-                    } else if self
-                        .period
-                        .and_then(|d| self.ks.b2_for_p(self.scp[0].p - d).ok())
-                        .filter(|&old_b2| old_b2 == b2)
-                        .is_some()
-                    {
-                        //everything that needs to be done.
+                    } else if self.is_repetitive(b2) {
+                        // everything but optimum re-evaluation.
                         self.scp[0].increment(b2);
                         continue;
                     }
@@ -252,17 +261,18 @@ impl<'a> KmerIter<'a> {
                             continue 'outer;
                         }
                     }
-                }
-                if self.scp[0].i != 0 {
-                    dbg_print!("started N-stretch at {}.", p);
-                    self.goffs += self.scp[0].i as u64;
-                    self.ks.push_contig(p, self.goffs);
+                } else {
+                    if self.scp[0].i != 0 {
+                        dbg_print!("started N-stretch at {}.", p);
+                        self.goffs += self.scp[0].i as u64;
+                        self.ks.push_contig(p, self.goffs);
 
-                    // clear all except orientation and position to rebuild at the start of a new contig.
-                    self.scp[0].i = 0;
-                    self.n_stretch = 0;
+                        // clear all except orientation and position to rebuild at the start of a new contig.
+                        self.scp[0].i = 0;
+                        self.n_stretch = 0;
+                    }
+                    self.n_stretch += 1;
                 }
-                self.n_stretch += 1;
             }
             break;
         }

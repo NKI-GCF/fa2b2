@@ -138,11 +138,9 @@ impl<'a> KmerIter<'a> {
         self.ks.push_contig(self.scp[0].p.pos(), self.goffs);
 
         'outer: loop {
-            if self.scp[1].p.is_set() {
-                match self.ks.b2_for_p(self.scp[1].p).and_then(|b2| {
-                    dbg_print!("=> twobit {:x} (past) <=", b2);
-                    self.scp[1].complete_and_update_mark(b2, 0)
-                }) {
+            if let Some(b2) = self.next_past_b2() {
+                dbg_print!("=> twobit {:x} (past) <=", b2);
+                match self.scp[1].complete_and_update_mark(b2, 0) {
                     Ok(true) => {}
                     Ok(false) => continue,
                     Err(e) => {

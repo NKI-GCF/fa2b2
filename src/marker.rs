@@ -148,9 +148,9 @@ impl<'a> KmerIter<'a> {
                 // dbg_print!("{}", self.get_scp());
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
                     if !self.rebuild_scope(stored_p)? {
-                        self.scp[1].p.clear();
-                        break;
+                        return Ok(());
                     }
+                    dbg_print!("resolving past for [{:x}], {:#x}", min_idx, stored_p);
                     self.scp[1].extend_kmer_stack(self.ks)?;
                     //dbgx!(self.ks.kmp[min_idx].set(min_p));
                     dbgx!(self.set_idx_pos(min_idx, min_p));
@@ -161,7 +161,7 @@ impl<'a> KmerIter<'a> {
                         self.set_idx_pos(min_idx, min_p);
                     }
                     self.scp[1].p.clear();
-                    break;
+                    return Ok(());
                 }
             } else if dbgx!(stored_p.extension() == min_p.extension()) {
                 // If a kmer occurs multiple times within an extending readlength, only

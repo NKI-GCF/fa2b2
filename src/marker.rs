@@ -253,7 +253,6 @@ impl<'a> KmerIter<'a> {
                     self.period = None;
 
                     // scp funcs also used for scope rebuild, therefore ext is set here.
-                    self.scp[0].p.set_extension(0);
                     match self.scp[0].complete_and_update_mark(b2, 0) {
                         Ok(true) => {
                             self.extend_until_writable_optimum()?;

@@ -187,6 +187,7 @@ impl<'a> Scope<'a> {
 
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
     fn set_if_optimum(&mut self, i: usize, x: usize) -> bool {
+        // XXX function is hot
         let afs = self.kc.afstand(x);
         let (hash, is_template) = self.get_xmer_and_strand(i, afs);
         let mut p = self.p.with_ext(x) - ((afs + i) << 1) as u64;

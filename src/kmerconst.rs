@@ -76,6 +76,6 @@ impl KmerConst {
     // one added because index is shortened (kmer index top bit flipped, if set)
     // XXX could use a lookup array instead?
     pub fn ext_domain(&self, x: usize) -> usize {
-        x.swap_bits() >> (size_of::<usize>() * 8 - self.bitlen + 1)
+        x.swap_bits() >> ((size_of::<usize>() << 3) - self.bitlen + 1)
     }
 }

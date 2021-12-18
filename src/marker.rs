@@ -174,6 +174,14 @@ impl<'a> KmerIter<'a> {
         self.ks.kmp[idx].set(p);
     }
 
+    fn next_past_b2(&mut self) -> Option<u8> {
+        if self.scp[1].p.is_set() {
+            self.ks.b2_for_p(self.scp[1].p).ok()
+        } else {
+            None
+        }
+    }
+
     fn get_scp(&mut self) -> &mut Scope<'a> {
         &mut self.scp[if self.scp[1].p.is_set() { 1 } else { 0 }]
     }
@@ -316,11 +324,14 @@ mod tests {
         }
         dbg_assert_eq!(ks.kmp.len(), 128);
         let first_pos = 1 | (kc.kmerlen as u64) << 1;
+        let mut seen = 0;
         for i in 1..ks.kmp.len() {
             if ks.kmp[i].is_set() {
-                dbg_assert!(ks.kmp[i] == first_pos, "[{}], {:x}", i, ks.kmp[i]);
+                dbg_assert!(ks.kmp[i] == first_pos, "[{:x}], {:x}", i, ks.kmp[i]);
+                seen += 1;
             }
         }
+        dbg_assert_eq!(seen, 1);
         Ok(())
     }
     #[test]
@@ -331,11 +342,14 @@ mod tests {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
         }
         let first_pos = 1 | (kc.kmerlen as u64) << 1;
+        let mut seen = 0;
         for i in 1..ks.kmp.len() {
             if ks.kmp[i].is_set() {
-                dbg_assert!(ks.kmp[i] == first_pos, "[{}], {:x}", i, ks.kmp[i]);
+                dbg_assert!(ks.kmp[i] == first_pos, "[{:x}], {:x}", i, ks.kmp[i]);
+                seen += 1;
             }
         }
+        dbg_assert_eq!(seen, 1);
         Ok(())
     }
     #[test]
@@ -345,12 +359,15 @@ mod tests {
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
+        let mut seen = 0;
         let first_pos = 1 | (kc.kmerlen as u64) << 1;
         for i in 1..ks.kmp.len() {
             if ks.kmp[i].is_set() {
-                dbg_assert!(ks.kmp[i] == first_pos, "[{}], {:x}", i, ks.kmp[i]);
+                dbg_assert!(ks.kmp[i] == first_pos, "[{:x}], {:x}", i, ks.kmp[i]);
+                seen += 1;
             }
         }
+        dbg_assert_eq!(seen, 1);
         Ok(())
     }
     #[test]
@@ -380,13 +397,16 @@ mod tests {
             .to_owned();
         let mut seq = seq_vec.iter();
         kmi.markcontig::<u64>(&mut seq)?;
+        let mut seen = 0;
         for hash in 0..ks_kmp_len {
             let p = kmi.ks.kmp[hash];
             if p.is_set() {
                 kmi.rebuild_scope(p)?;
                 dbg_assert_eq!(kmi.scp[1].mark.p, p);
+                seen += 1;
             }
         }
+        dbg_assert_eq!(seen, 9); // not 100% sure how many this should be
         Ok(())
     }
     #[test]

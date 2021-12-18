@@ -39,13 +39,13 @@ impl<'a> Scope<'a> {
 
     fn is_xmer_complete(&self, x: usize) -> bool {
         /*dbgf!(
-            self.i < self.kc.kmerlen + self.kc.afstand(x),
-            "{}: {} < {} + {}?",
+            self.i >= self.kc.kmerlen + self.kc.afstand(x),
+            "{}: {} >= {} + {}?",
             self.i,
             self.kc.kmerlen,
             self.kc.afstand(x)
         )*/
-        self.i < self.kc.kmerlen + self.kc.afstand(x)
+        self.i >= self.kc.kmerlen + self.kc.afstand(x)
     }
 
     pub fn increment(&mut self, b2: u8) {
@@ -69,7 +69,7 @@ impl<'a> Scope<'a> {
         self.increment(b2);
         if self.i >= self.kc.kmerlen {
             for x in x_start..=self.p.x() {
-                if self.is_xmer_complete(x) || self.set_if_optimum(0, x) {
+                if self.is_xmer_complete(x) && self.set_if_optimum(0, x) {
                     break;
                 }
             }
@@ -154,7 +154,7 @@ impl<'a> Scope<'a> {
 
         // set mark after extension, if possible
         self.mark.reset();
-        if !self.is_xmer_complete(x) {
+        if self.is_xmer_complete(x) {
             let _ = self.set_if_optimum(0, x);
         }
 

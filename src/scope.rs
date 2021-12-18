@@ -135,7 +135,7 @@ impl<'a> Scope<'a> {
         //let afs = self.kc.afstand(self.mark.p.x());
         let p_pos = self.p.pos();
         let dist = (self.kc.no_kmers << 1) as u64;
-        p_pos == self.mark.p.pos() + dist
+        p_pos >= self.mark.p.pos() + dist
     }
 
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)

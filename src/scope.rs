@@ -94,12 +94,6 @@ impl<'a> Scope<'a> {
         Ok(is_complete)
     }
 
-    /// geef de current kmer.
-    pub fn kmer(&self) -> Kmer<u64> {
-        // Todo: on the fly uit ks.
-        self.d[(self.i - self.kc.kmerlen) % self.kc.no_kmers]
-    }
-
     /// extend positie (als kmer/hash niet replaceble was); true indien mogelijk.
     // waar wordt dit ongedaan gemaakt??
     pub fn extend(&mut self) -> bool {
@@ -111,7 +105,7 @@ impl<'a> Scope<'a> {
     }
 
     /// is occ complete? call na complete_kmer() - self.i increment.
-    pub fn all_kmers(&self) -> bool {
+    fn all_kmers(&self) -> bool {
         self.i >= self.kc.readlen
     }
 
@@ -131,7 +125,7 @@ impl<'a> Scope<'a> {
     }
 
     /// is de minimum/optimum leaving?
-    pub fn mark_is_leaving(&self) -> bool {
+    fn mark_is_leaving(&self) -> bool {
         //let afs = self.kc.afstand(self.mark.p.x());
         let p_pos = self.p.pos();
         let dist = (self.kc.no_kmers << 1) as u64;
@@ -244,6 +238,13 @@ impl<'a> fmt::Display for Scope<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    impl<'a> Scope<'a> {
+        /// de current kmer.
+        fn kmer(&self) -> Kmer<u64> {
+            self.d[self.mod_i]
+        }
+    }
 
     const READLEN: usize = 16;
     const SEQLEN: usize = 250;

@@ -90,6 +90,7 @@ impl<T: PriExtPosOri> KmerStore<T> {
             .ok_or_else(|| anyhow!("stored pos past contig? {:#}", p))
     }
     pub fn extend_repetitive(&mut self, min_idx: usize, dist: u32) {
+        assert!(dist != 0);
         let repeat = self.repeat.entry(min_idx).or_insert((dist, 0));
         repeat.1 = dist;
     }

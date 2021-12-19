@@ -142,8 +142,9 @@ impl<'a> KmerIter<'a> {
                 // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
                 let scp = self.get_scp();
                 let stored_pos = stored_p.pos();
-                if stored_pos >= scp.plim.0.pos() {
+                if stored_pos >= scp.plim.0.pos() && stored_pos < scp.plim.1.pos() {
                     let dist = dbgx!(scp.mark.p.pos() - stored_pos);
+                    assert!(dist != 0);
 
                     self.period = Some(dist);
                     break;
@@ -170,7 +171,7 @@ impl<'a> KmerIter<'a> {
 
     fn is_repetitive(&self, b2: u8, i: usize) -> bool {
         match self.period.and_then(|d| {
-            dbg_assert!(d != 0);
+            assert!(d != 0);
             self.ks.b2_for_p(self.scp[i].p - d).ok()
         }) {
             Some(old_b2) => old_b2 == b2,

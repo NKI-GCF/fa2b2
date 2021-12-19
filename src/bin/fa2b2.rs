@@ -101,7 +101,7 @@ fn dump_stats(ks: &KmerStore<u64>) {
         100.0 * stat[0][0] as f64 / ks.kmp.len() as f64
     );
     for j in 1..=0xFFFF {
-        if stat[1][j] != 0 {
+        if stat[0][j] != 0 {
             println!(
                 "Blacklisted for extension {}: {}\t{:.2}%",
                 j,

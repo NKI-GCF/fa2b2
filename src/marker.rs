@@ -141,9 +141,9 @@ impl<'a> KmerIter<'a> {
                 // the first gets a position. During mapping this rule also should apply.
                 // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
                 let scp = self.get_scp();
-                let pos = stored_p.pos();
-                if pos >= scp.plim.0 {
-                    let dist = dbgx!(scp.mark.p.pos() - pos);
+                let stored_pos = stored_p.pos();
+                if stored_pos >= scp.plim.0 {
+                    let dist = dbgx!(scp.mark.p.pos() - stored_pos);
 
                     self.period = Some(dist);
                     break;

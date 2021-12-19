@@ -170,13 +170,13 @@ impl<'a> Scope<'a> {
     fn get_xmer_and_strand(&self, i: usize, afs: usize) -> (usize, bool) {
         let base = self.i - self.kc.kmerlen;
         let d_i = base.wrapping_sub(i) % self.kc.no_kmers;
-        let mut kmer = self.d[d_i];
+        let mut xmer = self.d[d_i];
         if afs > 0 {
             let d_i2 = base.wrapping_sub(afs + i) % self.kc.no_kmers;
-            dbg_print!("dna:{:#x}, dna2:{:#x}", self.d[d_i2].dna, kmer.dna);
-            kmer.hash(self.d[d_i2]);
+            dbg_print!("dna:{:#x}, dna2:{:#x}", self.d[d_i2].dna, xmer.dna);
+            xmer.hash(self.d[d_i2]);
         }
-        (kmer.get_idx(), kmer.is_template())
+        (xmer.get_idx(), xmer.is_template())
     }
 
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.

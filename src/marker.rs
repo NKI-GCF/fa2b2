@@ -274,6 +274,7 @@ impl<'a> KmerIter<'a> {
                         self.scp[0].i = 0;
                         self.scp[0].mod_i = 0;
                         self.n_stretch = 0;
+                        self.period = None;
                     }
                     self.n_stretch += 1;
                     n_count += 1;

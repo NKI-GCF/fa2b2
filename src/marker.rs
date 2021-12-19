@@ -50,34 +50,6 @@ impl<'a> KmerIter<'a> {
         self.n_stretch = 0;
     }
 
-    /// Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
-    fn recurrence_is_skippable(&mut self, p: u64, min_idx: usize) -> bool {
-        let scp = self.get_scp();
-        let pos = p.pos();
-        if pos >= scp.plim.0 {
-            let dist = dbgx!(scp.mark.p.pos() - pos);
-            if let Some(period) = self.period {
-                // Repeats can be more complex than a regular repetition. e.g.
-                // if a transposon is inserted + inserted inverted, and this is the
-                // repeat, then an xmers could recur at irregular intervals.
-                // but then the xmer out of line is extended and gets its own period,
-                // so it resolves that way too.
-                if dist % period == 0 {
-                    // XXX A xmer could recur exacly on period but not be a(n exact) repeat.
-                    self.ks.extend_repetitive(min_idx, dist as u32);
-                    return true;
-                }
-            } else {
-                self.period = Some(dist);
-                return true;
-            }
-        } else {
-            self.period = None;
-        }
-        self.ks.kmp[min_idx].set_dup();
-        false
-    }
-
     /// When rebuilding and exteniding scp for recurrent kmer, mind contig boundaries
     fn get_contig_limits(&self, p: u64) -> (u64, u64) {
         let p = p.pos();
@@ -167,9 +139,17 @@ impl<'a> KmerIter<'a> {
             } else if dbgx!(stored_p.extension() == min_p.extension()) {
                 // If a kmer occurs multiple times within an extending readlength, only
                 // the first gets a position. During mapping this rule also should apply.
-                if self.recurrence_is_skippable(stored_p, min_idx) {
+                // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
+                let scp = self.get_scp();
+                let pos = stored_p.pos();
+                if pos >= scp.plim.0 {
+                    let dist = dbgx!(scp.mark.p.pos() - pos);
+
+                    self.period = Some(dist);
                     break;
                 }
+                self.period = None;
+                self.ks.kmp[min_idx].set_dup();
             } else {
                 dbg_print!("\t\t<!>");
             }
@@ -248,6 +228,20 @@ impl<'a> KmerIter<'a> {
                         repetitive += 1;
                         // everything but optimum re-evaluation.
                         self.scp[0].increment(b2);
+                        if let Some(period) = self.period {
+                            let idx = self.scp[0].mark.idx;
+                            let stored = self.ks.kmp[idx];
+                            let dist = dbgx!(self.scp[0].mark.p.pos() - stored.pos());
+                            // Repeats can be more complex than a regular repetition. e.g.
+                            // if a transposon is inserted + inserted inverted, and this is the
+                            // repeat, then an xmers could recur at irregular intervals.
+                            // but then the xmer out of line is extended and gets its own period,
+                            // so it resolves that way too.
+                            if dist % period == 0 {
+                                // XXX A xmer could recur exacly on period but not be a(n exact) repeat.
+                                self.ks.extend_repetitive(idx, dist as u32);
+                            }
+                        }
                         continue;
                     }
                     self.period = None;

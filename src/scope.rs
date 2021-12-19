@@ -88,11 +88,21 @@ impl<'a> Scope<'a> {
     pub fn complete_and_update_mark(&mut self, b2: u8, x_start: usize) -> Result<bool> {
         // XXX: function is very hot
         self.increment(b2);
-        let is_complete = self.update_mark(x_start);
-        if is_complete && self.mark_is_leaving() {
-            self.set_next_mark()?;
+        if self.i >= self.kc.kmerlen {
+            for x in x_start..=self.p.x() {
+                if self.is_xmer_complete(x) && dbgx!(self.set_if_optimum(0, x, self.kc.afstand(x)))
+                {
+                    return Ok(self.all_kmers());
+                }
+            }
+            if self.all_kmers() {
+                if self.mark_is_leaving() {
+                    self.set_next_mark()?;
+                }
+                return Ok(true);
+            }
         }
-        Ok(is_complete)
+        return Ok(false);
     }
 
     /// extend positie (als kmer/hash niet replaceble was); true indien mogelijk.

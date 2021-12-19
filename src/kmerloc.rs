@@ -133,8 +133,7 @@ impl MidPos for u64 {
         }
     }
     fn is_replaceable_by(&self, new_entry: u64) -> bool {
-        // blacklisting for smaller extension is setting only extension bits. a value with this
-        // extension can be written.
+        // only extension bits means blacklisting, except for extension 0. pos is always > kmerlen
         self.is_no_pos() || *self <= new_entry.extension() || self.same_pos_and_ext(new_entry)
     }
     fn is_set_and_not(&self, other: u64) -> bool {

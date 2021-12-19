@@ -142,7 +142,7 @@ impl<'a> KmerIter<'a> {
                 // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
                 let scp = self.get_scp();
                 let stored_pos = stored_p.pos();
-                if stored_pos >= scp.plim.0 {
+                if stored_pos >= scp.plim.0.pos() {
                     let dist = dbgx!(scp.mark.p.pos() - stored_pos);
 
                     self.period = Some(dist);
@@ -222,6 +222,7 @@ impl<'a> KmerIter<'a> {
                     self.ks.p_max = p.pos() + 4;
                     if self.n_stretch > 0 {
                         self.finalize_n_stretch();
+                        self.scp[0].plim.0 = p.pos();
                         // If a repetition ends in an N-stretch, thereafter offset to period
                         // may differ or the repetition could be different or entirely gone.
                     } else if self.is_repetitive(b2, 0) {

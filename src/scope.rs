@@ -167,7 +167,10 @@ impl<'a> Scope<'a> {
         }
         Ok(())
     }
-    fn get_xmer_and_strand(&self, i: usize, afs: usize) -> (usize, bool) {
+    /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
+    fn set_if_optimum(&mut self, i: usize, x: usize) -> bool {
+        // XXX function is hot
+        let afs = self.kc.afstand(x);
         let base = self.i - self.kc.kmerlen;
         let d_i = base.wrapping_sub(i) % self.kc.no_kmers;
         let mut xmer = self.d[d_i];
@@ -176,18 +179,11 @@ impl<'a> Scope<'a> {
             dbg_print!("dna:{:#x}, dna2:{:#x}", self.d[d_i2].dna, xmer.dna);
             xmer.hash(self.d[d_i2]);
         }
-        (xmer.get_idx(), xmer.is_template())
-    }
-
-    /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
-    fn set_if_optimum(&mut self, i: usize, x: usize) -> bool {
-        // XXX function is hot
-        let afs = self.kc.afstand(x);
-        let (hash, is_template) = self.get_xmer_and_strand(i, afs);
         let mut p = self.p.with_ext(x) - ((afs + i) << 1) as u64;
-        if is_template {
+        if xmer.is_template() {
             p |= 1;
         }
+        let hash = xmer.get_idx();
         let ret = self.hash_is_optimum(hash, p);
         if ret {
             dbgf!(

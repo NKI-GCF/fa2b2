@@ -75,7 +75,7 @@ impl<'a> Scope<'a> {
         self.increment(b2);
         if self.i >= self.kc.kmerlen {
             for x in x_start..=self.p.x() {
-                if self.is_xmer_complete(x) && self.set_if_optimum(0, x) {
+                if self.is_xmer_complete(x) && self.set_if_optimum(0, x, self.kc.afstand(x)) {
                     return self.all_kmers();
                 }
             }
@@ -139,7 +139,7 @@ impl<'a> Scope<'a> {
         let afs = self.kc.afstand(x);
         ensure!(self.kc.no_kmers > afs, "Couldn't obtain new mark.");
         for i in 0..(self.kc.no_kmers - afs) {
-            let _ = self.set_if_optimum(i, x);
+            let _ = self.set_if_optimum(i, x, afs);
         }
         dbg_assert!(self.mark.is_set());
         Ok(())
@@ -152,7 +152,7 @@ impl<'a> Scope<'a> {
         // set mark after extension, if possible
         self.mark.reset();
         if self.is_xmer_complete(x) {
-            let _ = self.set_if_optimum(0, x);
+            let _ = self.set_if_optimum(0, x, self.kc.afstand(x));
         }
 
         while self.p.pos() < self.plim.1 {
@@ -168,9 +168,8 @@ impl<'a> Scope<'a> {
         Ok(())
     }
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
-    fn set_if_optimum(&mut self, i: usize, x: usize) -> bool {
+    fn set_if_optimum(&mut self, i: usize, x: usize, afs: usize) -> bool {
         // XXX function is hot
-        let afs = self.kc.afstand(x);
         let base = self.i - self.kc.kmerlen;
         let d_i = base.wrapping_sub(i) % self.kc.no_kmers;
         let mut xmer = self.d[d_i];

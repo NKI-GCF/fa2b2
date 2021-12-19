@@ -4,3 +4,10 @@
 callgrind*
 doc
 flamegraph.svg
+Linux perf Examples*
+perf.data*
+*svg
+GRCh38.bin
+rust-unmangle
+flamegraph.pl
+stackcollapse-perf.pl

@@ -70,12 +70,12 @@ impl<'a> Scope<'a> {
     /// add b2 to kmer, move .p according to occ orientation
     /// return whether required nr of kmers for struct scope were seen.
     // hierin vinden .i & .p increments and kmer .d[] update plaats. geen kmer ? false.
-    fn complete(&mut self, b2: u8, x_start: usize) -> bool {
+    fn update_mark(&mut self, x_start: usize) -> bool {
         // XXX: function is very hot
-        self.increment(b2);
         if self.i >= self.kc.kmerlen {
             for x in x_start..=self.p.x() {
-                if self.is_xmer_complete(x) && self.set_if_optimum(0, x, self.kc.afstand(x)) {
+                if self.is_xmer_complete(x) && dbgx!(self.set_if_optimum(0, x, self.kc.afstand(x)))
+                {
                     return self.all_kmers();
                 }
             }
@@ -87,7 +87,8 @@ impl<'a> Scope<'a> {
 
     pub fn complete_and_update_mark(&mut self, b2: u8, x_start: usize) -> Result<bool> {
         // XXX: function is very hot
-        let is_complete = self.complete(b2, x_start);
+        self.increment(b2);
+        let is_complete = self.update_mark(x_start);
         if is_complete && self.mark_is_leaving() {
             self.set_next_mark()?;
         }
@@ -139,7 +140,7 @@ impl<'a> Scope<'a> {
         let afs = self.kc.afstand(x);
         ensure!(self.kc.no_kmers > afs, "Couldn't obtain new mark.");
         for i in 0..(self.kc.no_kmers - afs) {
-            let _ = self.set_if_optimum(i, x, afs);
+            let _ = dbgx!(self.set_if_optimum(i, x, afs));
         }
         dbg_assert!(self.mark.is_set());
         Ok(())
@@ -152,12 +153,13 @@ impl<'a> Scope<'a> {
         // set mark after extension, if possible
         self.mark.reset();
         if self.is_xmer_complete(x) {
-            let _ = self.set_if_optimum(0, x, self.kc.afstand(x));
+            let _ = dbgx!(self.set_if_optimum(0, x, self.kc.afstand(x)));
         }
 
         while self.p.pos() < self.plim.1 {
             let b2 = ks.b2_for_p(self.p).unwrap();
-            if self.complete(b2, x) && self.mark_is_leaving() {
+            self.increment(b2);
+            if self.update_mark(x) && self.mark_is_leaving() {
                 self.set_next_mark()?;
                 if ks.kmp[self.mark.idx].is_same(self.mark.p) {
                     // retracked => finished
@@ -249,14 +251,16 @@ mod tests {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut occ = Scope::new((0, 100), &kc, 0);
         for _ in 0..6 {
-            occ.complete(1, 0);
+            occ.increment(1);
+            occ.update_mark(0);
         }
         let mut kmer = occ.kmer();
         dbg_assert_eq!(kmer.dna, 0x55);
         dbg_assert_eq!(kmer.rc, 0xff);
         dbg_assert_eq!(occ.p, 0xd);
 
-        occ.complete(2, 0);
+        occ.increment(2);
+        occ.update_mark(0);
         kmer = occ.kmer();
         dbg_assert_eq!(kmer.dna, 0x95);
         dbg_assert_eq!(kmer.rc, 0xfc);
@@ -268,16 +272,20 @@ mod tests {
         let kc = KmerConst::new(READLEN, SEQLEN);
         let mut occ = Scope::new((0, 100), &kc, 0);
         for _ in 0..8 {
-            occ.complete(0, 0);
+            occ.increment(0);
+            occ.update_mark(0);
         }
         for _ in 0..8 {
-            occ.complete(1, 0);
+            occ.increment(1);
+            occ.update_mark(0);
         }
         for _ in 0..8 {
-            occ.complete(2, 0);
+            occ.increment(2);
+            occ.update_mark(0);
         }
         for _ in 0..8 {
-            occ.complete(3, 0);
+            occ.increment(3);
+            occ.update_mark(0);
         }
     }
 }

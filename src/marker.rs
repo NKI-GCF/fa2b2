@@ -170,10 +170,10 @@ impl<'a> KmerIter<'a> {
     }
 
     fn is_repetitive(&self, b2: u8, i: usize) -> bool {
-        match self.period.and_then(|d| {
-            assert!(d != 0);
-            self.ks.b2_for_p(self.scp[i].p - d).ok()
-        }) {
+        match self
+            .period
+            .and_then(|d| self.ks.b2_for_p(self.scp[i].p - d).ok())
+        {
             Some(old_b2) => old_b2 == b2,
             _ => false,
         }
@@ -239,7 +239,7 @@ impl<'a> KmerIter<'a> {
                             // repeat, then an xmers could recur at irregular intervals.
                             // but then the xmer out of line is extended and gets its own period,
                             // so it resolves that way too.
-                            if dist % period == 0 {
+                            if dist != 0 && dist % period == 0 {
                                 // XXX A xmer could recur exacly on period but not be a(n exact) repeat.
                                 self.ks.extend_repetitive(idx, dist as u32);
                             }

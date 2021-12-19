@@ -118,9 +118,13 @@ pub trait MidPos: PriExtPosOri {
     fn is_replaceable_by(&self, new_entry: u64) -> bool;
     fn is_set_and_not(&self, other: u64) -> bool;
     fn has_samepos(&self, other: u64) -> bool;
+    fn same_pos_and_ext(&self, new_entry: u64) -> bool;
 }
 
 impl MidPos for u64 {
+    fn same_pos_and_ext(&self, new_entry: u64) -> bool {
+        (*self ^ new_entry) & 0xFFFF_3FFF_FFFF_FFFE == 0
+    }
     fn has_samepos(&self, other: u64) -> bool {
         self.pos() == other.pos() && {
             // XXX: may want to remove this later if orientation doesn't matter
@@ -131,9 +135,7 @@ impl MidPos for u64 {
     fn is_replaceable_by(&self, new_entry: u64) -> bool {
         // blacklisting for smaller extension is setting only extension bits. a value with this
         // extension can be written.
-        self.is_no_pos()
-            || *self <= new_entry.extension()
-            || (self.extension() == new_entry.extension() && self.has_samepos(new_entry))
+        self.is_no_pos() || *self <= new_entry.extension() || self.same_pos_and_ext(new_entry)
     }
     fn is_set_and_not(&self, other: u64) -> bool {
         self.is_set() && !self.is_same(other)

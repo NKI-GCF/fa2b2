@@ -161,26 +161,23 @@ impl<T: PriExtPosOri> KmerLoc<T> {
         self.p = p;
         self.p.set_extension(x as u64);
     }
-
-    /*pub fn priority(&self) -> u64 {
-        self.p.to_u64().unwrap() & 0x8000_0000_0000_0000
-    }*/
-    /*pub fn next(&mut self, ori: bool, is_template: bool) {
-    self.p.set_ori(if ori {1} else {0});*/
-    pub fn next(&mut self, p: u64, is_template: bool) {
-        if is_template {
-            self.p.incr()
-        } else {
-            self.p.decr()
-        }
-        self.p.set_ori(p);
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use rand::{thread_rng, Rng};
+
+    impl<T: PriExtPosOri> KmerLoc<T> {
+        fn next(&mut self, p: u64, is_template: bool) {
+            if is_template {
+                self.p.incr()
+            } else {
+                self.p.decr()
+            }
+            self.p.set_ori(p);
+        }
+    }
     #[test]
     fn forward() {
         let mut rng = thread_rng();

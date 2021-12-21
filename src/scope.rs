@@ -37,20 +37,22 @@ impl<'a> Scope<'a> {
         plim: (u64, u64),
         p: u64,
     ) -> Result<bool> {
-        // FIXME: dit zou hetzelfde resultaat moeten geven!
-        // self.p = p.extension() | plim.0;
-        self.p = self.kc.leftmost_of_scope(p, plim.0);
-
-        /* Er gaat iets niet goed met bij repetition toewijzing, afh. van scope
-        rebuilding. Indien met plim.0 geeft dit andere aantallen voor repetition
-        dan wanneer de first 2bit in scope wordt gebruikt. Voor de meeste contigs
-        levert het meer repetition op, maar enkele hebben minder. Duizendtallen op
-        de primary contigs.
-        De positie waarvoor gerebuild wordt zou een repetition kunnen zijn, of
-        duplicate, maar repetition wordt alleen geteld bij nieuwe sequence. Dus afh
+        /* Er gaat iets mis, blijkt uit repetitie telling die afwijkt afhankelijk
+        van de scope heropbouw. Indien met plim.0, geeft dit andere repetition
+        aantallen dan wanneer de eerste 2bit in scope wordt gebruikt. Voor de
+        meeste contigs meer repetitie, enkele minder. Duizendtallen op de primary
+        contigs.
+        De positie waarvoor herbouwt wordt zou een repetition of duplicaat kunnen
+        zijn, maar repetition wordt alleen geteld bij nieuwe sequentie. Dus afh
         van scope rebuilding moeten er verschillende xmers 'bezet' zijn, wat dan
         invloed heeft op de telling bij nieuwe sequence, lijkt mij de logischte
         verklaring. */
+
+        // FIXME: dit zou hetzelfde resultaat moeten geven!
+        // TODO: verbeter rebuild code en test impact hierop.
+        // Minder of geen verschil bij deze twee alternatieven is beter:
+        // self.p = p.extension() | plim.0;
+        self.p = self.kc.leftmost_of_scope(p, plim.0);
 
         self.plim = plim;
         self.i = 0;
@@ -112,7 +114,7 @@ impl<'a> Scope<'a> {
         // XXX: function is very hot
         if self.i >= self.kc.kmerlen {
             for x in x_start..=self.p.x() {
-                if self.is_xmer_complete(x) && dbgx!(self.set_if_optimum(0, x, self.kc.afstand(x)))
+                if self.is_xmer_complete(x) && dbgx!(self.set_if_optimum(0, x))
                 {
                     return self.all_kmers();
                 }
@@ -128,7 +130,7 @@ impl<'a> Scope<'a> {
         self.increment(b2);
         if self.i >= self.kc.kmerlen {
             for x in x_start..=self.p.x() {
-                if self.is_xmer_complete(x) && dbgx!(self.set_if_optimum(0, x, self.kc.afstand(x)))
+                if self.is_xmer_complete(x) && dbgx!(self.set_if_optimum(0, x))
                 {
                     return Ok(self.all_kmers());
                 }
@@ -188,7 +190,7 @@ impl<'a> Scope<'a> {
         let afs = self.kc.afstand(x);
         ensure!(self.kc.no_kmers > afs, "Couldn't obtain new mark.");
         for i in 0..(self.kc.no_kmers - afs) {
-            let _ = dbgx!(self.set_if_optimum(i, x, afs));
+            let _ = dbgx!(self.set_if_optimum(i, x));
         }
         dbg_assert!(self.mark.is_set());
         Ok(())
@@ -201,7 +203,7 @@ impl<'a> Scope<'a> {
         // set mark after extension, if possible
         self.mark.reset();
         if self.is_xmer_complete(x) {
-            let _ = dbgx!(self.set_if_optimum(0, x, self.kc.afstand(x)));
+            let _ = dbgx!(self.set_if_optimum(0, x));
         }
 
         while self.p.pos() < self.plim.1 {
@@ -218,8 +220,9 @@ impl<'a> Scope<'a> {
         Ok(())
     }
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
-    fn set_if_optimum(&mut self, i: usize, x: usize, afs: usize) -> bool {
+    fn set_if_optimum(&mut self, i: usize, x: usize) -> bool {
         // XXX function is hot
+        let afs = self.kc.afstand(x)
         let base = self.i - self.kc.kmerlen;
         let d_i = base.wrapping_sub(i) % self.kc.no_kmers;
         let mut xmer = self.d[d_i];
@@ -229,9 +232,7 @@ impl<'a> Scope<'a> {
             xmer.hash(self.d[d_i2]);
         }
         let mut p = self.p.with_ext(x) - ((afs + i) << 1) as u64;
-        if xmer.is_template() {
-            p |= 1;
-        }
+        p ^= (p ^ xmer.is_template() {1} else {0}) & 1;
         let hash = xmer.get_idx();
         let ret = self.hash_is_optimum(hash, p);
         if ret {

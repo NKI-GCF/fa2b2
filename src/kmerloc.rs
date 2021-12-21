@@ -27,6 +27,7 @@ pub trait PriExtPosOri: Clone {
     fn is_dup(&self) -> bool;
     fn set_repetitive(&mut self);
     fn is_repetitive(&self) -> bool;
+    //fn ext_max() -> Self;
 }
 
 impl PriExtPosOri for u64 {
@@ -37,10 +38,10 @@ impl PriExtPosOri for u64 {
         *self
     }
     fn pos(&self) -> u64 {
-        *self & 0x_3FFF_FFFF_FFFE
+        *self & 0xF_FFFF_FFFF_FFFE
     }
     fn no_pos() -> Self {
-        0x_3FFF_FFFF_FFFE
+        0xF_FFFF_FFFF_FFFE
     }
     fn clear(&mut self) {
         *self = PriExtPosOri::no_pos();
@@ -64,10 +65,10 @@ impl PriExtPosOri for u64 {
         *self -= 0x2;
     }
     fn extension(&self) -> u64 {
-        self & 0xFFFF_0000_0000_0000
+        self & 0xFF00_0000_0000_0000
     }
     fn x(&self) -> usize {
-        (self.extension() >> 48) as usize
+        (self.extension() >> 56) as usize
     }
     fn same_ori(&self, p: u64) -> bool {
         self.get_ori() == (p & 1)
@@ -78,39 +79,44 @@ impl PriExtPosOri for u64 {
     }
     fn blacklist(&mut self) {
         if self.is_set() {
-            *self &= !0x_3FFF_FFFF_FFFF;
+            *self &= !0xF_FFFF_FFFF_FFFF;
             self.extend();
         }
     }
     fn extend(&mut self) {
-        *self += 1 << 48;
+        *self += 1 << 56;
     }
     fn set_extension(&mut self, x: u64) {
-        dbg_assert!(x <= 0xFFFF);
-        *self &= 0x3FFF_FFFF_FFFF;
-        *self |= x << 48;
+        dbg_assert!(x <= 0xFF);
+        *self &= 0xF_FFFF_FFFF_FFFF;
+        *self |= x << 56;
     }
     fn clear_extension(&mut self) {
-        *self &= 0x_3FFF_FFFF_FFFF;
+        *self &= 0xF_FFFF_FFFF_FFFF;
     }
     fn is_same(&self, other: u64) -> bool {
         *self == other
     }
     fn with_ext(&self, x: usize) -> u64 {
-        self.pos() | ((x as u64) << 48)
+        self.pos() | ((x as u64) << 56)
     }
     fn set_dup(&mut self) {
-        *self |= 0x_8000_0000_0000;
+        *self |= 0x80_0000_0000_0000;
     }
     fn is_dup(&self) -> bool {
-        *self & 0x_8000_0000_0000 != 0
+        *self & 0x80_0000_0000_0000 != 0
     }
     fn set_repetitive(&mut self) {
-        *self |= 0x_4000_0000_0000;
+        *self |= 0x40_0000_0000_0000;
     }
     fn is_repetitive(&self) -> bool {
-        *self & 0x_4000_0000_0000 != 0
+        *self & 0x40_0000_0000_0000 != 0
     }
+    /* does not work because extension is currently limited by readlen.
+     * could maybe instead also shift base kmer or bits
+     * fn ext_max() -> Self {
+        0xFF
+    }*/
 }
 
 /// for extended kmers, where position is midpoint
@@ -123,7 +129,7 @@ pub trait MidPos: PriExtPosOri {
 
 impl MidPos for u64 {
     fn same_pos_and_ext(&self, new_entry: u64) -> bool {
-        (*self ^ new_entry) & 0xFFFF_3FFF_FFFF_FFFE == 0
+        (*self ^ new_entry) & 0xFF0F_FFFF_FFFF_FFFE == 0
     }
     fn has_samepos(&self, other: u64) -> bool {
         self.pos() == other.pos() && {

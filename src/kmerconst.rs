@@ -59,16 +59,11 @@ impl KmerConst {
         cmp::min(afstand(x, self.kmerlen), self.readlen)
     }
 
-    pub fn get_kmer_boundaries(&self, p: u64, contig_start: u64, contig_end: u64) -> (u64, u64) {
-        let p_rl = (self.readlen << 1) as u64;
-
-        let left = if p >= contig_start + p_rl {
-            p - p_rl
-        } else {
-            contig_start
-        };
-        let right = cmp::min(p + ((self.readlen - self.kmerlen) << 1) as u64, contig_end);
-        (left, right)
+    pub fn get_kmer_boundaries(&self, p: u64, contig: (u64, u64)) -> (u64, u64) {
+        (
+            cmp::max(p.saturating_sub(self.readlen as u64 * 2), contig.0),
+            cmp::min(p + (self.no_kmers as u64 - 1) * 2, contig.1),
+        )
     }
 
     /// with given extension, create bitmask to flip high bits before extreme minimization
@@ -76,7 +71,7 @@ impl KmerConst {
     // one added because index is shortened (kmer index top bit flipped, if set)
     // XXX could use a lookup array instead?
     pub fn ext_domain(&self, x: usize) -> usize {
-        x.swap_bits() >> ((size_of::<usize>() << 3) - self.bitlen + 1)
+        x.swap_bits() >> ((size_of::<usize>() * 8) - self.bitlen + 1)
     }
 
     pub fn leftmost_of_scope(&self, p: u64, plim_0: u64) -> u64 {

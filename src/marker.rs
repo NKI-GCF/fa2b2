@@ -52,9 +52,9 @@ impl<'a> KmerIter<'a> {
 
     /// When rebuilding and exteniding scp for recurrent kmer, mind contig boundaries
     fn get_contig_limits(&self, p: u64) -> (u64, u64) {
-        let p = p.pos();
-        let (contig_start, contig_end) = self.ks.get_contig_start_end_for_p(p);
-        self.kc.get_kmer_boundaries(p, contig_start, contig_end)
+        let pos = p.pos();
+        self.kc
+            .get_kmer_boundaries(pos, self.ks.get_contig_start_end_for_p(pos))
     }
 
     /// rebuild scp until scp.mark.p reaches stored position.

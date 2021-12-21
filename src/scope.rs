@@ -31,13 +31,39 @@ impl<'a> Scope<'a> {
         }
     }
 
-    pub fn set(&mut self, plim: (u64, u64), ext: u64) {
+    pub fn rebuild<T: PriExtPosOri>(
+        &mut self,
+        ks: &KmerStore<T>,
+        plim: (u64, u64),
+        p: u64,
+    ) -> Result<bool> {
+        let ext = p.extension();
+        // FIXME FIXME: waarom beginnen bij plim.0 ???
         self.p = ext | plim.0;
         self.plim = plim;
         self.i = 0;
         self.mod_i = 0;
-        self.mark.idx = usize::max_value();
-        self.mark.p = ext;
+        self.mark.reset();
+
+        let x = p.x();
+        loop {
+            let b2 = ks.b2_for_p(self.p).unwrap();
+            dbg_print!("=> b2 {:x}, p: {:#x} <=", b2, self.p);
+            if self.complete_and_update_mark(b2, x)? {
+                // komt voor aangezien start p soms te vroeg is. e.g. 2/3:C<AA|A>AA.
+                self.set_next_mark()?;
+                // XXX ik snap dit niet er is verschil in output zonder, maar.. we
+                // hebben next_mark toch net gezet?
+            }
+            if self.mark.p == p {
+                break;
+            }
+            if self.p.pos() >= self.plim.1 {
+                self.p.clear();
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     fn is_xmer_complete(&self, x: usize) -> bool {
@@ -156,7 +182,7 @@ impl<'a> Scope<'a> {
         Ok(())
     }
 
-    /// continue rebuild
+    /// continue rebuild //FIXME: rewrite, if this function is necessary.
     pub fn extend_kmer_stack<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) -> Result<()> {
         let x = self.p.x();
 

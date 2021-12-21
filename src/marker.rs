@@ -60,28 +60,8 @@ impl<'a> KmerIter<'a> {
     /// rebuild scp until scp.mark.p reaches stored position.
     fn rebuild_scope(&mut self, stored: u64) -> Result<bool> {
         ensure!(stored.pos() != PriExtPosOri::no_pos());
-        let x = stored.x();
         let contig_limits = self.get_contig_limits(stored);
-        let scp = &mut self.scp[1];
-
-        scp.set(contig_limits, stored.extension());
-
-        loop {
-            let b2 = self.ks.b2_for_p(scp.p).unwrap();
-            dbg_print!("=> b2 {:x}, p: {:#x} <=", b2, scp.p);
-            if scp.complete_and_update_mark(b2, x)? {
-                // komt voor aangezien start p soms te vroeg is. e.g. 2/3:C<AA|A>AA.
-                scp.set_next_mark()?;
-            }
-            if scp.mark.p == stored {
-                break;
-            }
-            if scp.p.pos() >= scp.plim.1 {
-                scp.p.clear();
-                return Ok(false);
-            }
-        }
-        Ok(true)
+        self.scp[1].rebuild(self.ks, contig_limits, stored)
     }
 
     fn set_idx_pos(&mut self, idx: usize, p: u64) {
@@ -201,7 +181,7 @@ impl<'a> KmerIter<'a> {
                         self.scp[1].p.clear();
                     }
                 }
-                // er mist een check of we tegen het einde van de contig aanlopen.
+                // check of we tegen het einde van de contig, of read sequence aanlopen.
                 if self.scp[1].p.pos() != cmp::min(self.scp[1].plim.1, self.scp[0].p.pos()) {
                     continue;
                 }

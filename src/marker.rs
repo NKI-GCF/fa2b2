@@ -267,9 +267,11 @@ impl<'a> KmerIter<'a> {
             dbgx!(self.finalize_n_stretch());
         }
         if chrname != "test" {
+            let complex = tot - repetitive - n_count;
             println!(
-                "chromosome {}\ttot:{}(complex dna:{:.2}%)\trepetitive:{}({:.2}%)\tN-count:{}({:.2}%)\t",
+                "chromosome {}\tcomplex dna:{} of {}({:.2}%)\trepetitive:{}({:.2}%)\tN-count:{}({:.2}%)\t",
                 chrname,
+                complex,
                 tot,
                 100.0 * (tot - repetitive - n_count) as f64 / tot as f64,
                 repetitive,

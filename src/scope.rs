@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::kmer::Kmer;
-pub use crate::kmerconst::KmerConst;
+use crate::kmerconst::KmerConst;
 use crate::kmerloc::{KmerLoc, PriExtPosOri};
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
@@ -37,9 +37,21 @@ impl<'a> Scope<'a> {
         plim: (u64, u64),
         p: u64,
     ) -> Result<bool> {
-        let ext = p.extension();
-        // FIXME FIXME: waarom beginnen bij plim.0 ???
-        self.p = ext | plim.0;
+        // FIXME: dit zou hetzelfde resultaat moeten geven!
+        // self.p = p.extension() | plim.0;
+        self.p = self.kc.leftmost_of_scope(p, plim.0);
+
+        /* Er gaat iets niet goed met bij repetition toewijzing, afh. van scope
+        rebuilding. Indien met plim.0 geeft dit andere aantallen voor repetition
+        dan wanneer de first 2bit in scope wordt gebruikt. Voor de meeste contigs
+        levert het meer repetition op, maar enkele hebben minder. Duizendtallen op
+        de primary contigs.
+        De positie waarvoor gerebuild wordt zou een repetition kunnen zijn, of
+        duplicate, maar repetition wordt alleen geteld bij nieuwe sequence. Dus afh
+        van scope rebuilding moeten er verschillende xmers 'bezet' zijn, wat dan
+        invloed heeft op de telling bij nieuwe sequence, lijkt mij de logischte
+        verklaring. */
+
         self.plim = plim;
         self.i = 0;
         self.mod_i = 0;

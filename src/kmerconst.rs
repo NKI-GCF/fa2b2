@@ -1,7 +1,7 @@
 use crate::kmerloc::PriExtPosOri;
 use crate::rdbg::STAT_DB;
 use bit_reverse::ParallelReverse;
-use std::cmp::min;
+use std::cmp;
 use std::mem::size_of;
 
 pub struct KmerConst {
@@ -56,7 +56,7 @@ impl KmerConst {
         }
     }
     pub fn afstand(&self, x: usize) -> usize {
-        min(afstand(x, self.kmerlen), self.readlen)
+        cmp::min(afstand(x, self.kmerlen), self.readlen)
     }
 
     pub fn get_kmer_boundaries(&self, p: u64, contig_start: u64, contig_end: u64) -> (u64, u64) {
@@ -67,7 +67,7 @@ impl KmerConst {
         } else {
             contig_start
         };
-        let right = min(p + ((self.readlen - self.kmerlen) << 1) as u64, contig_end);
+        let right = cmp::min(p + ((self.readlen - self.kmerlen) << 1) as u64, contig_end);
         (left, right)
     }
 
@@ -77,5 +77,12 @@ impl KmerConst {
     // XXX could use a lookup array instead?
     pub fn ext_domain(&self, x: usize) -> usize {
         x.swap_bits() >> ((size_of::<usize>() << 3) - self.bitlen + 1)
+    }
+
+    pub fn leftmost_of_scope(&self, p: u64, plim_0: u64) -> u64 {
+        cmp::max(
+            plim_0 | p.extension(),
+            p.saturating_sub((self.no_kmers + self.afstand(p.x())) as u64),
+        )
     }
 }

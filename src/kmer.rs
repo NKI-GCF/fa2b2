@@ -86,8 +86,25 @@ where
         }
     }
     /// return an index specific per sequence but the same for the other orientation
-    pub fn get_idx(&self) -> usize {
-        let seq = T::to_usize(cmp::min(&self.dna, &self.rc)).unwrap();
+    pub fn get_idx(&self, use_min: bool) -> usize {
+        let seq = T::to_usize(if (self.dna < self.rc) == use_min {
+            &self.dna
+        } else {
+            &self.rc
+        })
+        .unwrap();
+
+        // flipped if the top bit is set, to reduce size.
+        let overbit = 1 << (T::to_u64(&self.topb2).unwrap() + 1);
+        if (seq & overbit) == 0 {
+            seq
+        } else {
+            (overbit - 1) & !seq
+        }
+    }
+
+    pub fn get_idx_complement(&self) -> usize {
+        let seq = T::to_usize(cmp::max(&self.dna, &self.rc)).unwrap();
 
         // flipped if the top bit is set, to reduce size.
         let overbit = 1 << (T::to_u64(&self.topb2).unwrap() + 1);
@@ -131,7 +148,7 @@ mod tests {
         }
         dbg_assert_eq!(kmer.dna, 0xE4E4E4E4E4E4E4E4); // GTCAGTCAGTCAGTCA => 3210321032103210 (in 2bits)
         dbg_assert_eq!(kmer.rc, 0xB1B1B1B1B1B1B1B1); // xor 0xaaaaaaaa and reverse per 2bit
-        dbg_assert_eq!(kmer.get_idx(), 0x4E4E4E4E4E4E4E4E); // highest bit is set, so flipped.
+        dbg_assert_eq!(kmer.get_idx(true), 0x4E4E4E4E4E4E4E4E); // highest bit is set, so flipped.
     }
     #[test]
     fn test_u32() {
@@ -141,7 +158,7 @@ mod tests {
         }
         dbg_assert_eq!(kmer.dna, 0xE4E4E4E4);
         dbg_assert_eq!(kmer.rc, 0xB1B1B1B1);
-        dbg_assert_eq!(kmer.get_idx(), 0x4E4E4E4E);
+        dbg_assert_eq!(kmer.get_idx(true), 0x4E4E4E4E);
     }
     #[test]
     fn test_u8() {
@@ -151,7 +168,7 @@ mod tests {
         }
         dbg_assert_eq!(kmer.dna, 0xE4);
         dbg_assert_eq!(kmer.rc, 0xB1);
-        dbg_assert_eq!(kmer.get_idx(), 0x4E);
+        dbg_assert_eq!(kmer.get_idx(true), 0x4E);
     }
     #[test]
     fn test_usize() {
@@ -161,7 +178,7 @@ mod tests {
         }
         dbg_assert_eq!(kmer.dna, 0xE4E4E4E4E4E4E4E4);
         dbg_assert_eq!(kmer.rc, 0xB1B1B1B1B1B1B1B1);
-        dbg_assert_eq!(kmer.get_idx(), 0x4E4E4E4E4E4E4E4E);
+        dbg_assert_eq!(kmer.get_idx(true), 0x4E4E4E4E4E4E4E4E);
     }
     #[test]
     fn unique() {
@@ -171,7 +188,7 @@ mod tests {
             for j in 0..4 {
                 kmer.add((i >> (j << 1)) & 3);
             }
-            let x = (if kmer.is_template() { 1 } else { 0 }) | kmer.get_idx() << 1;
+            let x = (if kmer.is_template() { 1 } else { 0 }) | kmer.get_idx(true) << 1;
             dbg_assert!(!seen[x], "0x{:x} already seen!", x);
             seen[x] = true;
         }
@@ -204,7 +221,7 @@ mod tests {
             if i == pick {
                 test_dna = kmer.dna;
                 test_rc = kmer.rc;
-                test_idx = kmer.get_idx();
+                test_idx = kmer.get_idx(true);
                 test_ori = kmer.dna < kmer.rc;
             }
         }

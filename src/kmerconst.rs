@@ -10,17 +10,7 @@ pub struct KmerConst {
     pub bitlen: usize,
     pub readlen: usize,
     pub ext_max: usize,
-}
-
-fn afstand(x: usize, kmerlen: usize) -> usize {
-    let t = if x == 0 { 0 } else { 1 << (x - 1) };
-    if t <= kmerlen {
-        t
-    } else {
-        let n = kmerlen.next_power_of_two().trailing_zeros() as usize;
-        // (x - log2(kmerlen)) * kmerlen
-        (x - n) * kmerlen
-    }
+    pub extension: [(u8, u8); 256],
 }
 
 impl KmerConst {
@@ -35,28 +25,48 @@ impl KmerConst {
         let kmerlen = bitlen / 2;
         // e.g. with a RL 4 & KL 2: (0,1), (1,2), (2,3) => 3 kmers.
         let no_kmers = readlen - kmerlen + 1;
-        let mut p = 0;
-        while {
-            p.extend();
-            afstand(p.x(), kmerlen) < no_kmers
-        } {}
+
+        let mut extension = [(0, 0); 256];
+        let mut i = 0;
+        let mut j = 0;
+        for element in extension.as_mut_slice() {
+            *element = (i, j);
+            match i.cmp(&j) {
+                cmp::Ordering::Less => i += 1,
+                cmp::Ordering::Greater => {
+                    j += 1;
+                    if i == j {
+                        i = 0;
+                    }
+                }
+                cmp::Ordering::Equal => {
+                    j = 0;
+                    i += 1;
+                }
+            }
+        }
+
         dbg_restart!(
             "Genome size: {}, readlen: {}, kmerlen: {}, ext_max: {}\n--",
             genomesize,
             readlen,
             kmerlen,
-            p.x()
+            0xff
         );
         KmerConst {
             no_kmers,
             kmerlen,
             bitlen,
             readlen,
-            ext_max: p.x(),
+            ext_max: 0xff,
+            extension,
         }
     }
     pub fn afstand(&self, x: usize) -> usize {
-        cmp::min(afstand(x, self.kmerlen), self.readlen)
+        cmp::min(
+            cmp::max(self.extension[x].0, self.extension[x].1) as usize,
+            self.readlen,
+        )
     }
 
     pub fn get_kmer_boundaries(&self, p: u64, contig: (u64, u64)) -> (u64, u64) {

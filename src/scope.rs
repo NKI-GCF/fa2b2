@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use crate::kmer::Kmer;
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::{KmerLoc, PriExtPosOri};
@@ -64,20 +62,15 @@ impl<'a> Scope<'a> {
             let b2 = ks.b2_for_p(self.p).unwrap();
             dbg_print!("=> b2 {:x}, p: {:#x} <=", b2, self.p);
             if self.complete_and_update_mark(b2, x)? {
-                // komt voor aangezien start p soms te vroeg is. e.g. 2/3:C<AA|A>AA.
-                self.set_next_mark()?;
-                // XXX ik snap dit niet er is verschil in output zonder, maar.. we
-                // hebben next_mark toch net gezet?
-            }
-            if self.mark.p == p {
-                break;
-            }
-            if self.p.pos() >= self.plim.1 {
-                self.p.clear();
-                return Ok(false);
+                if self.mark.p == p {
+                    return Ok(true);
+                }
+                if self.p.pos() >= self.plim.1 {
+                    self.p.clear();
+                    return Ok(false);
+                }
             }
         }
-        Ok(true)
     }
 
     fn is_xmer_complete(&self, x: usize) -> bool {

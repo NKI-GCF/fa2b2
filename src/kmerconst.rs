@@ -26,6 +26,11 @@ impl KmerConst {
         // e.g. with a RL 4 & KL 2: (0,1), (1,2), (2,3) => 3 kmers.
         let no_kmers = readlen - kmerlen + 1;
 
+        // generate all combinations of 2 kmer positions for extension. overlap and inverse
+        // combinations are allowed, those will result respectively in no xor-hash and a
+        // complemented xor-hash with the max for index.
+        // the order used here maintains the minimum (positional) distance betweens kmers
+        // for all extensions
         let mut extension = [(0, 0); 256];
         let mut i = 0;
         let mut j = 0;

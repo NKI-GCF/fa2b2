@@ -172,7 +172,7 @@ impl<'a> KmerIter<'a> {
                 dbg_print!("=> twobit {:x} (past) <=", b2);
                 match self.scp[1].complete_and_update_mark(b2, 0) {
                     Ok(true) => self.extend_until_writable_optimum()?,
-                    Ok(false) => {}
+                    Ok(false) => continue,
                     Err(e) => {
                         // fixme: use thiserror?
                         if e.to_string() == "end of contig." {

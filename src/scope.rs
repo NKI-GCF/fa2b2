@@ -129,8 +129,8 @@ impl<'a> Scope<'a> {
             if self.all_kmers() {
                 if self.mark_is_leaving() {
                     self.set_next_mark()?;
+                    return Ok(true);
                 }
-                return Ok(true);
             }
         }
         return Ok(false);

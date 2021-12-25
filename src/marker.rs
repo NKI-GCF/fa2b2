@@ -113,12 +113,13 @@ impl<'a> KmerIter<'a> {
                     if self.ks.kmp[min_idx].is_no_pos() {
                         self.set_idx_pos(min_idx, min_p);
                     }
+                    // if we were fixing the past, we're done. without a test we just clear.
                     self.scp[1].p.clear();
                     return Ok(());
                 }
             } else if dbgx!(stored_p.extension() == min_p.extension()) {
-                // If a kmer occurs multiple times within an extending readlength, only
-                // the first gets a position. During mapping this rule also should apply.
+                // If a kmer occurs multiple times within an extending readlength (repetition),
+                // only the first gets a position. During mapping this rule should also apply.
                 // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
                 let scp = self.get_scp();
                 let stored_pos = stored_p.pos();

@@ -102,7 +102,6 @@ impl<'a> Scope<'a> {
 
     /// add b2 to kmer, move .p according to occ orientation
     /// return whether required nr of kmers for struct scope were seen.
-    // hierin vinden .i & .p increments and kmer .d[] update plaats. geen kmer ? false.
     fn update_mark(&mut self, x_start: usize) -> bool {
         // XXX: function is very hot
         if self.i >= self.kc.kmerlen {
@@ -117,6 +116,7 @@ impl<'a> Scope<'a> {
         }
     }
 
+    // hierin vinden .i & .p increments and kmer .d[] update plaats.
     pub fn complete_and_update_mark(&mut self, b2: u8, x_start: usize) -> Result<bool> {
         // XXX: function is very hot
         self.increment(b2);
@@ -206,7 +206,8 @@ impl<'a> Scope<'a> {
             let base = self.i - self.kc.kmerlen;
             let d = i + e.0 as usize;
             let nk = self.kc.no_kmers;
-            let mut hash = self.d[base.wrapping_sub(d) % nk].get_idx(e.0 <= e.1);
+            let kmer1 = self.d[base.wrapping_sub(d) % nk];
+            let mut hash = kmer1.get_idx(e.0 <= e.1);
             let mut p = match hash.cmp(&self.mark.idx) {
                 cmp::Ordering::Less => self.p.with_ext(x) - (d << 1) as u64,
                 cmp::Ordering::Greater => return false,
@@ -220,14 +221,14 @@ impl<'a> Scope<'a> {
             };
             p ^= match e.0.cmp(&e.1) {
                 cmp::Ordering::Less => {
-                    hash ^= self.d[base.wrapping_sub(i + e.0 as usize) % nk].get_idx(true);
-                    (p ^ 1) & 1
-                }
-                cmp::Ordering::Greater => {
-                    hash ^= self.d[base.wrapping_sub(i + e.0 as usize) % nk].get_idx(false);
+                    hash ^= self.d[base.wrapping_sub(i + e.1 as usize) % nk].get_idx(true);
                     p & 1
                 }
-                cmp::Ordering::Equal => (p ^ hash as u64) & 1,
+                cmp::Ordering::Greater => {
+                    hash ^= self.d[base.wrapping_sub(i + e.1 as usize) % nk].get_idx(false);
+                    !p & 1
+                }
+                cmp::Ordering::Equal => (p ^ kmer1.dna) & 1,
             };
             dbgf!(
                 self.mark.set(hash, p, x),

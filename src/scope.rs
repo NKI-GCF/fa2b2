@@ -108,7 +108,7 @@ impl<'a> Scope<'a> {
         if self.i >= self.kc.kmerlen {
             for x in x_start..=self.p.x() {
                 if self.set_if_optimum(0, x) {
-                    return self.all_kmers();
+                    return dbgf!(self.all_kmers(), "[update_mark()]: {}");
                 }
             }
             self.mark.is_set() && self.all_kmers()
@@ -123,21 +123,18 @@ impl<'a> Scope<'a> {
         if self.i >= self.kc.kmerlen {
             for x in x_start..=self.p.x() {
                 if self.set_if_optimum(0, x) {
-                    return Ok(self.all_kmers());
+                    return Ok(dbgf!(self.all_kmers(), "[complete_and_update_mark()]: {}"));
                 }
             }
-            if self.all_kmers() {
-                if self.mark_is_leaving() {
-                    self.set_next_mark()?;
-                    return Ok(true);
-                }
+            if self.mark_is_first_or_leaving() {
+                self.set_next_mark()?;
+                return Ok(true);
             }
         }
         return Ok(false);
     }
 
     /// extend positie (als kmer/hash niet replaceble was); true indien mogelijk.
-    // waar wordt dit ongedaan gemaakt??
     pub fn extend(&mut self) -> bool {
         let ret = self.p.x() + 1 < self.kc.ext_max;
         if ret {
@@ -151,12 +148,17 @@ impl<'a> Scope<'a> {
         self.i >= self.kc.readlen
     }
 
-    /// is de minimum/optimum leaving?
-    fn mark_is_leaving(&self) -> bool {
-        //let afs = self.kc.afstand(self.mark.p.x());
-        let p_pos = self.p.pos();
-        let dist = (self.kc.no_kmers << 1) as u64;
-        p_pos >= self.mark.p.pos() + dist
+    /// is de minimum/optimum leaving? eerste is speciaal.
+    fn mark_is_first_or_leaving(&self) -> bool {
+        match self.i.cmp(&self.kc.readlen) {
+            cmp::Ordering::Greater => {
+                let p_pos = self.p.pos();
+                let dist = (self.kc.no_kmers << 1) as u64;
+                p_pos >= self.mark.p.pos() + dist
+            }
+            cmp::Ordering::Less => false,
+            cmp::Ordering::Equal => true,
+        }
     }
 
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)
@@ -165,7 +167,7 @@ impl<'a> Scope<'a> {
         let x = self.p.x();
         let afs = self.kc.afstand(x);
         ensure!(self.kc.no_kmers > afs, "Couldn't obtain new mark.");
-        for i in 0..(self.kc.no_kmers - afs) {
+        for i in (0..(self.kc.no_kmers - afs)).rev() {
             let _ = self.set_if_optimum(i, x);
         }
         dbg_assert!(self.mark.is_set());
@@ -185,7 +187,7 @@ impl<'a> Scope<'a> {
         while self.p.pos() < self.plim.1 {
             let b2 = ks.b2_for_p(self.p).unwrap();
             self.increment(b2);
-            if self.update_mark(x) && self.mark_is_leaving() {
+            if self.update_mark(x) && self.mark_is_first_or_leaving() {
                 self.set_next_mark()?;
                 if ks.kmp[self.mark.idx].is_same(self.mark.p) {
                     // retracked => finished
@@ -196,7 +198,6 @@ impl<'a> Scope<'a> {
         Ok(())
     }
 
-    // TODO: return option.
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
     fn set_if_optimum(&mut self, i: usize, x: usize) -> bool {
         // XXX function is hot
@@ -206,7 +207,7 @@ impl<'a> Scope<'a> {
             let d = i + e.0 as usize;
             let nk = self.kc.no_kmers;
             let mut hash = self.d[base.wrapping_sub(d) % nk].get_idx(e.0 <= e.1);
-            let p = match hash.cmp(&self.mark.idx) {
+            let mut p = match hash.cmp(&self.mark.idx) {
                 cmp::Ordering::Less => self.p.with_ext(x) - (d << 1) as u64,
                 cmp::Ordering::Greater => return false,
                 cmp::Ordering::Equal => {
@@ -217,9 +218,17 @@ impl<'a> Scope<'a> {
                     p
                 }
             };
-            if e.0 != e.1 {
-                hash ^= self.d[base.wrapping_sub(i + e.0 as usize) % nk].get_idx(true);
-            }
+            p ^= match e.0.cmp(&e.1) {
+                cmp::Ordering::Less => {
+                    hash ^= self.d[base.wrapping_sub(i + e.0 as usize) % nk].get_idx(true);
+                    (p ^ 1) & 1
+                }
+                cmp::Ordering::Greater => {
+                    hash ^= self.d[base.wrapping_sub(i + e.0 as usize) % nk].get_idx(false);
+                    p & 1
+                }
+                cmp::Ordering::Equal => (p ^ hash as u64) & 1,
+            };
             dbgf!(
                 self.mark.set(hash, p, x),
                 "{:?} [{:x}] = {:x} | x({})",

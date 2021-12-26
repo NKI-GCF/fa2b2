@@ -13,7 +13,6 @@ use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
 use anyhow::{anyhow, ensure, Result};
-use std::cmp;
 
 pub struct KmerIter<'a> {
     //steekproefi: u64,
@@ -94,7 +93,8 @@ impl<'a> KmerIter<'a> {
             );
             let (min_idx, min_p) = (self.get_scp().mark.idx, self.get_scp().mark.p);
             dbg_assert!(min_idx < self.ks.kmp.len(), "{:x}, {:x}", min_idx, min_p);
-            let stored_p = self.ks.kmp[min_idx];
+            let stored_p =
+                self.ks.kmp[dbgf!(min_idx, "{:x} {:x}, {:x}", min_p, self.ks.kmp[min_idx])];
 
             if dbgx!(stored_p.is_replaceable_by(min_p)) {
                 //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
@@ -123,7 +123,7 @@ impl<'a> KmerIter<'a> {
                 // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
                 let scp = self.get_scp();
                 let stored_pos = stored_p.pos();
-                if stored_pos >= scp.plim.0.pos() && stored_pos < scp.plim.1.pos() {
+                if dbgx!(stored_pos >= scp.plim.0.pos() && stored_pos < scp.plim.1.pos()) {
                     let dist = dbgx!(scp.mark.p.pos() - stored_pos);
                     assert!(dist != 0);
 
@@ -183,7 +183,8 @@ impl<'a> KmerIter<'a> {
                     }
                 }
                 // check of we tegen het einde van de contig, of read sequence aanlopen.
-                if self.scp[1].p.pos() != cmp::min(self.scp[1].plim.1, self.scp[0].p.pos()) {
+                if self.scp[1].p.pos() != self.scp[0].p.pos() {
+                    assert!(self.scp[1].p.pos() != self.scp[1].plim.1);
                     continue;
                 }
                 self.scp[1].p.clear();

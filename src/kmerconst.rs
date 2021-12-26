@@ -1,8 +1,6 @@
 use crate::kmerloc::PriExtPosOri;
 use crate::rdbg::STAT_DB;
-use bit_reverse::ParallelReverse;
 use std::cmp;
-use std::mem::size_of;
 
 pub struct KmerConst {
     pub no_kmers: usize,
@@ -79,14 +77,6 @@ impl KmerConst {
             cmp::max(p.saturating_sub(self.readlen as u64 * 2), contig.0),
             cmp::min(p + (self.no_kmers as u64 - 1) * 2, contig.1),
         )
-    }
-
-    /// with given extension, create bitmask to flip high bits before extreme minimization
-    /// with this each extension minimizes in its own domain, decreasing ks.kmp sparsity.
-    // one added because index is shortened (kmer index top bit flipped, if set)
-    // XXX could use a lookup array instead?
-    pub fn ext_domain(&self, x: usize) -> usize {
-        x.swap_bits() >> ((size_of::<usize>() * 8) - self.bitlen + 1)
     }
 
     pub fn leftmost_of_scope(&self, p: u64, plim_0: u64) -> u64 {

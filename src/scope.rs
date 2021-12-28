@@ -97,8 +97,8 @@ impl<'a> Scope<'a> {
             self.d[self.mod_i] = old_d;
         }
         // first bit is strand bit, set according to kmer orientation bit.
-        self.p += 2;
-        self.p ^= 1 & (self.p ^ self.d[self.mod_i].update(b2));
+        self.p &= !1;
+        self.p += 2 + self.d[self.mod_i].update(b2);
         self.i += 1;
     }
 

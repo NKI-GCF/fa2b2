@@ -29,12 +29,7 @@ impl<'a> Scope<'a> {
         }
     }
 
-    pub fn rebuild<T: PriExtPosOri>(
-        &mut self,
-        ks: &KmerStore<T>,
-        plim: (u64, u64),
-        p: u64,
-    ) -> Result<bool> {
+    pub fn rebuild<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>, p: u64) -> Result<bool> {
         /* Er gaat iets mis, blijkt uit repetitie telling die afwijkt afhankelijk
         van de scope heropbouw. Indien met plim.0, geeft dit andere repetition
         aantallen dan wanneer de eerste 2bit in scope wordt gebruikt. Voor de
@@ -50,9 +45,14 @@ impl<'a> Scope<'a> {
         // TODO: verbeter rebuild code en test impact hierop.
         // Minder of geen verschil bij deze twee alternatieven is beter:
         // self.p = p.extension() | plim.0;
-        self.p = self.kc.leftmost_of_scope(p, plim.0);
+        let pos = p.pos();
+        ensure!(pos != PriExtPosOri::no_pos());
+        let contig = ks.get_contig_start_end_for_p(pos);
+        let contig_limits = self.kc.get_kmer_boundaries(pos, contig);
 
-        self.plim = plim;
+        self.p = self.kc.leftmost_of_scope(p, contig_limits.0);
+
+        self.plim = contig_limits;
         self.i = 0;
         self.mod_i = 0;
         self.mark.reset();
@@ -66,6 +66,7 @@ impl<'a> Scope<'a> {
                     return Ok(true);
                 }
                 if self.p.pos() >= self.plim.1 {
+                    dbg_print!("kmer not observed for {:x} !!", p);
                     self.p.clear();
                     return Ok(false);
                 }

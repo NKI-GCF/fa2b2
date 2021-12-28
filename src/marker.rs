@@ -21,7 +21,6 @@ pub struct KmerIter<'a> {
     period: Option<u64>,
     pub(super) scp: [Scope<'a>; 2],
     pub(super) ks: &'a mut KmerStore<u64>,
-    pub(super) kc: &'a KmerConst,
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
@@ -37,7 +36,6 @@ impl<'a> KmerIter<'a> {
             period: None,
             scp,
             ks,
-            kc,
         }
     }
 
@@ -47,20 +45,6 @@ impl<'a> KmerIter<'a> {
         self.ks.offset_contig(self.n_stretch);
         self.goffs += self.n_stretch;
         self.n_stretch = 0;
-    }
-
-    /// When rebuilding and exteniding scp for recurrent kmer, mind contig boundaries
-    fn get_contig_limits(&self, p: u64) -> (u64, u64) {
-        let pos = p.pos();
-        self.kc
-            .get_kmer_boundaries(pos, self.ks.get_contig_start_end_for_p(pos))
-    }
-
-    /// rebuild scp until scp.mark.p reaches stored position.
-    fn rebuild_scope(&mut self, stored: u64) -> Result<bool> {
-        ensure!(stored.pos() != PriExtPosOri::no_pos());
-        let contig_limits = self.get_contig_limits(stored);
-        self.scp[1].rebuild(self.ks, contig_limits, stored)
     }
 
     fn set_idx_pos(&mut self, idx: usize, p: u64) {
@@ -93,14 +77,13 @@ impl<'a> KmerIter<'a> {
             );
             let (min_idx, min_p) = (self.get_scp().mark.idx, self.get_scp().mark.p);
             dbg_assert!(min_idx < self.ks.kmp.len(), "{:x}, {:x}", min_idx, min_p);
-            let stored_p =
-                self.ks.kmp[dbgf!(min_idx, "{:x} {:x}, {:x}", min_p, self.ks.kmp[min_idx])];
+            let stored_p = self.ks.kmp[min_idx];
 
-            if dbgx!(stored_p.is_replaceable_by(min_p)) {
+            if stored_p.is_replaceable_by(min_p) {
                 //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
                 // dbg_print!("{}", self.get_scp());
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
-                    if !self.rebuild_scope(stored_p)? {
+                    if !self.scp[1].rebuild(self.ks, stored_p)? {
                         return Ok(());
                     }
                     dbg_print!("resolving past for [{:x}], {:#x}", min_idx, stored_p);
@@ -117,7 +100,7 @@ impl<'a> KmerIter<'a> {
                     self.scp[1].p.clear();
                     return Ok(());
                 }
-            } else if dbgx!(stored_p.extension() == min_p.extension()) {
+            } else if stored_p.extension() == min_p.extension() {
                 // If a kmer occurs multiple times within an extending readlength (repetition),
                 // only the first gets a position. During mapping this rule should also apply.
                 // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
@@ -424,8 +407,8 @@ mod tests {
         for hash in 0..ks_kmp_len {
             let p = kmi.ks.kmp[hash];
             if p.is_set() {
-                kmi.rebuild_scope(p)?;
-                dbg_assert_eq!(kmi.scp[1].mark.p, p);
+                kmi.scp[1].rebuild(&kmi.ks, p)?;
+                dbg_assert_eq!(kmi.scp[1].mark.p, p, "[{}]: {:x}", seen, hash);
                 seen += 1;
             }
         }
@@ -469,7 +452,7 @@ mod tests {
                     let p = kmi.ks.kmp[hash];
                     if p.is_set() {
                         dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
-                        kmi.rebuild_scope(p)?;
+                        kmi.scp[1].rebuild(&kmi.ks, p)?;
                         dbg_assert_eq!(kmi.scp[1].mark.p, p);
                     }
                 }

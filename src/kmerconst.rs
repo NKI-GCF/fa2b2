@@ -78,11 +78,4 @@ impl KmerConst {
             cmp::min(p + (self.no_kmers as u64 - 1) * 2, contig.1),
         )
     }
-
-    pub fn leftmost_of_scope(&self, p: u64, plim_0: u64) -> u64 {
-        cmp::max(
-            plim_0 | p.extension(),
-            p.saturating_sub((self.no_kmers + self.afstand(p.x())) as u64),
-        )
-    }
 }

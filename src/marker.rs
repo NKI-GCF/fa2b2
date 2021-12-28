@@ -83,7 +83,7 @@ impl<'a> KmerIter<'a> {
                 //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
                 // dbg_print!("{}", self.get_scp());
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
-                    if !self.scp[1].rebuild(self.ks, stored_p)? {
+                    if !self.scp[1].rebuild(self.ks, stored_p, min_idx)? {
                         return Ok(());
                     }
                     dbg_print!("resolving past for [{:x}], {:#x}", min_idx, stored_p);
@@ -408,7 +408,7 @@ mod tests {
             let p = kmi.ks.kmp[hash];
             if p.is_set() {
                 dbg_print!("---[ {:#x} ]---", hash);
-                kmi.scp[1].rebuild(&kmi.ks, p)?;
+                kmi.scp[1].rebuild(&kmi.ks, p, hash)?;
                 dbg_assert_eq!(kmi.scp[1].mark.p, p, "[{}]: {:x}", seen, hash);
                 seen += 1;
             }
@@ -453,7 +453,7 @@ mod tests {
                     let p = kmi.ks.kmp[hash];
                     if p.is_set() {
                         dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
-                        kmi.scp[1].rebuild(&kmi.ks, p)?;
+                        kmi.scp[1].rebuild(&kmi.ks, p, hash)?;
                         dbg_assert_eq!(kmi.scp[1].mark.p, p);
                     }
                 }

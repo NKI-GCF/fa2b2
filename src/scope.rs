@@ -29,7 +29,12 @@ impl<'a> Scope<'a> {
         }
     }
 
-    pub fn rebuild<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>, p: u64) -> Result<bool> {
+    pub fn rebuild<T: PriExtPosOri>(
+        &mut self,
+        ks: &KmerStore<T>,
+        p: u64,
+        idx: usize,
+    ) -> Result<bool> {
         /* Er gaat iets mis, blijkt uit repetitie telling die afwijkt afhankelijk
         van de scope heropbouw. Indien met plim.0, geeft dit andere repetition
         aantallen dan wanneer de eerste 2bit in scope wordt gebruikt. Voor de
@@ -48,11 +53,11 @@ impl<'a> Scope<'a> {
         let pos = p.pos();
         ensure!(pos != PriExtPosOri::no_pos());
         let contig = ks.get_contig_start_end_for_p(pos);
-        let contig_limits = self.kc.get_kmer_boundaries(pos, contig);
+        let bound = self.kc.get_kmer_boundaries(pos, contig);
 
-        self.p = self.kc.leftmost_of_scope(p, contig_limits.0);
+        self.p = bound.0 | p.extension();
 
-        self.plim = contig_limits;
+        self.plim = contig;
         self.i = 0;
         self.mod_i = 0;
         self.mark.reset();
@@ -65,8 +70,16 @@ impl<'a> Scope<'a> {
                 if self.mark.p == p {
                     return Ok(true);
                 }
-                if self.p.pos() >= self.plim.1 {
-                    dbg_print!("kmer not observed for {:x} !!", p);
+                if self.mark.idx == idx {
+                    dbg_print!(
+                        "idx {:x} observed but for {:#x}, not {:#x}",
+                        idx,
+                        self.mark.p,
+                        p
+                    );
+                }
+                if self.p.pos() >= bound.1 {
+                    dbg_print!("kmer {:x} not observed for {:x} !!", idx, p);
                     self.p.clear();
                     return Ok(false);
                 }

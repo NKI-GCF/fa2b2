@@ -85,6 +85,7 @@ impl<'a> Scope<'a> {
         self.i >= self.kc.kmerlen + self.kc.afstand(x)
     }
 
+    /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
     pub fn increment(&mut self, b2: u8) {
         // XXX: function is hot
         if self.i >= self.kc.kmerlen {

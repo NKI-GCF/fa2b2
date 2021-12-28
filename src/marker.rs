@@ -407,6 +407,7 @@ mod tests {
         for hash in 0..ks_kmp_len {
             let p = kmi.ks.kmp[hash];
             if p.is_set() {
+                dbg_print!("---[ {:#x} ]---", hash);
                 kmi.scp[1].rebuild(&kmi.ks, p)?;
                 dbg_assert_eq!(kmi.scp[1].mark.p, p, "[{}]: {:x}", seen, hash);
                 seen += 1;

@@ -11,3 +11,5 @@ GRCh38.bin
 rust-unmangle
 flamegraph.pl
 stackcollapse-perf.pl
+perf.out
+tags

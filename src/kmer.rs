@@ -74,10 +74,10 @@ where
     pub fn is_template(&self) -> bool {
         self.dna < self.rc || (self.dna == self.rc && (T::to_u64(&self.dna).unwrap() & 1) != 0)
     }
-    /// return whether orientation needs to be changed
+
+    /// Add twobit to k-mers and return orientation bit as first bit for stored
     pub fn update(&mut self, b2: u8) -> u64 {
         // XXX function is hot
-        // 2 is added for next pos; orientation is set in first bit.
         self.add(b2);
         match self.dna.cmp(&self.rc) {
             cmp::Ordering::Greater => 0,
@@ -85,6 +85,7 @@ where
             cmp::Ordering::Equal => T::to_u64(&self.dna).unwrap() & 1,
         }
     }
+
     /// return an index specific per sequence but the same for the other orientation
     pub fn get_idx(&self, use_min: bool) -> usize {
         let seq = T::to_usize(if (self.dna < self.rc) == use_min {

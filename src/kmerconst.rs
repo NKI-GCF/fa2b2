@@ -6,7 +6,7 @@ pub struct KmerConst {
     pub kmerlen: usize,
     pub bitlen: usize,
     pub venster: usize,
-    extent_mask: usize,
+    max_afstand: usize,
     pub extent: Vec<usize>,
 }
 
@@ -20,7 +20,7 @@ impl KmerConst {
             bitlen += 1
         }
         let kmerlen = bitlen / 2;
-        let max_afstand = (1 << (kmerlen >> 2)) >> 1;
+        let max_afstand = kmerlen / 2;
         let venster = kmerlen + max_afstand;
 
         // e.g. with a RL 4 & KL 2: (0,1), (1,2), (2,3) => 3 kmers.
@@ -49,13 +49,13 @@ impl KmerConst {
             kmerlen,
             bitlen,
             venster,
-            extent_mask: max_afstand - 1,
+            max_afstand,
             extent,
         }
     }
     pub fn get_kmers(&self, x: usize) -> (usize, usize) {
-        let first = self.extent[x] >> (self.kmerlen >> 2);
-        let second = self.extent[x] & self.extent_mask;
+        let first = self.extent[x] >> self.max_afstand;
+        let second = self.extent[x] & (self.max_afstand - 1);
         (first, second)
     }
     pub fn afstand(&self, x: usize) -> usize {

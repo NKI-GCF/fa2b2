@@ -413,7 +413,11 @@ mod tests {
                 seen += 1;
             }
         }
-        dbg_assert_eq!(seen, 29, "the number of seen kmers could change, though");
+        dbg_assert_eq!(
+            seen,
+            23,
+            "XXX: the number of seen kmers could change, though"
+        );
         Ok(())
     }
     #[test]

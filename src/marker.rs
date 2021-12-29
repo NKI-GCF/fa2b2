@@ -275,7 +275,6 @@ mod tests {
     use super::*;
     use crate::kmerconst::KmerConst;
     use anyhow::Result;
-    const READLEN: usize = 16;
     const SEQLEN: usize = 250;
 
     fn process<'a>(ks: &'a mut KmerStore<u64>, kc: &'a KmerConst, seq: Vec<u8>) -> Result<()> {
@@ -285,7 +284,7 @@ mod tests {
 
     #[test]
     fn test_16n() -> Result<()> {
-        let kc = KmerConst::new(READLEN, SEQLEN);
+        let kc = KmerConst::new(SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"NNNNNNNNNNNNNNNN"[..].to_owned())?;
@@ -297,7 +296,7 @@ mod tests {
     }
     #[test]
     fn test_1n() -> Result<()> {
-        let kc = KmerConst::new(READLEN, SEQLEN);
+        let kc = KmerConst::new(SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"N"[..].to_owned())?;
@@ -309,7 +308,7 @@ mod tests {
     }
     #[test]
     fn test_1n1c1n() -> Result<()> {
-        let kc = KmerConst::new(READLEN, SEQLEN);
+        let kc = KmerConst::new(SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"NCN"[..].to_owned())?;
@@ -323,7 +322,7 @@ mod tests {
     }
     #[test]
     fn test_17c() -> Result<()> {
-        let kc = KmerConst::new(READLEN, SEQLEN);
+        let kc = KmerConst::new(SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
@@ -342,7 +341,7 @@ mod tests {
     }
     #[test]
     fn test_1n18c1n() -> Result<()> {
-        let kc = KmerConst::new(READLEN, SEQLEN);
+        let kc = KmerConst::new(SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
@@ -360,7 +359,7 @@ mod tests {
     }
     #[test]
     fn test_1n16c() -> Result<()> {
-        let kc = KmerConst::new(READLEN, SEQLEN);
+        let kc = KmerConst::new(SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
@@ -378,7 +377,7 @@ mod tests {
     }
     #[test]
     fn test_18at() -> Result<()> {
-        let kc = KmerConst::new(READLEN, SEQLEN);
+        let kc = KmerConst::new(SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"ATATATATATATATATAT"[..].to_owned())?;
@@ -395,7 +394,7 @@ mod tests {
     }
     #[test]
     fn test_reconstruct1() -> Result<()> {
-        let kc = KmerConst::new(READLEN, SEQLEN);
+        let kc = KmerConst::new(SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         let ks_kmp_len = ks.kmp.len();
         let mut kmi = KmerIter::new(&mut ks, &kc);
@@ -413,11 +412,11 @@ mod tests {
                 seen += 1;
             }
         }
-        dbg_assert_eq!(seen, 9); // not 100% sure how many this should be
+        dbg_assert_eq!(seen, 29, "the number of seen kmers could change, though");
         Ok(())
     }
     #[test]
-    fn test_reconstruct_gs4_rl1to4_all() -> Result<()> {
+    fn test_reconstruct_gs4_all() -> Result<()> {
         // all mappable.
         let seqlen: usize = 6; //8;
 
@@ -428,34 +427,32 @@ mod tests {
         }
         let kmerlen = bitlen / 2;
 
-        for rl in kmerlen..=seqlen {
-            for gen in 0..=4_usize.pow(seqlen as u32) {
-                let kc = KmerConst::new(rl, seqlen);
-                let mut ks = KmerStore::<u64>::new(kc.bitlen);
-                let ks_kmp_len = ks.kmp.len();
-                let mut kmi = KmerIter::new(&mut ks, &kc);
-                let seq_vec: Vec<_> = (0..seqlen)
-                    .map(|i| match (gen >> (i << 1)) & 3 {
-                        0 => 'A',
-                        1 => 'C',
-                        2 => 'T',
-                        3 => 'G',
-                        _ => dbg_panic!("here"),
-                    })
-                    .collect();
-                dbg_print!("[{:#x}] sequence:\n{:?}", gen, seq_vec);
+        for gen in 0..=4_usize.pow(seqlen as u32) {
+            let kc = KmerConst::new(seqlen);
+            let mut ks = KmerStore::<u64>::new(kc.bitlen);
+            let ks_kmp_len = ks.kmp.len();
+            let mut kmi = KmerIter::new(&mut ks, &kc);
+            let seq_vec: Vec<_> = (0..seqlen)
+                .map(|i| match (gen >> (i << 1)) & 3 {
+                    0 => 'A',
+                    1 => 'C',
+                    2 => 'T',
+                    3 => 'G',
+                    _ => dbg_panic!("here"),
+                })
+                .collect();
+            dbg_print!("[{:#x}] sequence:\n{:?}", gen, seq_vec);
 
-                let vv: Vec<u8> = seq_vec.iter().map(|&c| c as u8).collect();
-                let mut seq = vv.iter();
-                kmi.markcontig::<u64>("test", &mut seq)?;
-                dbg_print!("-- testing hashes --");
-                for hash in 0..ks_kmp_len {
-                    let p = kmi.ks.kmp[hash];
-                    if p.is_set() {
-                        dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
-                        kmi.scp[1].rebuild(&kmi.ks, p, hash)?;
-                        dbg_assert_eq!(kmi.scp[1].mark.p, p);
-                    }
+            let vv: Vec<u8> = seq_vec.iter().map(|&c| c as u8).collect();
+            let mut seq = vv.iter();
+            kmi.markcontig::<u64>("test", &mut seq)?;
+            dbg_print!("-- testing hashes --");
+            for hash in 0..ks_kmp_len {
+                let p = kmi.ks.kmp[hash];
+                if p.is_set() {
+                    dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
+                    kmi.scp[1].rebuild(&kmi.ks, p, hash)?;
+                    dbg_assert_eq!(kmi.scp[1].mark.p, p);
                 }
             }
         }

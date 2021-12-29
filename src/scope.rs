@@ -160,12 +160,12 @@ impl<'a> Scope<'a> {
 
     /// is occ complete? call na complete_kmer() - self.i increment.
     fn all_kmers(&self) -> bool {
-        self.i >= self.kc.readlen
+        self.i >= self.kc.venster
     }
 
     /// is de minimum/optimum leaving? eerste is speciaal.
     fn mark_is_first_or_leaving(&self) -> bool {
-        match self.i.cmp(&self.kc.readlen) {
+        match self.i.cmp(&self.kc.venster) {
             cmp::Ordering::Greater => {
                 let p_pos = self.p.pos();
                 let dist = (self.kc.no_kmers << 1) as u64;
@@ -264,18 +264,18 @@ impl<'a> fmt::Display for Scope<'a> {
         let p = self.p.pos() as usize;
         let mp = self.mark.p.pos() as usize;
         let n = self.kc.kmerlen + self.p.x();
-        let o = " ".repeat(((p >> 1) - self.kc.readlen) * 5);
+        let o = " ".repeat(((p >> 1) - self.kc.venster) * 5);
         let r = (p - mp) >> 1;
         if r == 0 {
-            let x = self.kc.readlen - n;
+            let x = self.kc.venster - n;
             let s = if x != 0 {
                 " ".repeat(x << 2) + "|"
             } else {
                 String::from("")
             };
             write!(f, "{2}<{3}{: ^1$x}>", self.mark.idx, n << 2, o, s)
-        } else if r + self.kc.kmerlen == self.kc.readlen {
-            let x = self.kc.readlen - n;
+        } else if r + self.kc.kmerlen == self.kc.venster {
+            let x = self.kc.venster - n;
             let s = if x != 0 {
                 String::from("|") + &" ".repeat(x << 2)
             } else {
@@ -283,7 +283,7 @@ impl<'a> fmt::Display for Scope<'a> {
             };
             write!(f, "{2}<{: ^1$x}{3}>", self.mark.idx, n << 2, o, s)
         } else {
-            //let l = self.kc.readlen - r - n;
+            //let l = self.kc.venster - r - n;
             //let ls = if o {" ".repeat(o) + "|"} else {String::from("")};
             //let rs = if l {String::from("|") + &" ".repeat(l << 2)} else {String::from("")};
             //write!(f, "{2}<{3}|{: ^1$x}|{4}>", self.mark.idx, n << 2, o, ls, rs)
@@ -303,12 +303,11 @@ mod tests {
         }
     }
 
-    const READLEN: usize = 16;
     const SEQLEN: usize = 250;
 
     #[test]
     fn test_push_b2() {
-        let kc = KmerConst::new(READLEN, SEQLEN);
+        let kc = KmerConst::new(SEQLEN);
         let mut occ = Scope::new((0, 100), &kc, 0);
         for _ in 0..6 {
             occ.increment(1);
@@ -329,7 +328,7 @@ mod tests {
     }
     #[test]
     fn occurrence() {
-        let kc = KmerConst::new(READLEN, SEQLEN);
+        let kc = KmerConst::new(SEQLEN);
         let mut occ = Scope::new((0, 100), &kc, 0);
         for _ in 0..8 {
             occ.increment(0);

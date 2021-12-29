@@ -62,8 +62,7 @@ fn main() -> Result<()> {
         .value_of("out")
         .map(|f| BufWriter::new(File::create(f).unwrap()));
 
-    let readlen = 64;
-    let kc = KmerConst::new(readlen, chrs.iter().map(|x| x.len as usize).sum());
+    let kc = KmerConst::new(chrs.iter().map(|x| x.len as usize).sum());
     let mut ks = KmerStore::new(kc.bitlen);
     ks.opt |= 1; //
                  //ks.opt |= 2; // if set also non-priority (ext)kmers

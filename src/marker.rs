@@ -397,14 +397,13 @@ mod tests {
     fn test_reconstruct1() -> Result<()> {
         let kc = KmerConst::new(SEQLEN);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
-        let ks_kmp_len = ks.kmp.len();
         let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
         let mut seq = seq_vec.iter();
         kmi.markcontig::<u64>("test", &mut seq)?;
         let mut seen = 0;
-        for hash in 0..ks_kmp_len {
+        for hash in 0..kmi.ks.kmp.len() {
             let p = kmi.ks.kmp[hash];
             if p.is_set() {
                 dbg_print!("---[ {:#x} ]---", hash);
@@ -424,11 +423,10 @@ mod tests {
     fn test_reconstruct_gs4_all() -> Result<()> {
         // all mappable.
         let seqlen: usize = 6; //8;
+        let kc = KmerConst::new(seqlen);
 
         for gen in 0..=4_usize.pow(seqlen as u32) {
-            let kc = KmerConst::new(seqlen);
             let mut ks = KmerStore::<u64>::new(kc.bitlen);
-            let ks_kmp_len = ks.kmp.len();
             let mut kmi = KmerIter::new(&mut ks, &kc);
             let seq_vec: Vec<_> = (0..seqlen)
                 .map(|i| match (gen >> (i << 1)) & 3 {
@@ -436,7 +434,7 @@ mod tests {
                     1 => 'C',
                     2 => 'T',
                     3 => 'G',
-                    _ => dbg_panic!("here"),
+                    _ => unreachable!(),
                 })
                 .collect();
             dbg_print!("[{:#x}] sequence:\n{:?}", gen, seq_vec);
@@ -444,8 +442,8 @@ mod tests {
             let vv: Vec<u8> = seq_vec.iter().map(|&c| c as u8).collect();
             let mut seq = vv.iter();
             kmi.markcontig::<u64>("test", &mut seq)?;
-            dbg_print!("-- testing hashes --");
-            for hash in 0..ks_kmp_len {
+            dbg_print!("-- testing hashes ({:x}) --", gen);
+            for hash in 0..kmi.ks.kmp.len() {
                 let p = kmi.ks.kmp[hash];
                 if p.is_set() {
                     dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);

@@ -146,7 +146,7 @@ impl<'a> Scope<'a> {
                 return Ok(true);
             }
         }
-        return Ok(false);
+        Ok(false)
     }
 
     /// extend positie (als kmer/hash niet replaceble was); true indien mogelijk.

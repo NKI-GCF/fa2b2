@@ -64,6 +64,7 @@ impl PriExtPosOri for u64 {
     fn decr(&mut self) {
         *self -= 0x2;
     }
+    // not all extensions may apply, it's dependent on genome size.
     fn extension(&self) -> u64 {
         self & 0xFF00_0000_0000_0000
     }

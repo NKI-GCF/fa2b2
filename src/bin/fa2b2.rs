@@ -80,7 +80,7 @@ fn main() -> Result<()> {
             //break;
         }
     }
-    dump_stats(&ks);
+    dump_stats(&ks, kc.extent.len());
 
     if let Some(f) = out_file.as_mut() {
         println!("Writing first occurances per kmer to disk");
@@ -89,8 +89,8 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn dump_stats(ks: &KmerStore<u64>) {
-    let mut stat = [[0; 0x1_0000]; 2];
+fn dump_stats(ks: &KmerStore<u64>, extent_len: usize) {
+    let mut stat = [[0; 0x100]; 2];
     for k in ks.kmp.iter() {
         stat[if k.is_set() { 1 } else { 0 }][k.x()] += 1;
     }
@@ -100,7 +100,7 @@ fn dump_stats(ks: &KmerStore<u64>) {
         ks.kmp.len(),
         100.0 * stat[0][0] as f64 / ks.kmp.len() as f64
     );
-    for j in 1..=0xFFFF {
+    for j in 1..extent_len {
         if stat[0][j] != 0 {
             println!(
                 "Blacklisted for extension {}: {}\t{:.2}%",
@@ -110,7 +110,7 @@ fn dump_stats(ks: &KmerStore<u64>) {
             );
         }
     }
-    for j in 0..=0xFFFF {
+    for j in 0..extent_len {
         if stat[1][j] != 0 {
             println!(
                 "Set for extension {}: {}\t{:.2}%",

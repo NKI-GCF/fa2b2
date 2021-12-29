@@ -151,7 +151,7 @@ impl<'a> Scope<'a> {
 
     /// extend positie (als kmer/hash niet replaceble was); true indien mogelijk.
     pub fn extend(&mut self) -> bool {
-        let ret = self.p.x() + 1 < self.kc.ext_max;
+        let ret = self.p.x() + 1 < self.kc.extent.len();
         if ret {
             self.p.extend();
         }
@@ -217,7 +217,7 @@ impl<'a> Scope<'a> {
     fn set_if_optimum(&mut self, i: usize, x: usize) -> bool {
         // XXX function is hot
         if self.i >= self.kc.kmerlen + self.kc.afstand(x) {
-            let e = self.kc.extension[x];
+            let e = self.kc.get_kmers(x);
             let base = self.i - self.kc.kmerlen;
             let d = i + e.0 as usize;
             let nk = self.kc.no_kmers;

@@ -7,8 +7,7 @@ pub struct KmerConst {
     pub kmerlen: usize,
     pub bitlen: usize,
     pub readlen: usize,
-    pub ext_max: usize,
-    pub extension: [(u8, u8); 256],
+    pub extent: Vec<usize>,
 }
 
 impl KmerConst {
@@ -24,52 +23,35 @@ impl KmerConst {
         // e.g. with a RL 4 & KL 2: (0,1), (1,2), (2,3) => 3 kmers.
         let no_kmers = readlen - kmerlen + 1;
 
-        // generate all combinations of 2 kmer positions for extension. overlap and inverse
-        // combinations are allowed, those will result respectively in no xor-hash and a
-        // complemented xor-hash with the max for index.
-        // the order used here maintains the minimum (positional) distance betweens kmers
-        // for all extensions
-        let mut extension = [(0, 0); 256];
-        let mut i = 0;
-        let mut j = 0;
-        for element in extension.as_mut_slice() {
-            *element = (i, j);
-            match i.cmp(&j) {
-                cmp::Ordering::Less => i += 1,
-                cmp::Ordering::Greater => {
-                    j += 1;
-                    if i == j {
-                        i = 0;
-                    }
-                }
-                cmp::Ordering::Equal => {
-                    j = 0;
-                    i += 1;
-                }
-            }
-        }
+        // generate all combinations of 2 kmer positions for extension, high and low bits.
+        // overlap and combination duplicates are allowed, those will result respectively
+        // in no xor-hash and a complemented xor-hash with the max for index.
+        let extent: Vec<usize> = (0..kmerlen).collect();
 
         dbg_restart!(
             "Genome size: {}, readlen: {}, kmerlen: {}, ext_max: {}\n--",
             genomesize,
             readlen,
             kmerlen,
-            0xff
+            extent.len() - 1
         );
         KmerConst {
             no_kmers,
             kmerlen,
             bitlen,
             readlen,
-            ext_max: 0xff,
-            extension,
+            extent,
         }
     }
+    pub fn get_kmers(&self, x: usize) -> (usize, usize) {
+        let shift = self.kmerlen >> 1;
+        let first = self.extent[x] >> shift;
+        let second = self.extent[x] & ((1 << shift) - 1);
+        (first, second)
+    }
     pub fn afstand(&self, x: usize) -> usize {
-        cmp::min(
-            cmp::max(self.extension[x].0, self.extension[x].1) as usize,
-            self.readlen,
-        )
+        let kmer = self.get_kmers(x);
+        cmp::min(cmp::max(kmer.0, kmer.1), self.readlen)
     }
 
     pub fn get_kmer_boundaries(&self, p: u64, contig: (u64, u64)) -> (u64, u64) {

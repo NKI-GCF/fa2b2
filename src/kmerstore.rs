@@ -20,7 +20,7 @@ pub struct KmerStore<T> {
     pub b2: Vec<u8>,
     pub kmp: Vec<T>, // position + strand per k-mer.
     pub contig: Vec<Contig>,
-    pub repeat: HashMap<usize, (u32, u32)>,
+    pub repeat: HashMap<usize, HashMap<(u64, u64), (u32, u32)>>,
 }
 
 impl<T: PriExtPosOri> KmerStore<T> {
@@ -42,7 +42,7 @@ impl<T: PriExtPosOri> KmerStore<T> {
             genomic: goffs,
         });
     }
-    /// Adjust offset for contig. The
+    /// Adjust offset for contig.
     pub fn offset_contig(&mut self, offset: u64) {
         if let Some(ctg) = self.contig.last_mut() {
             ctg.genomic += offset;
@@ -89,8 +89,9 @@ impl<T: PriExtPosOri> KmerStore<T> {
             .map(|x| (x >> (p & 6)) & 3)
             .ok_or_else(|| anyhow!("stored pos past contig? {:#}", p))
     }
-    pub fn extend_repetitive(&mut self, min_idx: usize, dist: u32) {
-        let repeat = self.repeat.entry(min_idx).or_insert((dist, 0));
+    pub fn extend_repetitive(&mut self, min_idx: usize, contig: (u64, u64), dist: u32) {
+        let idx_entry = self.repeat.entry(min_idx).or_insert(HashMap::new());
+        let repeat = idx_entry.entry(contig).or_insert((dist, 0));
         repeat.1 = dist;
     }
 }

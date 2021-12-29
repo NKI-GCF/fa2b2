@@ -120,12 +120,14 @@ fn dump_stats(ks: &KmerStore<u64>, extent_len: usize) {
         }
     }
     println!("{} sections of non-ambiguous code", ks.contig.len());
-    println!("{} sections of repetitive code", ks.repeat.len());
+    println!("{} k-mers stored for repetitive code", ks.repeat.len());
 
     let mut period_counter = HashMap::new();
-    for v in ks.repeat.values() {
-        let entry = period_counter.entry(v.0).or_insert(0);
-        *entry += 1;
+    for ctg in ks.repeat.values() {
+        for v in ctg.values() {
+            let entry = period_counter.entry(v.0).or_insert(0);
+            *entry += 1;
+        }
     }
     let mut count_vec: Vec<(&u32, &u32)> = period_counter.iter().collect();
     count_vec.sort_by(|a, b| b.1.cmp(a.1));

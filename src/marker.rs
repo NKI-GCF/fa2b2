@@ -206,7 +206,8 @@ impl<'a> KmerIter<'a> {
                             // so it resolves that way too.
                             if dist != 0 && dist % period == 0 {
                                 // XXX A xmer could recur exacly on period but not be a(n exact) repeat.
-                                self.ks.extend_repetitive(idx, dist as u32);
+                                self.ks
+                                    .extend_repetitive(idx, self.scp[0].plim, dist as u32);
                             }
                         }
                         continue;
@@ -419,13 +420,6 @@ mod tests {
     fn test_reconstruct_gs4_all() -> Result<()> {
         // all mappable.
         let seqlen: usize = 6; //8;
-
-        let mut bitlen = seqlen.next_power_of_two().trailing_zeros() as usize;
-        if (bitlen & 1) == 1 {
-            // must be even.
-            bitlen += 1
-        }
-        let kmerlen = bitlen / 2;
 
         for gen in 0..=4_usize.pow(seqlen as u32) {
             let kc = KmerConst::new(seqlen);

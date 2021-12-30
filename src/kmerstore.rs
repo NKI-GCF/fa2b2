@@ -13,7 +13,8 @@ pub struct Contig {
     pub genomic: u64, // if 0: next contig
 }
 
-type ContigBoundaries = (u64, u64);
+type ContigRng = (u64, u64);
+type Repeat = (u32, u32);
 
 #[derive(Serialize, Deserialize)]
 pub struct KmerStore<T> {
@@ -22,7 +23,7 @@ pub struct KmerStore<T> {
     pub b2: Vec<u8>,
     pub kmp: Vec<T>, // position + strand per k-mer.
     pub contig: Vec<Contig>,
-    pub repeat: HashMap<usize, HashMap<ContigBoundaries, (u32, u32)>>,
+    pub repeat: HashMap<usize, Repeat>,
 }
 
 impl<T: PriExtPosOri> KmerStore<T> {
@@ -64,7 +65,7 @@ impl<T: PriExtPosOri> KmerStore<T> {
         }
         base
     }
-    pub fn get_contig_start_end_for_p(&self, p: u64) -> ContigBoundaries {
+    pub fn get_contig_start_end_for_p(&self, p: u64) -> ContigRng {
         let i = self.get_contig(p);
 
         dbg_assert!(i < self.contig.len());
@@ -91,9 +92,8 @@ impl<T: PriExtPosOri> KmerStore<T> {
             .map(|x| (x >> (p & 6)) & 3)
             .ok_or_else(|| anyhow!("stored pos past contig? {:#}", p))
     }
-    pub fn extend_repetitive(&mut self, min_idx: usize, contig: ContigBoundaries, dist: u32) {
-        let idx_entry = self.repeat.entry(min_idx).or_insert_with(HashMap::new);
-        let repeat = idx_entry.entry(contig).or_insert((dist, 0));
+    pub fn extend_repetitive(&mut self, min_idx: usize, dist: u32) {
+        let repeat = self.repeat.entry(min_idx).or_insert((dist, 0));
         repeat.1 = dist;
     }
 }

@@ -66,7 +66,7 @@ impl<'a> Scope<'a> {
         loop {
             let b2 = ks.b2_for_p(self.p).unwrap();
             dbg_print!("=> b2 {:x}, p: {:#x} <=", b2, self.p);
-            if self.complete_and_update_mark(b2, x)? {
+            if self.complete_and_update_mark(b2, x, Some(ks))? {
                 if self.mark.p == p {
                     return Ok(true);
                 }
@@ -117,12 +117,12 @@ impl<'a> Scope<'a> {
 
     /// add b2 to kmer, move .p according to occ orientation
     /// return whether required nr of kmers for struct scope were seen.
-    fn update_mark(&mut self, x_start: usize) -> bool {
+    fn update_mark<T: PriExtPosOri>(&mut self, x_start: usize, oks: Option<&KmerStore<T>>) -> bool {
         // XXX: function is very hot
         if self.i >= self.kc.kmerlen {
             for x in x_start..=self.p.x() {
-                if self.set_if_optimum(0, x) {
-                    return dbgf!(self.all_kmers(), "[update_mark()]: {}");
+                if self.set_if_optimum(0, x, oks) {
+                    return dbgf!(self.all_kmers(), "{}");
                 }
             }
             self.mark.is_set() && self.all_kmers()
@@ -132,18 +132,22 @@ impl<'a> Scope<'a> {
     }
 
     // hierin vinden .i & .p increments and kmer .d[] update plaats.
-    pub fn complete_and_update_mark(&mut self, b2: u8, x_start: usize) -> Result<bool> {
+    pub fn complete_and_update_mark<T: PriExtPosOri>(
+        &mut self,
+        b2: u8,
+        x_start: usize,
+        oks: Option<&KmerStore<T>>,
+    ) -> Result<bool> {
         // XXX: function is very hot
         self.increment(b2);
         if self.i >= self.kc.kmerlen {
             for x in x_start..=self.p.x() {
-                if self.set_if_optimum(0, x) {
-                    return Ok(dbgf!(self.all_kmers(), "[complete_and_update_mark()]: {}"));
+                if self.set_if_optimum(0, x, oks) {
+                    return Ok(dbgf!(self.all_kmers(), "{}"));
                 }
             }
-            if self.mark_is_first_or_leaving() {
-                self.set_next_mark()?;
-                return Ok(true);
+            if dbgx!(self.mark_is_first_or_leaving()) {
+                return self.set_next_mark(oks);
             }
         }
         Ok(false)
@@ -177,34 +181,33 @@ impl<'a> Scope<'a> {
     }
 
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)
-    pub fn set_next_mark(&mut self) -> Result<()> {
+    pub fn set_next_mark<T: PriExtPosOri>(&mut self, oks: Option<&KmerStore<T>>) -> Result<bool> {
         self.mark.reset();
         let x = self.p.x();
         let afs = self.kc.afstand(x);
         ensure!(self.kc.no_kmers > afs, "Couldn't obtain new mark.");
         for i in (0..(self.kc.no_kmers - afs)).rev() {
-            let _ = self.set_if_optimum(i, x);
+            let _ = self.set_if_optimum(dbgx!(i), x, oks);
         }
-        dbg_assert!(self.mark.is_set());
-        Ok(())
+        Ok(self.mark.is_set())
     }
 
     /// continue rebuild //FIXME: rewrite, if this function is necessary.
     pub fn extend_kmer_stack<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) -> Result<()> {
         let x = self.p.x();
+        let oks = Some(ks);
 
         // set mark after extension, if possible
         self.mark.reset();
         if self.is_xmer_complete(x) {
-            let _ = self.set_if_optimum(0, x);
+            let _ = dbgx!(self.set_if_optimum(0, x, oks));
         }
 
         while self.p.pos() < self.plim.1 {
             let b2 = ks.b2_for_p(self.p).unwrap();
             self.increment(b2);
-            if self.update_mark(x) && self.mark_is_first_or_leaving() {
-                self.set_next_mark()?;
-                if ks.kmp[self.mark.idx].is_same(self.mark.p) {
+            if self.update_mark(x, oks) && self.mark_is_first_or_leaving() {
+                if self.set_next_mark(oks)? && ks.kmp[self.mark.idx].is_same(self.mark.p) {
                     // retracked => finished
                     break;
                 }
@@ -214,7 +217,12 @@ impl<'a> Scope<'a> {
     }
 
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
-    fn set_if_optimum(&mut self, i: usize, x: usize) -> bool {
+    fn set_if_optimum<T: PriExtPosOri>(
+        &mut self,
+        i: usize,
+        x: usize,
+        oks: Option<&KmerStore<T>>,
+    ) -> bool {
         // XXX function is hot
         if self.i >= self.kc.kmerlen + self.kc.afstand(x) {
             let e = self.kc.get_kmers(x);
@@ -245,6 +253,21 @@ impl<'a> Scope<'a> {
                 }
                 cmp::Ordering::Equal => (p ^ kmer1.dna) & 1,
             };
+            if let Some(rep) = oks.and_then(|ks| ks.repeat.get(&hash)) {
+                let ks = oks.unwrap();
+                let stored_p = &ks.kmp[hash];
+                if stored_p.is_set()
+                    && p.pos() != stored_p.pos()
+                    && dbgf!(
+                        p.pos() < stored_p.pos() + rep.1 as u64,
+                        "{} {:#x} Rep:{:?}",
+                        hash,
+                        rep
+                    )
+                {
+                    return false;
+                }
+            }
             dbgf!(
                 self.mark.set(hash, p, x),
                 "{:?} [{:x}] = {:x} | x({})",
@@ -307,11 +330,11 @@ mod tests {
 
     #[test]
     fn test_push_b2() {
-        let kc = KmerConst::new(SEQLEN);
+        let kc = KmerConst::new(SEQLEN, 1000);
         let mut occ = Scope::new((0, 100), &kc, 0);
         for _ in 0..6 {
             occ.increment(1);
-            occ.update_mark(0);
+            occ.update_mark::<u64>(0, None);
         }
         let mut kmer = occ.kmer();
         dbg_assert_eq!(kmer.dna, 0x55);
@@ -319,7 +342,7 @@ mod tests {
         dbg_assert_eq!(occ.p, 0xd);
 
         occ.increment(2);
-        occ.update_mark(0);
+        occ.update_mark::<u64>(0, None);
         kmer = occ.kmer();
         dbg_assert_eq!(kmer.dna, 0x95);
         dbg_assert_eq!(kmer.rc, 0xfc);
@@ -328,23 +351,23 @@ mod tests {
     }
     #[test]
     fn occurrence() {
-        let kc = KmerConst::new(SEQLEN);
+        let kc = KmerConst::new(SEQLEN, 1000);
         let mut occ = Scope::new((0, 100), &kc, 0);
         for _ in 0..8 {
             occ.increment(0);
-            occ.update_mark(0);
+            occ.update_mark::<u64>(0, None);
         }
         for _ in 0..8 {
             occ.increment(1);
-            occ.update_mark(0);
+            occ.update_mark::<u64>(0, None);
         }
         for _ in 0..8 {
             occ.increment(2);
-            occ.update_mark(0);
+            occ.update_mark::<u64>(0, None);
         }
         for _ in 0..8 {
             occ.increment(3);
-            occ.update_mark(0);
+            occ.update_mark::<u64>(0, None);
         }
     }
 }

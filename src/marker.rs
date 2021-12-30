@@ -70,11 +70,8 @@ impl<'a> KmerIter<'a> {
     }
 
     fn extend_until_writable_optimum(&mut self) -> Result<()> {
-        loop {
-            dbg_print!(
-                "---------[ past:{:?} ]-------------",
-                self.scp[1].p.is_set()
-            );
+        'outer: loop {
+            dbg_print_if!(self.scp[1].p.is_set(), "------[ past ]------");
             let (min_idx, min_p) = (self.get_scp().mark.idx, self.get_scp().mark.p);
             dbg_assert!(min_idx < self.ks.kmp.len(), "{:x}, {:x}", min_idx, min_p);
             let stored_p = self.ks.kmp[min_idx];
@@ -109,21 +106,24 @@ impl<'a> KmerIter<'a> {
                 if dbgx!(stored_pos >= scp.plim.0.pos() && stored_pos < scp.plim.1.pos()) {
                     let dist = scp.mark.p.pos() - stored_pos;
                     assert!(dist != 0);
-
-                    self.period = Some(dist);
-                    break;
+                    if dist < scp.kc.repetition_max_dist {
+                        self.period = Some(dist);
+                        break;
+                    }
                 }
                 self.period = None;
                 self.ks.kmp[min_idx].set_dup();
             } else {
                 dbg_print!("\t\t<!>");
             }
-            if dbgx!(!self.get_scp().extend()) {
-                break;
-            }
-            if self.scp[1].p.is_set() {
-                // includes check for readlength
-                self.scp[1].set_next_mark()?;
+            // in repetitive dna, mark may not be assigned
+            loop {
+                if dbgx!(!self.get_scp().extend()) {
+                    break 'outer;
+                }
+                if !self.scp[1].p.is_set() || self.scp[1].set_next_mark(Some(&self.ks))? {
+                    break;
+                }
             }
         }
         if self.scp[1].p.is_set() && dbgx!(self.scp[1].p.pos() >= self.scp[1].plim.1) {
@@ -153,7 +153,7 @@ impl<'a> KmerIter<'a> {
         'outer: loop {
             if let Some(b2) = self.next_past_b2() {
                 dbg_print!("=> twobit {:x} (past) <=", b2);
-                match self.scp[1].complete_and_update_mark(b2, 0) {
+                match self.scp[1].complete_and_update_mark(b2, 0, Some(&self.ks)) {
                     Ok(true) => self.extend_until_writable_optimum()?,
                     Ok(false) => continue,
                     Err(e) => {
@@ -206,8 +206,9 @@ impl<'a> KmerIter<'a> {
                             // so it resolves that way too.
                             if dist != 0 && dist % period == 0 {
                                 // XXX A xmer could recur exacly on period but not be a(n exact) repeat.
-                                self.ks
-                                    .extend_repetitive(idx, self.scp[0].plim, dist as u32);
+                                // The xmer of a repeat on a different contig is not a problem.
+                                // self.period does not get assigned in that case.
+                                self.ks.extend_repetitive(idx, dist as u32);
                             }
                         }
                         continue;
@@ -215,7 +216,7 @@ impl<'a> KmerIter<'a> {
                     self.period = None;
 
                     // scp funcs also used for scope rebuild, therefore ext is set here.
-                    match self.scp[0].complete_and_update_mark(b2, 0) {
+                    match self.scp[0].complete_and_update_mark::<u64>(b2, 0, None) {
                         Ok(true) => {
                             self.extend_until_writable_optimum()?;
                             continue;
@@ -285,7 +286,7 @@ mod tests {
 
     #[test]
     fn test_16n() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN);
+        let kc = KmerConst::new(SEQLEN, 1000);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"NNNNNNNNNNNNNNNN"[..].to_owned())?;
@@ -297,7 +298,7 @@ mod tests {
     }
     #[test]
     fn test_1n() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN);
+        let kc = KmerConst::new(SEQLEN, 1000);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"N"[..].to_owned())?;
@@ -309,7 +310,7 @@ mod tests {
     }
     #[test]
     fn test_1n1c1n() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN);
+        let kc = KmerConst::new(SEQLEN, 1000);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"NCN"[..].to_owned())?;
@@ -323,7 +324,7 @@ mod tests {
     }
     #[test]
     fn test_17c() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN);
+        let kc = KmerConst::new(SEQLEN, 1000);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
@@ -342,7 +343,7 @@ mod tests {
     }
     #[test]
     fn test_1n18c1n() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN);
+        let kc = KmerConst::new(SEQLEN, 1000);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
@@ -360,7 +361,7 @@ mod tests {
     }
     #[test]
     fn test_1n16c() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN);
+        let kc = KmerConst::new(SEQLEN, 1000);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
@@ -378,7 +379,7 @@ mod tests {
     }
     #[test]
     fn test_18at() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN);
+        let kc = KmerConst::new(SEQLEN, 1000);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         {
             process(&mut ks, &kc, b"ATATATATATATATATAT"[..].to_owned())?;
@@ -395,7 +396,7 @@ mod tests {
     }
     #[test]
     fn test_reconstruct1() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN);
+        let kc = KmerConst::new(SEQLEN, 1000);
         let mut ks = KmerStore::<u64>::new(kc.bitlen);
         let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
@@ -422,8 +423,8 @@ mod tests {
     #[test]
     fn test_reconstruct_gs4_all() -> Result<()> {
         // all mappable.
-        let seqlen: usize = 6; //8;
-        let kc = KmerConst::new(seqlen);
+        let seqlen: usize = 8; //8;
+        let kc = KmerConst::new(seqlen, 1000);
 
         for gen in 0..=4_usize.pow(seqlen as u32) {
             let mut ks = KmerStore::<u64>::new(kc.bitlen);
@@ -437,18 +438,18 @@ mod tests {
                     _ => unreachable!(),
                 })
                 .collect();
-            dbg_print!("[{:#x}] sequence:\n{:?}", gen, seq_vec);
+            dbg_print!("-- k: {} rl: {} {:#x} seq:", kc.kmerlen, kc.venster, gen);
+            dbg_print!("{:?}", seq_vec);
 
             let vv: Vec<u8> = seq_vec.iter().map(|&c| c as u8).collect();
             let mut seq = vv.iter();
             kmi.markcontig::<u64>("test", &mut seq)?;
-            dbg_print!("-- testing hashes ({:x}) --", gen);
             for hash in 0..kmi.ks.kmp.len() {
                 let p = kmi.ks.kmp[hash];
                 if p.is_set() {
                     dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
                     kmi.scp[1].rebuild(&kmi.ks, p, hash)?;
-                    dbg_assert_eq!(kmi.scp[1].mark.p, p);
+                    dbg_assert_eq!(kmi.scp[1].mark.p, p, "reps: {}", kmi.ks.repeat.len());
                 }
             }
         }

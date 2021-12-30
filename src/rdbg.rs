@@ -58,6 +58,16 @@ macro_rules! dbg_print {
     });
 }
 
+/// line for dump, not in stats
+#[macro_export]
+macro_rules! dbg_print_if {
+    ($cond:expr, $fmt:literal$(, $arg:expr)*) => ({
+        if cfg!(debug_assertions) && $cond {
+            STAT_DB.lock().unwrap().add(false, filelinestr!(stringify!($fmt)), format!($fmt$(, $arg)*));
+        }
+    });
+}
+
 /// for dump and in stats, conditionally dump_next()
 #[macro_export]
 macro_rules! dbg_dump_if {

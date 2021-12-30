@@ -50,6 +50,14 @@ fn main() -> Result<()> {
                 //.required(true)
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("repetition_max_dist")
+                .short("X")
+                .long("repetition-max-dist")
+                .value_name("repetition_max_dist")
+                .help("Maximum distance between kmers to be considered for repetition")
+                .takes_value(true),
+        )
         .get_matches();
 
     let fa_name = matches.value_of("ref").unwrap();
@@ -62,7 +70,16 @@ fn main() -> Result<()> {
         .value_of("out")
         .map(|f| BufWriter::new(File::create(f).unwrap()));
 
-    let kc = KmerConst::new(chrs.iter().map(|x| x.len as usize).sum());
+    let repetition_max_dist = matches
+        .value_of("repetition_max_dist")
+        .map(|v| v.parse())
+        .transpose()?
+        .unwrap_or(10_000);
+
+    let kc = KmerConst::new(
+        chrs.iter().map(|x| x.len as usize).sum(),
+        repetition_max_dist,
+    );
     let mut ks = KmerStore::new(kc.bitlen);
     ks.opt |= 1; //
                  //ks.opt |= 2; // if set also non-priority (ext)kmers
@@ -109,13 +126,14 @@ fn dump_stats(ks: &KmerStore<u64>, extent_len: usize) {
             );
         }
     }
+    let tot_set = ks.kmp.len() - stat[0][0];
     for j in 0..extent_len {
         if stat[1][j] != 0 {
             println!(
-                "Set for extension {}: {}\t{:.2}%",
+                "Set for extension {}: {}\t{:.2}% (of set)",
                 j,
                 stat[1][j],
-                100.0 * stat[1][j] as f64 / ks.kmp.len() as f64
+                100.0 * stat[1][j] as f64 / tot_set as f64
             );
         }
     }
@@ -123,11 +141,9 @@ fn dump_stats(ks: &KmerStore<u64>, extent_len: usize) {
     println!("{} k-mers stored for repetitive code", ks.repeat.len());
 
     let mut period_counter = HashMap::new();
-    for ctg in ks.repeat.values() {
-        for v in ctg.values() {
-            let entry = period_counter.entry(v.0).or_insert(0);
-            *entry += 1;
-        }
+    for v in ks.repeat.values() {
+        let entry = period_counter.entry(v.0).or_insert(0);
+        *entry += 1;
     }
     let mut count_vec: Vec<(&u32, &u32)> = period_counter.iter().collect();
     count_vec.sort_by(|a, b| b.1.cmp(a.1));

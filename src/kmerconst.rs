@@ -7,11 +7,12 @@ pub struct KmerConst {
     pub bitlen: usize,
     pub venster: usize,
     max_afstand: usize,
+    pub repetition_max_dist: u64,
     pub extent: Vec<usize>,
 }
 
 impl KmerConst {
-    pub fn new(genomesize: usize) -> Self {
+    pub fn new(genomesize: usize, repetition_max_dist: u64) -> Self {
         // bit width, required to store all (cumulative) genomic positions, is used as len
 
         let mut bitlen = genomesize.next_power_of_two().trailing_zeros() as usize;
@@ -21,6 +22,8 @@ impl KmerConst {
         }
         let kmerlen = bitlen / 2;
         let max_afstand = kmerlen / 2;
+
+        // Een venster, groot genoeg voor de meeste unieke x-mers (wat arbitrair)
         let venster = kmerlen + max_afstand;
 
         // e.g. with a RL 4 & KL 2: (0,1), (1,2), (2,3) => 3 kmers.
@@ -50,6 +53,7 @@ impl KmerConst {
             bitlen,
             venster,
             max_afstand,
+            repetition_max_dist: repetition_max_dist * 2,
             extent,
         }
     }
@@ -64,6 +68,7 @@ impl KmerConst {
     }
 
     pub fn get_kmer_boundaries(&self, p: u64, contig: (u64, u64)) -> (u64, u64) {
+        //let afs = self.afstand(p.x()); // => zou van venster / no_kmers afgetrokken kunnen
         (
             cmp::max(p.saturating_sub(self.venster as u64 * 2), contig.0),
             cmp::min(p + (self.no_kmers as u64 - 1) * 2, contig.1),

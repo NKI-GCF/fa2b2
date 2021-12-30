@@ -441,9 +441,8 @@ mod tests {
             dbg_print!("-- k: {} rl: {} {:#x} seq:", kc.kmerlen, kc.venster, gen);
             dbg_print!("{:?}", seq_vec);
 
-            let vv: Vec<u8> = seq_vec.iter().map(|&c| c as u8).collect();
-            let mut seq = vv.iter();
-            kmi.markcontig::<u64>("test", &mut seq)?;
+            let vv: Vec<u8> = seq_vec.into_iter().map(|c| c as u8).collect();
+            kmi.markcontig::<u64>("test", &mut vv.iter())?;
             for hash in 0..kmi.ks.kmp.len() {
                 let p = kmi.ks.kmp[hash];
                 if p.is_set() {

@@ -1,14 +1,26 @@
-Een mapping strategie is om een twobit sequentie te gebruiken als
-index voor opslag van posities. Probleem is dat lange k-mers veel
-werkgeheugen gebruiken en dat korte k-mers vaak niet uniek genoeg
-zijn. Dit document beschrijft strategieen om deze beperkingen te
-omzeilen.
+Een mapping strategie is om een k-mer, twobit sequentie met vaste
+lengte, te gebruiken als index voor opslag van posities. Probleem
+is dat lange k-mers veel en maar beperkt gevuld geheugen vereisen
+en een deel vaker voorkomt. Dit document beschrijft strategieen
+om deze beperkingen te omzeilen.
 
-Sla niet elke kmer op, kies enkele met wat regels op basis van de
-sequentie. Het kan dat je aan een kmer binnen het venster van een
-read genoeg hebt om de positie te bepalen, en overigen redundant
-zijn. Van de twee strands zou ook een moeten volstaan. Hiervoor
-dient de xmer. De x staat voor extensie en de xor hash operaties.
+Sla niet voor elke k-mer de bijbehorende positie op, maar kies op
+basis van sequentie alleen bepaalde k-mers binnen een readlengte.
+Bijvoorbeeld simpelweg de minimale. Ook van de twee strands is de
+opslag voor het minimum van de twee genoeg. De gekozen orientatie
+wordt als eerste bit voor de positie opgeslagen.
+
+Zo wordt minder opgeslagen, maar met alleen minima is er weinig
+afname in het aantal terugkerende k-mers. bij terugkeren kunnen
+andere k-mers gebruikt worden, k-mers met elkaar ge-xor-hash't
+of hoge bits worden gemoduleerd
+
+
+Het kan dat je aan een kmer binnen het venster
+van een read genoeg hebt om de positie te bepalen, en de rest
+overbodig is. Van de twee strands zou ook een moeten volstaan.
+Hiervoor dient de xmer. De x staat voor extensie en de xor hash
+operaties.
 
 Een xmer is de kmer van een template of reverse complement strand
 of een bitwise complement van een van de twee. Orientatie wordt
@@ -18,11 +30,11 @@ gezet, anders het bitwise complement. Een index met 1 bit minder
 betekent 2x minder ruimte nodig voor de opslag.
 
 Na bitwise complementatie is de index niet meer het kleinste van
-de twee, zo moet he zijn, want deze index komt niet overeen met
+de twee, zo moet het zijn, want deze index komt niet overeen met
 een andere index - na het kiezen van de andere strand en dan de
 bitwise complement nemen namelijk wel. Een uitzondering zijn de
 palindrome kmers, daarbij wordt gekeken naar de staat van de
-eerste bit.
+eerste bit. (geen reverse complement, toch?)
 
 Onafhankelijk van de strand wordt zo dezelfde xmer gekozen. Ook
 bij palidrome kmers die voor beide strands resulteren in dezelfde

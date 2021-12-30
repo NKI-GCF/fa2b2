@@ -18,7 +18,6 @@ pub struct KmerIter<'a> {
     //steekproefi: u64,
     n_stretch: u64,
     goffs: u64,
-    period: Option<u64>,
     pub(super) scp: [Scope<'a>; 2],
     pub(super) ks: &'a mut KmerStore<u64>,
 } //^-^\\
@@ -33,7 +32,6 @@ impl<'a> KmerIter<'a> {
             //steekproefi: 10_000,
             n_stretch: 0,
             goffs: 0,
-            period: None,
             scp,
             ks,
         }
@@ -69,7 +67,7 @@ impl<'a> KmerIter<'a> {
         &mut self.scp[if self.scp[1].p.is_set() { 1 } else { 0 }]
     }
 
-    fn extend_until_writable_optimum(&mut self) -> Result<()> {
+    fn extend_until_writable_optimum(&mut self) -> Result<Option<u64>> {
         'outer: loop {
             dbg_print_if!(self.scp[1].p.is_set(), "------[ past ]------");
             let (min_idx, min_p) = (self.get_scp().mark.idx, self.get_scp().mark.p);
@@ -81,7 +79,7 @@ impl<'a> KmerIter<'a> {
                 // dbg_print!("{}", self.get_scp());
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
                     if !self.scp[1].rebuild(self.ks, stored_p, min_idx)? {
-                        return Ok(());
+                        break;
                     }
                     dbg_print!("resolving past for [{:x}], {:#x}", min_idx, stored_p);
                     self.scp[1].extend_kmer_stack(self.ks)?;
@@ -95,7 +93,7 @@ impl<'a> KmerIter<'a> {
                     }
                     // if we were fixing the past, we're done. without a test we just clear.
                     self.scp[1].p.clear();
-                    return Ok(());
+                    break;
                 }
             } else if stored_p.extension() == min_p.extension() {
                 // If a kmer occurs multiple times within an extending readlength (repetition),
@@ -107,11 +105,9 @@ impl<'a> KmerIter<'a> {
                     let dist = scp.mark.p.pos() - stored_pos;
                     assert!(dist != 0);
                     if dist < scp.kc.repetition_max_dist {
-                        self.period = Some(dist);
-                        break;
+                        return Ok(Some(dist));
                     }
                 }
-                self.period = None;
                 self.ks.kmp[min_idx].set_dup();
             } else {
                 dbg_print!("\t\t<!>");
@@ -126,26 +122,18 @@ impl<'a> KmerIter<'a> {
                 }
             }
         }
-        if self.scp[1].p.is_set() && dbgx!(self.scp[1].p.pos() >= self.scp[1].plim.1) {
-            // extension requires bases, but we're at contig limit, just leave it.
-            self.scp[1].p.clear();
-        }
-        Ok(())
+        Ok(None)
     }
 
-    fn is_repetitive(&self, b2: u8, i: usize) -> bool {
-        match self
-            .period
-            .and_then(|d| self.ks.b2_for_p(self.scp[i].p - d).ok())
-        {
-            Some(old_b2) => old_b2 == b2,
-            _ => false,
-        }
+    fn is_repetitive(&self, b2: u8, i: usize, dist: u64) -> Result<bool> {
+        Ok(dist != 0 && self.ks.b2_for_p(self.scp[i].p - dist)? == b2)
     }
 
     pub fn markcontig<T: MidPos>(&mut self, chrname: &str, seq: &mut Iter<u8>) -> Result<()> {
         self.goffs = 0;
         self.ks.push_contig(self.scp[0].p.pos(), self.goffs);
+        let mut period = 0;
+
         let mut repetitive = 0_u64;
         let mut n_count = 0_u64;
         let mut tot = 0_u64;
@@ -154,7 +142,14 @@ impl<'a> KmerIter<'a> {
             if let Some(b2) = self.next_past_b2() {
                 dbg_print!("=> twobit {:x} (past) <=", b2);
                 match self.scp[1].complete_and_update_mark(b2, 0, Some(&self.ks)) {
-                    Ok(true) => self.extend_until_writable_optimum()?,
+                    Ok(true) => {
+                        if let Some(pd) = self.extend_until_writable_optimum()? {
+                            // XXX this branch never seems to happen
+                            period = pd;
+                        } else if self.scp[1].is_p_beyond_contig() {
+                            self.scp[1].p.clear();
+                        }
+                    }
                     Ok(false) => continue,
                     Err(e) => {
                         // fixme: use thiserror?
@@ -191,34 +186,38 @@ impl<'a> KmerIter<'a> {
                         self.scp[0].plim.0 = p.pos();
                         // If a repetition ends in an N-stretch, thereafter offset to period
                         // may differ or the repetition could be different or entirely gone.
-                    } else if self.is_repetitive(b2, 0) {
+                    } else if self.is_repetitive(b2, 0, period)? {
                         repetitive += 1;
                         // everything but optimum re-evaluation.
                         self.scp[0].increment(b2);
-                        if let Some(period) = self.period {
-                            let idx = self.scp[0].mark.idx;
-                            let stored = self.ks.kmp[idx];
-                            let dist = dbgx!(self.scp[0].mark.p.pos() - stored.pos());
-                            // Repeats can be more complex than a regular repetition. e.g.
-                            // if a transposon is inserted + inserted inverted, and this is the
-                            // repeat, then an xmers could recur at irregular intervals.
-                            // but then the xmer out of line is extended and gets its own period,
-                            // so it resolves that way too.
-                            if dist != 0 && dist % period == 0 {
-                                // XXX A xmer could recur exacly on period but not be a(n exact) repeat.
-                                // The xmer of a repeat on a different contig is not a problem.
-                                // self.period does not get assigned in that case.
-                                self.ks.extend_repetitive(idx, dist as u32);
-                            }
+
+                        let idx = self.scp[0].mark.idx;
+                        let stored = self.ks.kmp[idx];
+                        let dist = dbgx!(self.scp[0].mark.p.pos() - stored.pos());
+                        // Repeats can be more complex than a regular repetition. e.g.
+                        // if a transposon is inserted + inserted inverted, and this is the
+                        // repeat, then an xmers could recur at irregular intervals.
+                        // but then the xmer out of line is extended and gets its own period,
+                        // so it resolves that way too.
+                        if dist != 0 && dist % period == 0 {
+                            // XXX A xmer could recur exacly on period but not be a(n exact) repeat.
+                            // The xmer of a repeat on a different contig is not a problem.
+                            // period does not get assigned in that case.
+                            self.ks.extend_repetitive(idx, dist as u32);
                         }
                         continue;
                     }
-                    self.period = None;
+                    period = 0;
 
                     // scp funcs also used for scope rebuild, therefore ext is set here.
                     match self.scp[0].complete_and_update_mark::<u64>(b2, 0, None) {
                         Ok(true) => {
-                            self.extend_until_writable_optimum()?;
+                            if let Some(pd) = self.extend_until_writable_optimum()? {
+                                // XXX asigning period here causes last test to fail.
+                                //period = pd;
+                            } else if self.scp[1].is_p_beyond_contig() {
+                                self.scp[1].p.clear();
+                            }
                             continue;
                         }
                         Ok(false) => continue 'outer,
@@ -242,7 +241,7 @@ impl<'a> KmerIter<'a> {
                         self.scp[0].i = 0;
                         self.scp[0].mod_i = 0;
                         self.n_stretch = 0;
-                        self.period = None;
+                        period = 0;
                     }
                     self.n_stretch += 1;
                     n_count += 1;
@@ -267,7 +266,6 @@ impl<'a> KmerIter<'a> {
                 100.0 * n_count as f64 / tot as f64,
             );
         }
-        self.period = None;
         Ok(())
     }
 }
@@ -423,7 +421,7 @@ mod tests {
     #[test]
     fn test_reconstruct_gs4_all() -> Result<()> {
         // all mappable.
-        let seqlen: usize = 8; //8;
+        let seqlen: usize = 8;
         let kc = KmerConst::new(seqlen, 1000);
 
         for gen in 0..=4_usize.pow(seqlen as u32) {

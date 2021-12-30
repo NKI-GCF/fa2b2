@@ -98,6 +98,10 @@ impl<'a> Scope<'a> {
         self.i >= self.kc.kmerlen + self.kc.afstand(x)
     }
 
+    pub fn is_p_beyond_contig(&self) -> bool {
+        self.p.is_set() && dbgx!(self.p.pos() >= self.plim.1)
+    }
+
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
     pub fn increment(&mut self, b2: u8) {
         // XXX: function is hot

@@ -88,13 +88,6 @@ impl<'a> Scope<'a> {
     }
 
     fn is_xmer_complete(&self, x: usize) -> bool {
-        /*dbgf!(
-            self.i >= self.kc.kmerlen + self.kc.afstand(x),
-            "{}: {} >= {} + {}?",
-            self.i,
-            self.kc.kmerlen,
-            self.kc.afstand(x)
-        )*/
         self.i >= self.kc.kmerlen + self.kc.afstand(x)
     }
 
@@ -117,22 +110,6 @@ impl<'a> Scope<'a> {
         self.p &= !1;
         self.p += 2 + self.d[self.mod_i].update(b2);
         self.i += 1;
-    }
-
-    /// add b2 to kmer, move .p according to occ orientation
-    /// return whether required nr of kmers for struct scope were seen.
-    fn update_mark<T: PriExtPosOri>(&mut self, x_start: usize, oks: Option<&KmerStore<T>>) -> bool {
-        // XXX: function is very hot
-        if self.i >= self.kc.kmerlen {
-            for x in x_start..=self.p.x() {
-                if self.set_if_optimum(0, x, oks) {
-                    return dbgf!(self.all_kmers(), "{}");
-                }
-            }
-            self.mark.is_set() && self.all_kmers()
-        } else {
-            false
-        }
     }
 
     // hierin vinden .i & .p increments and kmer .d[] update plaats.
@@ -196,30 +173,6 @@ impl<'a> Scope<'a> {
         Ok(self.mark.is_set())
     }
 
-    /// continue rebuild //FIXME: rewrite, if this function is necessary.
-    pub fn extend_kmer_stack<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) -> Result<()> {
-        let x = self.p.x();
-        let oks = Some(ks);
-
-        // set mark after extension, if possible
-        self.mark.reset();
-        if self.is_xmer_complete(x) {
-            let _ = dbgx!(self.set_if_optimum(0, x, oks));
-        }
-
-        while self.p.pos() < self.plim.1 {
-            let b2 = ks.b2_for_p(self.p).unwrap();
-            self.increment(b2);
-            if self.update_mark(x, oks) && self.mark_is_first_or_leaving() {
-                if self.set_next_mark(oks)? && ks.kmp[self.mark.idx].is_same(self.mark.p) {
-                    // retracked => finished
-                    break;
-                }
-            }
-        }
-        Ok(())
-    }
-
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
     fn set_if_optimum<T: PriExtPosOri>(
         &mut self,
@@ -228,7 +181,7 @@ impl<'a> Scope<'a> {
         oks: Option<&KmerStore<T>>,
     ) -> bool {
         // XXX function is hot
-        if self.i >= self.kc.kmerlen + self.kc.afstand(x) {
+        if self.is_xmer_complete(x) {
             let e = self.kc.get_kmers(x);
             let base = self.i - self.kc.kmerlen;
             let d = i + e.0 as usize;
@@ -284,6 +237,36 @@ impl<'a> Scope<'a> {
             false
         }
     }
+
+    /// false: too few twobits or at contig end; true: extended and mark set.
+    pub fn extension_loop<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) -> Result<bool> {
+        while {
+            if dbgx!(!self.extend()) {
+                return Ok(false);
+            }
+            // false should only occur in case of repetition
+            !self.set_next_mark(Some(ks))?
+        } {}
+        Ok(true)
+    }
+    pub fn extend_past<T: PriExtPosOri>(
+        &mut self,
+        ks: &KmerStore<T>,
+    ) -> Result<Option<(usize, u64)>> {
+        while !self.extension_loop(ks)? {
+            let b2 = ks.b2_for_p(self.p).unwrap();
+            self.increment(b2);
+            if self.p.pos() >= self.plim.1 {
+                dbg_print!("unresolved past extension");
+                self.p.clear();
+                return Ok(None);
+            }
+            if self.set_next_mark(Some(ks))? {
+                break;
+            }
+        }
+        Ok(Some((self.mark.idx, self.mark.p)))
+    }
 }
 
 impl<'a> fmt::Display for Scope<'a> {
@@ -327,6 +310,18 @@ mod tests {
         /// de current kmer.
         fn kmer(&self) -> Kmer<u64> {
             self.d[self.mod_i]
+        }
+
+        /// add b2 to kmer, move .p according to occ orientation
+        /// return whether required nr of kmers for struct scope were seen.
+        fn update_mark<T: PriExtPosOri>(&mut self, x_start: usize, oks: Option<&KmerStore<T>>) {
+            if self.i >= self.kc.kmerlen {
+                for x in x_start..=self.p.x() {
+                    if self.set_if_optimum(0, x, oks) {
+                        return;
+                    }
+                }
+            }
         }
     }
 

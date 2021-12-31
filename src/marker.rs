@@ -15,7 +15,6 @@ use crate::scope::Scope;
 use anyhow::{anyhow, ensure, Result};
 
 pub struct KmerIter<'a> {
-    //steekproefi: u64,
     n_stretch: u64,
     goffs: u64,
     pub(super) scp: [Scope<'a>; 2],
@@ -29,7 +28,6 @@ impl<'a> KmerIter<'a> {
             Scope::new((0, u64::max_value()), kc, PriExtPosOri::no_pos()),
         ];
         KmerIter {
-            //steekproefi: 10_000,
             n_stretch: 0,
             goffs: 0,
             scp,
@@ -46,12 +44,6 @@ impl<'a> KmerIter<'a> {
     }
 
     fn set_idx_pos(&mut self, idx: usize, p: u64) {
-        /*self.steekproefi -= 1;
-        if self.steekproefi == 0 {
-            self.steekproefi = 10_000;
-            // XXX waarom geeft dit telkens een p met dupbit set en ext == 3 ???
-            eprintln!("[{:#x}] = {:#x}", idx, p);
-        }*/
         self.ks.kmp[idx].set(p);
     }
 
@@ -69,7 +61,7 @@ impl<'a> KmerIter<'a> {
     }
 
     fn extend_until_writable_optimum(&mut self) -> Result<Option<u64>> {
-        'outer: loop {
+        loop {
             dbg_print_if!(self.scp[1].p.is_set(), "------[ past ]------");
             let (min_idx, min_p) = (self.get_scp().mark.idx, self.get_scp().mark.p);
             let stored_p = self.ks.kmp[min_idx];
@@ -82,10 +74,11 @@ impl<'a> KmerIter<'a> {
                         break;
                     }
                     dbg_print!("resolving past for [{:x}], {:#x}", min_idx, stored_p);
-                    self.scp[1].extend_kmer_stack(self.ks)?;
-                    //dbgx!(self.ks.kmp[min_idx].set(min_p));
-                    dbgx!(self.set_idx_pos(min_idx, min_p));
-                    // go back and extend
+                    if let Some((idx, p)) = self.scp[1].extend_past(&self.ks)? {
+                        dbgx!(self.set_idx_pos(idx, p));
+                    }
+
+                    return Ok(None);
                 } else {
                     // If already set it was min_p. Then leave dupbit state.
                     if self.ks.kmp[min_idx].is_no_pos() {
@@ -113,13 +106,9 @@ impl<'a> KmerIter<'a> {
                 dbg_print!("\t\t<!>");
             }
             // in repetitive dna, mark may not be assigned
-            loop {
-                if dbgx!(!self.get_scp().extend()) {
-                    break 'outer;
-                }
-                if !self.scp[1].p.is_set() || self.scp[1].set_next_mark(Some(&self.ks))? {
-                    break;
-                }
+            let i = if self.scp[1].p.is_set() { 1 } else { 0 };
+            if !self.scp[i].extension_loop(&self.ks)? {
+                break;
             }
         }
         Ok(None)
@@ -199,14 +188,21 @@ impl<'a> KmerIter<'a> {
                         let stored = self.ks.kmp[idx];
                         assert!(stored.is_set());
 
+                        assert!(self.scp[0].mark.p.pos() >= stored.pos());
                         let dist = dbgx!(self.scp[0].mark.p.pos() - stored.pos());
-                        assert!(dist > 0);
                         // Repeats can be more complex than a regular repetition. e.g.
                         // if a transposon is inserted + inserted inverted, and this is the
                         // repeat, then an xmers could recur at irregular intervals.
                         // but then the xmer out of line is extended and gets its own period,
                         // so it resolves that way too.
-                        if dist % period == 0 {
+                        if dist == 0 {
+                            dbg_assert!(
+                                false,
+                                "FIXME: waarom komen we opnieuw bij stored uit? [{:x}]: {:#x}",
+                                idx,
+                                stored
+                            );
+                        } else if dist % period == 0 {
                             // XXX A xmer could recur exacly on period but not be a(n exact) repeat.
                             // The xmer of a repeat on a different contig is not a problem.
                             // period does not get assigned in that case.

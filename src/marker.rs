@@ -47,28 +47,14 @@ impl<'a> KmerIter<'a> {
         self.ks.kmp[idx].set(p);
     }
 
-    fn next_past_b2(&mut self) -> Result<Option<u8>> {
-        if self.scp[1].p.is_set() {
-            let b2 = self.ks.b2_for_p(self.scp[1].p)?;
-            Ok(Some(b2))
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn get_scp(&mut self) -> &mut Scope<'a> {
-        &mut self.scp[if self.scp[1].p.is_set() { 1 } else { 0 }]
-    }
-
     fn extend_until_writable_optimum(&mut self) -> Result<Option<u64>> {
         loop {
-            dbg_print_if!(self.scp[1].p.is_set(), "------[ past ]------");
-            let (min_idx, min_p) = (self.get_scp().mark.idx, self.get_scp().mark.p);
+            let (min_idx, min_p) = (self.scp[0].mark.idx, self.scp[0].mark.p);
             let stored_p = self.ks.kmp[min_idx];
 
             if stored_p.is_replaceable_by(min_p) {
                 //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
-                // dbg_print!("{}", self.get_scp());
+                // dbg_print!("{}", self.scp[0]);
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
                     if !self.scp[1].rebuild(self.ks, stored_p, min_idx)? {
                         break;
@@ -77,27 +63,24 @@ impl<'a> KmerIter<'a> {
                     if let Some((idx, p)) = self.scp[1].extend_past(&self.ks)? {
                         dbgx!(self.set_idx_pos(idx, p));
                     }
-
-                    return Ok(None);
-                } else {
-                    // If already set it was min_p. Then leave dupbit state.
-                    if self.ks.kmp[min_idx].is_no_pos() {
-                        self.set_idx_pos(min_idx, min_p);
-                    }
-                    // if we were fixing the past, we're done. without a test we just clear.
                     self.scp[1].p.clear();
+                } else if self.ks.kmp[min_idx].is_set() {
+                    // If already set it was min_p. Then leave dupbit state.
                     break;
                 }
+                self.set_idx_pos(min_idx, min_p);
+                break;
             } else if stored_p.extension() == min_p.extension() {
                 // If a kmer occurs multiple times within an extending readlength (repetition),
                 // only the first gets a position. During mapping this rule should also apply.
                 // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
-                let scp = self.get_scp();
                 let stored_pos = stored_p.pos();
-                assert!(scp.mark.p.pos() > stored_pos);
-                if dbgx!(stored_pos >= scp.plim.0.pos() && stored_pos < scp.plim.1.pos()) {
-                    let dist = scp.mark.p.pos() - stored_pos;
-                    if dist < scp.kc.repetition_max_dist {
+                assert!(self.scp[0].mark.p.pos() > stored_pos);
+                if dbgx!(
+                    stored_pos >= self.scp[0].plim.0.pos() && stored_pos < self.scp[0].plim.1.pos()
+                ) {
+                    let dist = self.scp[0].mark.p.pos() - stored_pos;
+                    if dist < self.scp[0].kc.repetition_max_dist {
                         return Ok(Some(dist));
                     }
                 }
@@ -106,8 +89,7 @@ impl<'a> KmerIter<'a> {
                 dbg_print!("\t\t<!>");
             }
             // in repetitive dna, mark may not be assigned
-            let i = if self.scp[1].p.is_set() { 1 } else { 0 };
-            if !self.scp[i].extension_loop(&self.ks)? {
+            if !self.scp[0].extension_loop(&self.ks)? {
                 break;
             }
         }
@@ -128,35 +110,6 @@ impl<'a> KmerIter<'a> {
         let mut tot = 0_u64;
 
         'outer: loop {
-            if let Some(b2) = self.next_past_b2()? {
-                dbg_print!("=> twobit {:x} (past) <=", b2);
-                match self.scp[1].complete_and_update_mark(b2, 0, Some(&self.ks)) {
-                    Ok(true) => {
-                        if let Some(pd) = self.extend_until_writable_optimum()? {
-                            // XXX this branch never seems to happen
-                            period = pd;
-                        } else if self.scp[1].is_p_beyond_contig() {
-                            self.scp[1].p.clear();
-                        }
-                    }
-                    Ok(false) => continue,
-                    Err(e) => {
-                        // fixme: use thiserror?
-                        if e.to_string() == "end of contig." {
-                            break;
-                        }
-                        dbg_print!("{} (p:{:x})", e, self.scp[1].mark.p);
-                        self.scp[1].p.clear();
-                    }
-                }
-                // check of we tegen het einde van de contig, of read sequence aanlopen.
-                if self.scp[1].p.pos() != self.scp[0].p.pos() {
-                    assert!(self.scp[1].p.pos() != self.scp[1].plim.1);
-                    continue;
-                }
-                self.scp[1].p.clear();
-            }
-            assert!(!self.scp[1].p.is_set());
             while let Some(b2) = seq.next().map(|&c| {
                 let b2 = (c >> 1) & 0x7;
                 // dbg_print!("[{}, {}]: {:x}", self.scp[0].p.pos() >> 1, c as char, b2);
@@ -164,7 +117,6 @@ impl<'a> KmerIter<'a> {
                 b2
             }) {
                 tot += 1;
-                assert!(!self.scp[1].p.is_set());
                 let p = self.scp[0].p;
                 if b2 < 4 {
                     // new sequence is also stored, to enable lookup later.
@@ -179,7 +131,6 @@ impl<'a> KmerIter<'a> {
                         // may differ or the repetition could be different or entirely gone.
                     } else if self.is_repetitive(b2, 0, period)? {
                         // XXX somethings goes wrong while taking this path
-                        // XXX FIXME: occurs: assert!(!self.scp[1].p.is_set());
                         repetitive += 1;
                         // everything but optimum re-evaluation.
                         self.scp[0].increment(b2);
@@ -216,14 +167,7 @@ impl<'a> KmerIter<'a> {
                     match self.scp[0].complete_and_update_mark::<u64>(b2, 0, None) {
                         Ok(true) => {
                             if let Some(pd) = self.extend_until_writable_optimum()? {
-                                assert!(!self.scp[1].p.is_set());
                                 //period = pd;
-                            } else if self.scp[1].p.is_set() {
-                                if self.scp[1].is_p_beyond_contig() {
-                                    self.scp[1].p.clear();
-                                } else {
-                                    continue 'outer;
-                                }
                             }
                             continue;
                         }

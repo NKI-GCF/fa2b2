@@ -27,6 +27,7 @@ pub trait PriExtPosOri: Clone {
     fn is_dup(&self) -> bool;
     fn set_repetitive(&mut self);
     fn is_repetitive(&self) -> bool;
+    fn rep_dup_masked(&self) -> u64;
     //fn ext_max() -> Self;
 }
 
@@ -113,6 +114,9 @@ impl PriExtPosOri for u64 {
     fn is_repetitive(&self) -> bool {
         *self & 0x40_0000_0000_0000 != 0
     }
+    fn rep_dup_masked(&self) -> u64 {
+        *self & !0xc0_0000_0000_0000
+    }
     /* does not work because extension is currently limited by readlen.
      * could maybe instead also shift base kmer or bits
      * fn ext_max() -> Self {
@@ -141,7 +145,9 @@ impl MidPos for u64 {
     }
     fn is_replaceable_by(&self, new_entry: u64) -> bool {
         // only extension bits means blacklisting, except for extension 0. pos is always > kmerlen
-        self.is_no_pos() || *self <= new_entry.extension() || self.same_pos_and_ext(new_entry)
+        self.is_no_pos()
+            || new_entry.extension() > self.rep_dup_masked() // TODO: count down extension?
+            || (new_entry.extension() == self.extension() && new_entry.pos() <= self.pos())
     }
     fn is_set_and_not(&self, other: u64) -> bool {
         self.is_set() && !self.is_same(other)

@@ -14,6 +14,7 @@ pub struct Scope<'a> {
     pub i: usize,
     pub mod_i: usize,
     pub plim: (u64, u64),
+    pub period: u64,
 }
 
 impl<'a> Scope<'a> {
@@ -26,15 +27,16 @@ impl<'a> Scope<'a> {
             i: 0,
             mod_i: 0,
             plim,
+            period: 0,
         }
     }
 
-    pub fn rebuild<T: PriExtPosOri>(
-        &mut self,
+    pub fn rebuild<T: PriExtPosOri + fmt::LowerHex>(
         ks: &KmerStore<T>,
-        p: u64,
+        kc: &'a KmerConst,
+        p: &T,
         idx: usize,
-    ) -> Result<bool> {
+    ) -> Result<Self> {
         /* Er gaat iets mis, blijkt uit repetitie telling die afwijkt afhankelijk
         van de scope heropbouw. Indien met plim.0, geeft dit andere repetition
         aantallen dan wanneer de eerste 2bit in scope wordt gebruikt. Voor de
@@ -52,46 +54,142 @@ impl<'a> Scope<'a> {
         // self.p = p.extension() | plim.0;
         let pos = p.pos();
         ensure!(pos != PriExtPosOri::no_pos());
-        let contig = ks.get_contig_start_end_for_p(pos);
-        let bound = self.kc.get_kmer_boundaries(pos, contig);
+        let plim = ks.get_contig_start_end_for_p(pos);
+        let bound = kc.get_kmer_boundaries(pos, plim);
 
-        self.p = bound.0 | p.extension();
-
-        self.plim = contig;
-        self.i = 0;
-        self.mod_i = 0;
-        self.mark.reset();
+        let mut scp = Scope {
+            kc,
+            p: bound.0 | p.extension(),
+            d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
+            mark: KmerLoc::new(usize::max_value(), p.extension()),
+            i: 0,
+            mod_i: 0,
+            plim,
+            period: 0,
+        };
 
         let x = p.x();
         loop {
-            let b2 = ks.b2_for_p(self.p).unwrap();
-            dbg_print!("=> b2 {:x}, p: {:#x} <=", b2, self.p);
-            if self.complete_and_update_mark(b2, x, Some(ks))? {
-                if self.mark.p == p {
-                    return Ok(true);
+            let b2 = ks.b2_for_p(scp.p).unwrap();
+            dbg_print!("=> b2 {:x}, p: {:#x} <=", b2, scp.p);
+            if scp.complete_and_update_mark(b2, x, Some(ks))? {
+                if p.same_pos_and_ext(scp.mark.p) {
+                    break;
                 }
-                if self.mark.idx == idx {
+                if scp.mark.idx == idx {
                     dbg_print!(
                         "idx {:x} observed but for {:#x}, not {:#x}",
                         idx,
-                        self.mark.p,
+                        scp.mark.p,
                         p
                     );
                 }
-                if self.p.pos() >= bound.1 {
+                // XXX ik zou een assertion hier logischer vinden
+                /*assert!(
+                    scp.p.pos() < bound.1,
+                    "kmer {:x} not observed for {:x} !!",
+                    idx,
+                    p
+                );*/
+                if scp.p.pos() >= bound.1 {
                     dbg_print!("kmer {:x} not observed for {:x} !!", idx, p);
-                    self.p.clear();
-                    return Ok(false);
+                    scp.p.clear();
+                    break;
                 }
             }
         }
+        return Ok(scp);
+    }
+
+    /// return toont of er een oplossing was
+    pub fn handle_mark<T>(&mut self, ks: &mut KmerStore<T>) -> Result<bool>
+    where
+        T: PriExtPosOri + fmt::LowerHex + Copy,
+    {
+        let (min_idx, min_p) = (self.mark.idx, self.mark.p);
+        let stored_p = ks.kmp[min_idx];
+
+        if stored_p.is_replaceable_by(min_p) {
+            //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
+            // dbg_print!("{}", self);
+            if dbgx!(stored_p.is_set_and_not(min_p)) {
+                let mut new_scp = Scope::rebuild(ks, self.kc, &stored_p, min_idx)?;
+                if !new_scp.p.is_set() {
+                    // unset when kmer is not observed (zie dbg_print..)
+                    return Ok(false);
+                }
+                if let Some(storage) = ks.kmp.get_mut(min_idx) {
+                    storage.set(min_p);
+                }
+                dbg_print!("resolving past for [{:x}], {:#x}", min_idx, stored_p);
+                if new_scp.extension_gave_mark(ks)? && !new_scp.handle_mark(ks)? {
+                    dbg_print!("unresolved new_scp mark");
+                }
+            } else if ks.kmp[min_idx].is_no_pos() {
+                ks.kmp[min_idx].set(min_p);
+                // If already set it was min_p. Then leave dupbit state.
+            }
+            return Ok(true);
+        }
+        if stored_p.extension() == min_p.extension() {
+            // If a kmer occurs multiple times within an extending readlength (repetition),
+            // only the first gets a position. During mapping this rule should also apply.
+            // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
+            let stored_pos = stored_p.pos();
+            assert!(self.mark.p.pos() > stored_pos);
+            if dbgx!(stored_pos >= self.plim.0.pos() && stored_pos < self.plim.1.pos()) {
+                let dist = self.mark.p.pos() - stored_pos;
+                if dist < self.kc.repetition_max_dist {
+                    self.period = dist;
+                    // niet gezet, doen we niet bij repetition, extensie is niet nodig.
+                    return Ok(false);
+                }
+            }
+            ks.kmp[min_idx].set_dup();
+        } else {
+            dbg_print!("\t\t<!>");
+        }
+        // in repetitive dna, mark may not be assigned
+        self.extension_gave_mark(ks)
+    }
+
+    fn can_extend(&self) -> bool {
+        self.p.x() + 1 < self.kc.extent.len()
+    }
+
+    // reads b2 for extension, but we cannot add, e.g. running into end of contig => false.
+    fn extend<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) -> Result<()> {
+        self.p.extend();
+        dbg_assert!(self.p.pos() >= self.mark.p.pos());
+
+        if self.p.pos() - self.mark.p.pos() > (self.kc.afstand(self.p.x()) * 2) as u64 {
+            let b2 = ks.b2_for_p(self.p).unwrap();
+            self.increment(b2);
+            ensure!(!self.is_p_beyond_contig(), "unresolved past extension");
+        }
+        Ok(())
+    }
+
+    /// true: too few twobits or at contig end; true: extended and mark set.
+    fn extension_gave_mark<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) -> Result<bool> {
+        while self.can_extend() {
+            if let Err(e) = self.extend(ks) {
+                dbg_print!("{}", e);
+                self.p.clear();
+                break;
+            }
+            if self.set_next_mark(Some(ks))? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     fn is_xmer_complete(&self, x: usize) -> bool {
         self.i >= self.kc.kmerlen + self.kc.afstand(x)
     }
 
-    pub fn is_p_beyond_contig(&self) -> bool {
+    fn is_p_beyond_contig(&self) -> bool {
         dbgx!(self.p.pos() >= self.plim.1)
     }
 
@@ -134,15 +232,6 @@ impl<'a> Scope<'a> {
         Ok(false)
     }
 
-    /// extend positie (als kmer/hash niet replaceble was); true indien mogelijk.
-    pub fn extend(&mut self) -> bool {
-        let ret = self.p.x() + 1 < self.kc.extent.len();
-        if ret {
-            self.p.extend();
-        }
-        ret
-    }
-
     /// is occ complete? call na complete_kmer() - self.i increment.
     fn all_kmers(&self) -> bool {
         self.i >= self.kc.venster
@@ -162,11 +251,12 @@ impl<'a> Scope<'a> {
     }
 
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)
-    pub fn set_next_mark<T: PriExtPosOri>(&mut self, oks: Option<&KmerStore<T>>) -> Result<bool> {
+    fn set_next_mark<T: PriExtPosOri>(&mut self, oks: Option<&KmerStore<T>>) -> Result<bool> {
         self.mark.reset();
         let x = self.p.x();
         let afs = self.kc.afstand(x);
         ensure!(self.kc.no_kmers > afs, "Couldn't obtain new mark.");
+        // reverse is logischer omdat we bij gelijke extensie voor een lagere positie kiezen.
         for i in (0..(self.kc.no_kmers - afs)).rev() {
             let _ = self.set_if_optimum(dbgx!(i), x, oks);
         }
@@ -236,36 +326,6 @@ impl<'a> Scope<'a> {
         } else {
             false
         }
-    }
-
-    /// false: too few twobits or at contig end; true: extended and mark set.
-    pub fn extension_loop<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) -> Result<bool> {
-        while {
-            if dbgx!(!self.extend()) {
-                return Ok(false);
-            }
-            // false should only occur in case of repetition
-            !self.set_next_mark(Some(ks))?
-        } {}
-        Ok(true)
-    }
-    pub fn extend_past<T: PriExtPosOri>(
-        &mut self,
-        ks: &KmerStore<T>,
-    ) -> Result<Option<(usize, u64)>> {
-        while !self.extension_loop(ks)? {
-            let b2 = ks.b2_for_p(self.p).unwrap();
-            self.increment(b2);
-            if self.p.pos() >= self.plim.1 {
-                dbg_print!("unresolved past extension");
-                self.p.clear();
-                return Ok(None);
-            }
-            if self.set_next_mark(Some(ks))? {
-                break;
-            }
-        }
-        Ok(Some((self.mark.idx, self.mark.p)))
     }
 }
 

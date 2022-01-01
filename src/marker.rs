@@ -8,25 +8,22 @@ extern crate num_traits;
 use crate::kmerconst::KmerConst;
 use std::slice::Iter;
 
-use crate::kmerloc::{MidPos, PriExtPosOri};
+use crate::kmerloc::PriExtPosOri;
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
-use anyhow::{anyhow, ensure, Result};
+use anyhow::Result;
 
 pub struct KmerIter<'a> {
     n_stretch: u64,
     goffs: u64,
-    pub(super) scp: [Scope<'a>; 2],
+    pub(super) scp: Scope<'a>,
     pub(super) ks: &'a mut KmerStore<u64>,
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
     pub fn new(ks: &'a mut KmerStore<u64>, kc: &'a KmerConst) -> Self {
-        let scp = [
-            Scope::new((0, u64::max_value()), kc, 0),
-            Scope::new((0, u64::max_value()), kc, PriExtPosOri::no_pos()),
-        ];
+        let scp = Scope::new((0, u64::max_value()), kc, 0);
         KmerIter {
             n_stretch: 0,
             goffs: 0,
@@ -43,67 +40,14 @@ impl<'a> KmerIter<'a> {
         self.n_stretch = 0;
     }
 
-    fn set_idx_pos(&mut self, idx: usize, p: u64) {
-        self.ks.kmp[idx].set(p);
+    fn is_repetitive(&self, b2: u8) -> Result<bool> {
+        let dist = 0; //self.scp.period;
+        Ok(dist != 0 && self.ks.b2_for_p(self.scp.p - dist)? == b2)
     }
 
-    fn extend_until_writable_optimum(&mut self) -> Result<Option<u64>> {
-        loop {
-            let (min_idx, min_p) = (self.scp[0].mark.idx, self.scp[0].mark.p);
-            let stored_p = self.ks.kmp[min_idx];
-
-            if stored_p.is_replaceable_by(min_p) {
-                //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
-                // dbg_print!("{}", self.scp[0]);
-                if dbgx!(stored_p.is_set_and_not(min_p)) {
-                    if !self.scp[1].rebuild(self.ks, stored_p, min_idx)? {
-                        break;
-                    }
-                    dbg_print!("resolving past for [{:x}], {:#x}", min_idx, stored_p);
-                    if let Some((idx, p)) = self.scp[1].extend_past(&self.ks)? {
-                        dbgx!(self.set_idx_pos(idx, p));
-                    }
-                    self.scp[1].p.clear();
-                } else if self.ks.kmp[min_idx].is_set() {
-                    // If already set it was min_p. Then leave dupbit state.
-                    break;
-                }
-                self.set_idx_pos(min_idx, min_p);
-                break;
-            } else if stored_p.extension() == min_p.extension() {
-                // If a kmer occurs multiple times within an extending readlength (repetition),
-                // only the first gets a position. During mapping this rule should also apply.
-                // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
-                let stored_pos = stored_p.pos();
-                assert!(self.scp[0].mark.p.pos() > stored_pos);
-                if dbgx!(
-                    stored_pos >= self.scp[0].plim.0.pos() && stored_pos < self.scp[0].plim.1.pos()
-                ) {
-                    let dist = self.scp[0].mark.p.pos() - stored_pos;
-                    if dist < self.scp[0].kc.repetition_max_dist {
-                        return Ok(Some(dist));
-                    }
-                }
-                self.ks.kmp[min_idx].set_dup();
-            } else {
-                dbg_print!("\t\t<!>");
-            }
-            // in repetitive dna, mark may not be assigned
-            if !self.scp[0].extension_loop(&self.ks)? {
-                break;
-            }
-        }
-        Ok(None)
-    }
-
-    fn is_repetitive(&self, b2: u8, i: usize, dist: u64) -> Result<bool> {
-        Ok(dist != 0 && self.ks.b2_for_p(self.scp[i].p - dist)? == b2)
-    }
-
-    pub fn markcontig<T: MidPos>(&mut self, chrname: &str, seq: &mut Iter<u8>) -> Result<()> {
+    pub fn markcontig<T: PriExtPosOri>(&mut self, chrname: &str, seq: &mut Iter<u8>) -> Result<()> {
         self.goffs = 0;
-        self.ks.push_contig(self.scp[0].p.pos(), self.goffs);
-        let mut period = 0;
+        self.ks.push_contig(self.scp.p.pos(), self.goffs);
 
         let mut repetitive = 0_u64;
         let mut n_count = 0_u64;
@@ -112,12 +56,12 @@ impl<'a> KmerIter<'a> {
         'outer: loop {
             while let Some(b2) = seq.next().map(|&c| {
                 let b2 = (c >> 1) & 0x7;
-                // dbg_print!("[{}, {}]: {:x}", self.scp[0].p.pos() >> 1, c as char, b2);
+                // dbg_print!("[{}, {}]: {:x}", self.scp.p.pos() >> 1, c as char, b2);
                 dbg_print!("{}: {:x}", c as char, b2);
                 b2
             }) {
                 tot += 1;
-                let p = self.scp[0].p;
+                let p = self.scp.p;
                 if b2 < 4 {
                     // new sequence is also stored, to enable lookup later.
                     if let Some(qb) = self.ks.b2.get_mut(p.byte_pos()) {
@@ -126,21 +70,21 @@ impl<'a> KmerIter<'a> {
                     self.ks.p_max = p.pos() + 4;
                     if self.n_stretch > 0 {
                         self.finalize_n_stretch();
-                        self.scp[0].plim.0 = p.pos();
+                        self.scp.plim.0 = p.pos();
                         // If a repetition ends in an N-stretch, thereafter offset to period
                         // may differ or the repetition could be different or entirely gone.
-                    } else if self.is_repetitive(b2, 0, period)? {
+                    } else if self.is_repetitive(b2)? {
                         // XXX somethings goes wrong while taking this path
                         repetitive += 1;
                         // everything but optimum re-evaluation.
-                        self.scp[0].increment(b2);
+                        self.scp.increment(b2);
 
-                        let idx = self.scp[0].mark.idx;
+                        let idx = self.scp.mark.idx;
                         let stored = self.ks.kmp[idx];
                         assert!(stored.is_set());
 
-                        assert!(self.scp[0].mark.p.pos() >= stored.pos());
-                        let dist = dbgx!(self.scp[0].mark.p.pos() - stored.pos());
+                        assert!(self.scp.mark.p.pos() >= stored.pos());
+                        let dist = dbgx!(self.scp.mark.p.pos() - stored.pos());
                         // Repeats can be more complex than a regular repetition. e.g.
                         // if a transposon is inserted + inserted inverted, and this is the
                         // repeat, then an xmers could recur at irregular intervals.
@@ -153,7 +97,7 @@ impl<'a> KmerIter<'a> {
                                 idx,
                                 stored
                             );
-                        } else if dist % period == 0 {
+                        } else if dist % self.scp.period == 0 {
                             // XXX A xmer could recur exacly on period but not be a(n exact) repeat.
                             // The xmer of a repeat on a different contig is not a problem.
                             // period does not get assigned in that case.
@@ -161,13 +105,13 @@ impl<'a> KmerIter<'a> {
                         }
                         continue;
                     }
-                    period = 0;
+                    self.scp.period = 0;
 
                     // scp funcs also used for scope rebuild, therefore ext is set here.
-                    match self.scp[0].complete_and_update_mark::<u64>(b2, 0, None) {
+                    match self.scp.complete_and_update_mark::<u64>(b2, 0, None) {
                         Ok(true) => {
-                            if let Some(pd) = self.extend_until_writable_optimum()? {
-                                //period = pd;
+                            if !self.scp.handle_mark(&mut self.ks)? {
+                                dbg_print!("Unable to find mark");
                             }
                             continue;
                         }
@@ -178,21 +122,21 @@ impl<'a> KmerIter<'a> {
                                 dbg_print!("unexpected end of contig");
                                 break 'outer;
                             }
-                            dbg_print!("{} (p:{:x})", e, self.scp[0].mark.p);
+                            dbg_print!("{} (p:{:x})", e, self.scp.mark.p);
                             continue 'outer;
                         }
                     }
                 } else {
-                    if self.scp[0].i != 0 {
+                    if self.scp.i != 0 {
                         dbg_print!("started N-stretch at {}.", p);
-                        self.goffs += self.scp[0].i as u64;
+                        self.goffs += self.scp.i as u64;
                         self.ks.push_contig(p, self.goffs);
 
                         // clear all except orientation and position to rebuild at the start of a new contig.
-                        self.scp[0].i = 0;
-                        self.scp[0].mod_i = 0;
                         self.n_stretch = 0;
-                        period = 0;
+                        self.scp.i = 0;
+                        self.scp.mod_i = 0;
+                        self.scp.period = 0;
                     }
                     self.n_stretch += 1;
                     n_count += 1;
@@ -357,8 +301,8 @@ mod tests {
             let p = kmi.ks.kmp[hash];
             if p.is_set() {
                 dbg_print!("---[ {:#x} ]---", hash);
-                kmi.scp[1].rebuild(&kmi.ks, p, hash)?;
-                dbg_assert_eq!(kmi.scp[1].mark.p, p, "[{}]: {:x}", seen, hash);
+                let scp = Scope::rebuild(&kmi.ks, &kc, &p, hash)?;
+                dbg_assert_eq!(scp.mark.p, p, "[{}]: {:x}", seen, hash);
                 seen += 1;
             }
         }
@@ -396,8 +340,8 @@ mod tests {
                 let p = kmi.ks.kmp[hash];
                 if p.is_set() {
                     dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
-                    kmi.scp[1].rebuild(&kmi.ks, p, hash)?;
-                    dbg_assert_eq!(kmi.scp[1].mark.p, p, "reps: {}", kmi.ks.repeat.len());
+                    let scp = Scope::rebuild(&kmi.ks, &kc, &p, hash)?;
+                    dbg_assert_eq!(scp.mark.p, p, "reps: {}", kmi.ks.repeat.len());
                 }
             }
         }

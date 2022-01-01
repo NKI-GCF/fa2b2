@@ -28,6 +28,10 @@ pub trait PriExtPosOri: Clone {
     fn set_repetitive(&mut self);
     fn is_repetitive(&self) -> bool;
     fn rep_dup_masked(&self) -> u64;
+    fn is_replaceable_by(&self, new_entry: u64) -> bool;
+    fn is_set_and_not(&self, other: u64) -> bool;
+    fn same_pos_and_ext(&self, new_entry: u64) -> bool;
+    fn has_samepos(&self, other: u64) -> bool;
     //fn ext_max() -> Self;
 }
 
@@ -117,22 +121,15 @@ impl PriExtPosOri for u64 {
     fn rep_dup_masked(&self) -> u64 {
         *self & !0xc0_0000_0000_0000
     }
-    /* does not work because extension is currently limited by readlen.
-     * could maybe instead also shift base kmer or bits
-     * fn ext_max() -> Self {
-        0xFF
-    }*/
-}
-
-/// for extended kmers, where position is midpoint
-pub trait MidPos: PriExtPosOri {
-    fn is_replaceable_by(&self, new_entry: u64) -> bool;
-    fn is_set_and_not(&self, other: u64) -> bool;
-    fn has_samepos(&self, other: u64) -> bool;
-    fn same_pos_and_ext(&self, new_entry: u64) -> bool;
-}
-
-impl MidPos for u64 {
+    fn is_replaceable_by(&self, new_entry: u64) -> bool {
+        // only extension bits means blacklisting, except for extension 0. pos is always > kmerlen
+        self.is_no_pos()
+            || new_entry.extension() > self.rep_dup_masked() // TODO: count down extension?
+            || (new_entry.extension() == self.extension() && new_entry.pos() <= self.pos())
+    }
+    fn is_set_and_not(&self, other: u64) -> bool {
+        self.is_set() && !self.is_same(other)
+    }
     fn same_pos_and_ext(&self, new_entry: u64) -> bool {
         (*self ^ new_entry) & 0xFF0F_FFFF_FFFF_FFFE == 0
     }
@@ -143,15 +140,11 @@ impl MidPos for u64 {
             true
         }
     }
-    fn is_replaceable_by(&self, new_entry: u64) -> bool {
-        // only extension bits means blacklisting, except for extension 0. pos is always > kmerlen
-        self.is_no_pos()
-            || new_entry.extension() > self.rep_dup_masked() // TODO: count down extension?
-            || (new_entry.extension() == self.extension() && new_entry.pos() <= self.pos())
-    }
-    fn is_set_and_not(&self, other: u64) -> bool {
-        self.is_set() && !self.is_same(other)
-    }
+    /* does not work because extension is currently limited by readlen.
+     * could maybe instead also shift base kmer or bits
+     * fn ext_max() -> Self {
+        0xFF
+    }*/
 }
 
 #[derive(new, Clone, PartialEq)]

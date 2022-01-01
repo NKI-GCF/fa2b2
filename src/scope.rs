@@ -158,40 +158,29 @@ impl<'a> Scope<'a> {
         } else {
             dbg_print!("\t\t<!>");
         }
-        // in repetitive dna, mark may not be assigned
-        self.extension_gave_mark(ks)
+        while self.can_extend() {
+            self.p.extend();
+            dbg_assert!(self.p.pos() >= self.mark.p.pos());
+
+            if self.p.pos() - self.mark.p.pos() > (self.kc.afstand(self.p.x()) * 2) as u64 {
+                let b2 = ks.b2_for_p(self.p).unwrap();
+                dbg_assert!(self.increment(b2));
+                if !self.is_p_beyond_contig() {
+                    dbg_print!("running into end of contig");
+                    self.p.clear();
+                    break;
+                }
+            }
+            // in repetitive dna, mark may not be assigned
+            if self.set_next_mark(Some(ks))? {
+                return Ok(true); // extended and mark set.
+            }
+        }
+        Ok(false) // too much repetition to get mark or running into end of contig
     }
 
     fn can_extend(&self) -> bool {
         self.p.x() + 1 < self.kc.extent.len()
-    }
-
-    // reads b2 for extension, but we cannot add, e.g. running into end of contig => false.
-    fn extend<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) -> Result<()> {
-        self.p.extend();
-        dbg_assert!(self.p.pos() >= self.mark.p.pos());
-
-        if self.p.pos() - self.mark.p.pos() > (self.kc.afstand(self.p.x()) * 2) as u64 {
-            let b2 = ks.b2_for_p(self.p).unwrap();
-            dbg_assert!(self.increment(b2));
-            ensure!(!self.is_p_beyond_contig(), "unresolved past extension");
-        }
-        Ok(())
-    }
-
-    /// true: too few twobits or at contig end; true: extended and mark set.
-    fn extension_gave_mark<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) -> Result<bool> {
-        while self.can_extend() {
-            if let Err(e) = self.extend(ks) {
-                dbg_print!("{}", e);
-                self.p.clear();
-                break;
-            }
-            if self.set_next_mark(Some(ks))? {
-                return Ok(true);
-            }
-        }
-        Ok(false)
     }
 
     fn is_xmer_complete(&self, x: usize) -> bool {

@@ -127,7 +127,7 @@ impl<'a> Scope<'a> {
                     storage.set(min_p);
                 }
                 dbg_print!("resolving past for [{:x}], {:#x}", min_idx, stored_p);
-                if new_scp.extension_gave_mark(ks)? && !new_scp.handle_mark(ks)? {
+                if !new_scp.handle_mark(ks)? {
                     dbg_print!("unresolved new_scp mark");
                 }
             } else if ks.kmp[min_idx].is_no_pos() {
@@ -169,8 +169,7 @@ impl<'a> Scope<'a> {
 
         if self.p.pos() - self.mark.p.pos() > (self.kc.afstand(self.p.x()) * 2) as u64 {
             let b2 = ks.b2_for_p(self.p).unwrap();
-            let has_kmer = self.increment(b2);
-            assert!(has_kmer);
+            dbg_assert!(self.increment(b2));
             ensure!(!self.is_p_beyond_contig(), "unresolved past extension");
         }
         Ok(())

@@ -70,7 +70,8 @@ impl<'a> KmerIter<'a> {
                         // If a repetition ends in an N-stretch, thereafter offset to period
                         // may differ or the repetition could be different or entirely gone.
                     } else if self.scp.period != 0 {
-                        if self.ks.b2_for_p(self.scp.p - self.scp.period)? == b2 {
+                        let pd = self.scp.period;
+                        if self.ks.b2_for_p(self.scp.p - pd)? == b2 {
                             let idx = self.scp.mark.get_idx();
                             let stored = self.ks.kmp[idx];
                             let dist = match self.scp.mark.p.pos().cmp(&stored.pos()) {
@@ -79,12 +80,11 @@ impl<'a> KmerIter<'a> {
                                     dbg_print!("repetitive occurs before non-repetitive?");
                                     stored.pos() - self.scp.mark.p.pos()
                                 }
-                                cmp::Ordering::Equal => panic!(
-                                    "revisit [{:x}] {:x} (pd: {})?",
-                                    idx, stored, self.scp.period
-                                ),
+                                cmp::Ordering::Equal => {
+                                    dbg_panic!("revisit [{:x}] {:x} (pd: {})?", idx, stored, pd);
+                                }
                             };
-                            if dist % self.scp.period == 0 {
+                            if dist % pd == 0 {
                                 repetitive += 1;
                                 self.ks.extend_repetitive(idx, dist as u32);
                             }
@@ -105,7 +105,7 @@ impl<'a> KmerIter<'a> {
                         Err(e) => {
                             if e.to_string() != "end of contig." {
                                 // FIXME: assert?
-                                dbg_print!("unexpected end of contig");
+                                dbg_print!("unexpected error");
                                 break 'outer;
                             }
                             dbg_print!("{} (p:{:x})", e, self.scp.mark.p);

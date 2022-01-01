@@ -57,6 +57,9 @@ impl KmerConst {
             extent,
         }
     }
+    pub fn no_xmers(&self, x: usize) -> usize {
+        self.no_kmers - self.afstand(x)
+    }
     pub fn get_kmers(&self, x: usize) -> (usize, usize) {
         let first = self.extent[x] >> self.max_afstand;
         let second = self.extent[x] & (self.max_afstand - 1);

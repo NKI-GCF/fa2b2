@@ -253,13 +253,12 @@ impl<'a> Scope<'a> {
     }
 
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)
+    /// geen enkele optimum kan voorkoment bij repetitive DNA
     fn set_next_mark<T: PriExtPosOri>(&mut self, oks: Option<&KmerStore<T>>) -> Result<bool> {
         self.mark.reset();
         let x = self.p.x();
-        let afs = self.kc.afstand(x);
-        ensure!(self.kc.no_kmers > afs, "Couldn't obtain new mark.");
         // reverse is logischer omdat we bij gelijke extensie voor een lagere positie kiezen.
-        for i in (0..(self.kc.no_kmers - afs)).rev() {
+        for i in (0..self.kc.no_xmers(x)).rev() {
             let _ = self.set_if_optimum(dbgx!(i), x, oks);
         }
         Ok(self.mark.is_set())

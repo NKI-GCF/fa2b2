@@ -75,7 +75,7 @@ impl<'a> Scope<'a> {
                 // we weten extension op voorhand.
                 let oks = Some(ks);
                 if (scp.set_if_optimum(0, scp.mark.p.x(), oks) && scp.all_kmers())
-                    || scp.mark_set_considering_leaving(oks)?
+                    || scp.mark_set_considering_leaving(oks, false)?
                 {
                     if p.same_pos_and_ext(scp.mark.p) {
                         break;
@@ -225,9 +225,13 @@ impl<'a> Scope<'a> {
     fn mark_set_considering_leaving<T: PriExtPosOri>(
         &mut self,
         oks: Option<&KmerStore<T>>,
+        reset_extension_if_leaving: bool,
     ) -> Result<bool> {
         if self.all_kmers() && self.mark.is_set() {
             if self.is_mark_leaving() {
+                if reset_extension_if_leaving {
+                    self.p.clear_extension();
+                }
                 return self.set_next_mark(oks);
             }
             Ok(true)
@@ -252,7 +256,7 @@ impl<'a> Scope<'a> {
                     return Ok(self.all_kmers());
                 }
             }
-            self.mark_set_considering_leaving(oks)
+            self.mark_set_considering_leaving(oks, true)
         } else {
             Ok(false)
         }

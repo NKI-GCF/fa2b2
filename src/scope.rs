@@ -106,7 +106,7 @@ impl<'a> Scope<'a> {
         return Ok(scp);
     }
 
-    /// return toont of er een oplossing was
+    /// return toont of er een oplossing (mark gezet) was
     pub fn handle_mark<T>(&mut self, ks: &mut KmerStore<T>) -> Result<bool>
     where
         T: PriExtPosOri + fmt::LowerHex + Copy,
@@ -203,7 +203,7 @@ impl<'a> Scope<'a> {
     }
 
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
-    /// true if we have one kmer.
+    /// true if we have at least one kmer.
     pub fn increment(&mut self, b2: u8) -> bool {
         // XXX: function is hot
         if self.i >= self.kc.kmerlen {

@@ -38,6 +38,14 @@ impl<'a> KmerIter<'a> {
         self.ks.offset_contig(self.n_stretch);
         self.goffs += self.n_stretch;
         self.n_stretch = 0;
+        self.scp.p.clear_extension();
+        self.scp.mark.reset();
+        self.scp.plim.0 = self.scp.p.pos();
+        self.scp.mod_i = 0;
+        // If a repetition ends in an N-stretch, thereafter offset to period
+        // may differ or the repetition could be different or entirely gone.
+        // TODO: allow repetition to include N-stretch - if both sides of N-stretch show the same repetition.
+        self.scp.period = 0;
     }
 
     pub fn markcontig<T: PriExtPosOri>(&mut self, chrname: &str, seq: &mut Iter<u8>) -> Result<()> {
@@ -48,90 +56,67 @@ impl<'a> KmerIter<'a> {
         let mut n_count = 0_u64;
         let mut tot = 0_u64;
 
-        'outer: loop {
-            while let Some(b2) = seq.next().map(|&c| {
-                let b2 = (c >> 1) & 0x7;
-                // dbg_print!("[{}, {}]: {:x}", self.scp.p.pos() >> 1, c as char, b2);
-                dbg_print!("{}: {:x}", c as char, b2);
-                b2
-            }) {
-                tot += 1;
-                let p = self.scp.p;
-                if b2 < 4 {
-                    // new sequence is also stored, to enable lookup later.
-                    if let Some(qb) = self.ks.b2.get_mut(p.byte_pos()) {
-                        *qb |= b2 << (p & 6);
-                    }
-                    self.ks.p_max = p.pos() + 4;
-                    if self.n_stretch > 0 {
-                        self.finalize_n_stretch();
-                        self.scp.plim.0 = p.pos();
-                        self.scp.period = 0;
-                        // If a repetition ends in an N-stretch, thereafter offset to period
-                        // may differ or the repetition could be different or entirely gone.
-                    } else if self.scp.period != 0 {
-                        let pd = self.scp.period;
-                        if self.ks.b2_for_p(self.scp.p - pd)? == b2 {
-                            let idx = self.scp.mark.get_idx();
-                            let stored = self.ks.kmp[idx];
-                            let dist = match self.scp.mark.p.pos().cmp(&stored.pos()) {
-                                cmp::Ordering::Greater => self.scp.mark.p.pos() - stored.pos(),
-                                cmp::Ordering::Less => {
-                                    dbg_print!("repetitive occurs before non-repetitive?");
-                                    stored.pos() - self.scp.mark.p.pos()
-                                }
-                                cmp::Ordering::Equal => {
-                                    // FIXME: waarom gebeurt dit? TODO: ignore het niet.
-                                    //dbg_panic!("revisit [{:x}] {:x} (pd: {})?", idx, stored, pd);
-                                    dbg_print!("revisit [{:x}] {:x} (pd: {})?", idx, stored, pd);
-                                    pd - 1
-                                }
-                            };
-                            if dist % pd == 0 {
-                                repetitive += 1;
-                                self.ks.extend_repetitive(idx, dist as u32);
-                            }
-                        } else {
-                            self.scp.period = 0;
-                        }
-                    }
-
-                    // scp funcs also used for scope rebuild, therefore ext is set here.
-                    match self.scp.complete_and_update_mark::<u64>(b2, None) {
-                        Ok(true) => {
-                            if !self.scp.handle_mark(&mut self.ks)? {
-                                dbg_print!("Unable to find mark");
-                            }
-                            continue;
-                        }
-                        Ok(false) => continue 'outer,
-                        Err(e) => {
-                            if e.to_string() != "end of contig." {
-                                // FIXME: assert?
-                                dbg_print!("unexpected error");
-                                break 'outer;
-                            }
-                            dbg_print!("{} (p:{:x})", e, self.scp.mark.p);
-                            continue 'outer;
-                        }
-                    }
-                } else {
-                    if self.scp.i != 0 {
-                        dbg_print!("started N-stretch at {}.", p);
-                        self.goffs += self.scp.i as u64;
-                        self.ks.push_contig(p, self.goffs);
-
-                        // clear all except orientation and position to rebuild at the start of a new contig.
-                        self.n_stretch = 0;
-                        self.scp.i = 0;
-                        self.scp.mod_i = 0;
-                        self.scp.period = 0;
-                    }
-                    self.n_stretch += 1;
-                    n_count += 1;
+        while let Some(b2) = seq.next().map(|&c| {
+            let b2 = (c >> 1) & 0x7;
+            // dbg_print!("[{}, {}]: {:x}", self.scp.p.pos() >> 1, c as char, b2);
+            dbg_print!("{}: {:x}", c as char, b2);
+            b2
+        }) {
+            tot += 1;
+            let p = self.scp.p;
+            if b2 < 4 {
+                // new sequence is also stored, to enable lookup later.
+                if let Some(qb) = self.ks.b2.get_mut(p.byte_pos()) {
+                    *qb |= b2 << (p & 6);
                 }
+                self.ks.p_max = p.pos() + 4;
+                if self.n_stretch > 0 {
+                    self.finalize_n_stretch();
+                } else if self.scp.period != 0 {
+                    let pd = self.scp.period;
+                    if self.ks.b2_for_p(self.scp.p - pd)? == b2 {
+                        let idx = self.scp.mark.get_idx();
+                        let stored = self.ks.kmp[idx];
+                        let dist = match self.scp.mark.p.pos().cmp(&stored.pos()) {
+                            cmp::Ordering::Greater => self.scp.mark.p.pos() - stored.pos(),
+                            cmp::Ordering::Less => {
+                                dbg_print!("repetitive occurs before non-repetitive?");
+                                stored.pos() - self.scp.mark.p.pos()
+                            }
+                            cmp::Ordering::Equal => {
+                                // FIXME: waarom gebeurt dit? TODO: ignore het niet.
+                                //dbg_panic!("revisit [{:x}] {:x} (pd: {})?", idx, stored, pd);
+                                dbg_print!("revisit [{:x}] {:x} (pd: {})?", idx, stored, pd);
+                                pd - 1
+                            }
+                        };
+                        if dist % pd == 0 {
+                            repetitive += 1;
+                            self.ks.extend_repetitive(idx, dist as u32);
+                        }
+                    } else {
+                        self.scp.period = 0;
+                    }
+                }
+                // scp funcs also used for scope rebuild, therefore ext is set here.
+                if self.scp.complete_and_update_mark::<u64>(b2, None)? {
+                    if !self.scp.handle_mark(&mut self.ks)? {
+                        dbg_print!("Unable to find mark");
+                    }
+                }
+            } else {
+                if self.scp.i != 0 {
+                    dbg_print!("started N-stretch at {}.", p);
+                    self.goffs += self.scp.i as u64;
+                    self.ks.push_contig(p, self.goffs);
+
+                    // clear all except orientation and position to rebuild at the start of a new contig.
+                    self.n_stretch = 0;
+                    self.scp.i = 0;
+                }
+                self.n_stretch += 1;
+                n_count += 1;
             }
-            break;
         }
         if self.n_stretch > 0 {
             dbgx!(self.finalize_n_stretch());

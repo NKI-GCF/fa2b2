@@ -111,7 +111,7 @@ fn dump_stats(ks: &KmerStore<u64>, extent_len: usize) {
         stat[if k.is_set() { 1 } else { 0 }][k.x()] += 1;
     }
     println!(
-        "Unset: {} of {} \t{:.2}%",
+        "Unset: {} of {} (k/x-mers) \t{:.2}%",
         stat[0][0],
         ks.kmp.len(),
         100.0 * stat[0][0] as f64 / ks.kmp.len() as f64

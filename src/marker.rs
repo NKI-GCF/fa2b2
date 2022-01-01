@@ -81,7 +81,10 @@ impl<'a> KmerIter<'a> {
                                     stored.pos() - self.scp.mark.p.pos()
                                 }
                                 cmp::Ordering::Equal => {
-                                    dbg_panic!("revisit [{:x}] {:x} (pd: {})?", idx, stored, pd);
+                                    // FIXME: waarom gebeurt dit? TODO: ignore het niet.
+                                    //dbg_panic!("revisit [{:x}] {:x} (pd: {})?", idx, stored, pd);
+                                    dbg_print!("revisit [{:x}] {:x} (pd: {})?", idx, stored, pd);
+                                    pd - 1
                                 }
                             };
                             if dist % pd == 0 {

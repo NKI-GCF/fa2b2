@@ -71,8 +71,7 @@ impl<'a> Scope<'a> {
         loop {
             let b2 = ks.b2_for_p(scp.p).unwrap();
             dbg_print!("=> b2 {:x}, p: {:#x} <=", b2, scp.p);
-            scp.increment(b2);
-            if scp.i >= scp.kc.kmerlen {
+            if scp.increment(b2) {
                 // we weten extension op voorhand.
                 let oks = Some(ks);
                 if (scp.set_if_optimum(0, scp.mark.p.x(), oks) && scp.all_kmers())
@@ -170,7 +169,8 @@ impl<'a> Scope<'a> {
 
         if self.p.pos() - self.mark.p.pos() > (self.kc.afstand(self.p.x()) * 2) as u64 {
             let b2 = ks.b2_for_p(self.p).unwrap();
-            self.increment(b2);
+            let has_kmer = self.increment(b2);
+            assert!(has_kmer);
             ensure!(!self.is_p_beyond_contig(), "unresolved past extension");
         }
         Ok(())
@@ -200,7 +200,8 @@ impl<'a> Scope<'a> {
     }
 
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
-    pub fn increment(&mut self, b2: u8) {
+    /// true if we have one kmer.
+    pub fn increment(&mut self, b2: u8) -> bool {
         // XXX: function is hot
         if self.i >= self.kc.kmerlen {
             let old_d = self.d[self.mod_i];
@@ -214,6 +215,7 @@ impl<'a> Scope<'a> {
         self.p &= !1;
         self.p += 2 + self.d[self.mod_i].update(b2);
         self.i += 1;
+        self.i >= self.kc.kmerlen
     }
 
     /// sufficient kmers to have mimimum and do we have minimum?
@@ -239,8 +241,7 @@ impl<'a> Scope<'a> {
         oks: Option<&KmerStore<T>>,
     ) -> Result<bool> {
         // XXX: function is very hot
-        self.increment(b2);
-        if self.i >= self.kc.kmerlen {
+        if self.increment(b2) {
             // mark.p hoeft niet gezet te zijn.
             for x in 0..=self.p.x() {
                 if self.set_if_optimum(0, x, oks) {
@@ -405,7 +406,7 @@ mod tests {
         let kc = KmerConst::new(SEQLEN, 1000);
         let mut occ = Scope::new((0, 100), &kc, 0);
         for _ in 0..6 {
-            occ.increment(1);
+            let _ = occ.increment(1);
             occ.update_mark::<u64>(0, None);
         }
         let mut kmer = occ.kmer();
@@ -426,19 +427,19 @@ mod tests {
         let kc = KmerConst::new(SEQLEN, 1000);
         let mut occ = Scope::new((0, 100), &kc, 0);
         for _ in 0..8 {
-            occ.increment(0);
+            let _ = occ.increment(0);
             occ.update_mark::<u64>(0, None);
         }
         for _ in 0..8 {
-            occ.increment(1);
+            let _ = occ.increment(1);
             occ.update_mark::<u64>(0, None);
         }
         for _ in 0..8 {
-            occ.increment(2);
+            let _ = occ.increment(2);
             occ.update_mark::<u64>(0, None);
         }
         for _ in 0..8 {
-            occ.increment(3);
+            let _ = occ.increment(3);
             occ.update_mark::<u64>(0, None);
         }
     }

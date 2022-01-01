@@ -41,7 +41,7 @@ impl<'a> KmerIter<'a> {
     }
 
     fn is_repetitive(&self, b2: u8) -> Result<bool> {
-        let dist = 0; //self.scp.period;
+        let dist = self.scp.period;
         Ok(dist != 0 && self.ks.b2_for_p(self.scp.p - dist)? == b2)
     }
 

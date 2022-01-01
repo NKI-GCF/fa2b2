@@ -139,7 +139,7 @@ impl<'a> Scope<'a> {
             assert!(self.mark.p.pos() > stored_pos);
             if dbgx!(stored_pos >= self.plim.0.pos() && stored_pos < self.plim.1.pos()) {
                 let dist = self.mark.p.pos() - stored_pos;
-                if dist < self.kc.repetition_max_dist {
+                if dbgx!(dist < self.kc.repetition_max_dist) {
                     self.period = dist;
                     // niet gezet, doen we niet bij repetition, extensie is niet nodig.
                     return Ok(false);
@@ -225,11 +225,10 @@ impl<'a> Scope<'a> {
                     return Ok(dbgf!(self.all_kmers(), "{}"));
                 }
             }
-            if dbgx!(self.mark_is_first_or_leaving()) {
-                return self.set_next_mark(oks);
-            }
+            self.handle_leaving(oks)
+        } else {
+            Ok(false)
         }
-        Ok(false)
     }
 
     /// is occ complete? call na complete_kmer() - self.i increment.
@@ -238,16 +237,19 @@ impl<'a> Scope<'a> {
     }
 
     /// is de minimum/optimum leaving? eerste is speciaal.
-    fn mark_is_first_or_leaving(&self) -> bool {
-        match self.i.cmp(&self.kc.venster) {
-            cmp::Ordering::Greater => {
-                let p_pos = self.p.pos();
-                let dist = (self.kc.no_kmers << 1) as u64;
-                p_pos >= self.mark.p.pos() + dist
+    fn handle_leaving<T: PriExtPosOri>(&mut self, oks: Option<&KmerStore<T>>) -> Result<bool> {
+        if self.i > self.kc.venster {
+            let p_pos = self.p.pos();
+            let dist = (self.kc.no_kmers << 1) as u64;
+            if p_pos >= self.mark.p.pos() + dist {
+                return self.set_next_mark(oks);
             }
-            cmp::Ordering::Less => false,
-            cmp::Ordering::Equal => true,
+        } else if self.i == self.kc.venster {
+            // waarom is dit nodig
+            // !self.mark.is_set()
+            return self.set_next_mark(oks);
         }
+        Ok(false)
     }
 
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)

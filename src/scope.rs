@@ -211,6 +211,7 @@ impl<'a> Scope<'a> {
     }
 
     // hierin vinden .i & .p increments and kmer .d[] update plaats.
+    // returns true if all kmers observed and one is set as mark.
     pub fn complete_and_update_mark<T: PriExtPosOri>(
         &mut self,
         b2: u8,
@@ -220,15 +221,21 @@ impl<'a> Scope<'a> {
         // XXX: function is very hot
         self.increment(b2);
         if self.i >= self.kc.kmerlen {
-            for x in x_start..=self.p.x() {
+            for x in 0..=self.p.x() {
                 if self.set_if_optimum(0, x, oks) {
-                    return Ok(dbgf!(self.all_kmers(), "{}"));
+                    // als we een nieuwe xmer tegenkwamen, wel genoeg kmers?
+                    return Ok(self.all_kmers());
                 }
             }
-            self.handle_leaving(oks)
-        } else {
-            Ok(false)
+            // genoeg kmers om mimimum vast te houden en hebben we die vast?
+            if self.all_kmers() {
+                if self.is_mark_leaving() {
+                    return self.set_next_mark(oks);
+                }
+                return Ok(true);
+            }
         }
+        Ok(false)
     }
 
     /// is occ complete? call na complete_kmer() - self.i increment.
@@ -238,20 +245,6 @@ impl<'a> Scope<'a> {
 
     fn is_mark_leaving(&self) -> bool {
         self.p.pos() >= self.mark.p.pos() + (self.kc.no_xmers(self.p.x()) << 1) as u64
-    }
-
-    /// is de minimum/optimum leaving? eerste is speciaal.
-    fn handle_leaving<T: PriExtPosOri>(&mut self, oks: Option<&KmerStore<T>>) -> Result<bool> {
-        if self.i > self.kc.venster {
-            if self.is_mark_leaving() {
-                return self.set_next_mark(oks);
-            }
-        } else if self.i == self.kc.venster {
-            // waarom is dit nodig
-            // !self.mark.is_set()
-            return self.set_next_mark(oks);
-        }
-        Ok(false)
     }
 
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)

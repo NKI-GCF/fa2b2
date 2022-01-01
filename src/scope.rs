@@ -107,7 +107,7 @@ impl<'a> Scope<'a> {
     }
 
     /// return toont of er een oplossing (mark gezet) was
-    pub fn handle_mark<T>(&mut self, ks: &mut KmerStore<T>) -> Result<bool>
+    fn handle_mark<T>(&mut self, ks: &mut KmerStore<T>) -> Result<bool>
     where
         T: PriExtPosOri + fmt::LowerHex + Copy,
     {
@@ -242,26 +242,34 @@ impl<'a> Scope<'a> {
         }
     }
 
-    // hierin vinden .i & .p increments and kmer .d[] update plaats.
-    // returns true if all kmers observed and one is set as mark.
-    pub fn complete_and_update_mark<T: PriExtPosOri>(
-        &mut self,
-        b2: u8,
-        oks: Option<&KmerStore<T>>,
-    ) -> Result<bool> {
+    // hier krijgen we nieuwe sequence, zijn geen past scope aan het behandelen, of zo.
+    // .i & .p increments en kmer .d[] updates vinden plaats.
+    pub fn complete_and_update_mark<T>(&mut self, b2: u8, ks: &mut KmerStore<T>) -> Result<()>
+    where
+        T: PriExtPosOri + fmt::LowerHex + Copy,
+    {
         // XXX: function is very hot
         if self.increment(b2) {
             // mark.p hoeft niet gezet te zijn.
+            let mut test = false;
             for x in 0..=self.p.x() {
-                if self.set_if_optimum(0, x, oks) {
-                    // als we een nieuwe xmer tegenkwamen, wel genoeg kmers?
-                    return Ok(self.all_kmers());
+                //
+                if self.set_if_optimum(0, x, Some(ks)) {
+                    test = true;
+                    break;
                 }
             }
-            self.mark_set_considering_leaving(oks, true)
-        } else {
-            Ok(false)
+            if test {
+                // nieuwe xmer, maar ook wel genoeg kmers?
+                test = self.all_kmers();
+            } else {
+                test = self.mark_set_considering_leaving(Some(ks), true)?;
+            }
+            if test && !self.handle_mark(ks)? {
+                dbg_print!("Unable to find mark");
+            }
         }
+        Ok(())
     }
 
     /// is occ complete? call na complete_kmer() - self.i increment.

@@ -100,11 +100,7 @@ impl<'a> KmerIter<'a> {
                     }
                 }
                 // scp funcs also used for scope rebuild, therefore ext is set here.
-                if self.scp.complete_and_update_mark::<u64>(b2, None)? {
-                    if !self.scp.handle_mark(&mut self.ks)? {
-                        dbg_print!("Unable to find mark");
-                    }
-                }
+                self.scp.complete_and_update_mark::<u64>(b2, &mut self.ks)?;
             } else {
                 if self.scp.i != 0 {
                     dbg_print!("started N-stretch at {}.", p);

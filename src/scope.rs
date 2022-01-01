@@ -68,33 +68,39 @@ impl<'a> Scope<'a> {
             period: 0,
         };
 
-        let x = p.x();
         loop {
             let b2 = ks.b2_for_p(scp.p).unwrap();
             dbg_print!("=> b2 {:x}, p: {:#x} <=", b2, scp.p);
-            if scp.complete_and_update_mark(b2, x, Some(ks))? {
-                if p.same_pos_and_ext(scp.mark.p) {
-                    break;
-                }
-                if scp.mark.idx == idx {
-                    dbg_print!(
-                        "idx {:x} observed but for {:#x}, not {:#x}",
+            scp.increment(b2);
+            if scp.i >= scp.kc.kmerlen {
+                // we weten extension op voorhand.
+                let oks = Some(ks);
+                if (scp.set_if_optimum(0, scp.mark.p.x(), oks) && scp.all_kmers())
+                    || scp.mark_set_considering_leaving(oks)?
+                {
+                    if p.same_pos_and_ext(scp.mark.p) {
+                        break;
+                    }
+                    if scp.mark.get_idx() == idx {
+                        dbg_print!(
+                            "idx {:x} observed but for {:#x}, not {:#x}",
+                            idx,
+                            scp.mark.p,
+                            p
+                        );
+                    }
+                    // XXX ik zou een assertion hier logischer vinden
+                    /*assert!(
+                        scp.p.pos() < bound.1,
+                        "kmer {:x} not observed for {:x} !!",
                         idx,
-                        scp.mark.p,
                         p
-                    );
-                }
-                // XXX ik zou een assertion hier logischer vinden
-                /*assert!(
-                    scp.p.pos() < bound.1,
-                    "kmer {:x} not observed for {:x} !!",
-                    idx,
-                    p
-                );*/
-                if scp.p.pos() >= bound.1 {
-                    dbg_print!("kmer {:x} not observed for {:x} !!", idx, p);
-                    scp.p.clear();
-                    break;
+                    );*/
+                    if scp.p.pos() >= bound.1 {
+                        dbg_print!("kmer {:x} not observed for {:x} !!", idx, p);
+                        scp.p.clear();
+                        break;
+                    }
                 }
             }
         }
@@ -106,7 +112,7 @@ impl<'a> Scope<'a> {
     where
         T: PriExtPosOri + fmt::LowerHex + Copy,
     {
-        let (min_idx, min_p) = (self.mark.idx, self.mark.p);
+        let (min_idx, min_p) = self.mark.get();
         let stored_p = ks.kmp[min_idx];
 
         if stored_p.is_replaceable_by(min_p) {
@@ -210,32 +216,42 @@ impl<'a> Scope<'a> {
         self.i += 1;
     }
 
+    /// sufficient kmers to have mimimum and do we have minimum?
+    fn mark_set_considering_leaving<T: PriExtPosOri>(
+        &mut self,
+        oks: Option<&KmerStore<T>>,
+    ) -> Result<bool> {
+        if self.all_kmers() && self.mark.is_set() {
+            if self.is_mark_leaving() {
+                return self.set_next_mark(oks);
+            }
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     // hierin vinden .i & .p increments and kmer .d[] update plaats.
     // returns true if all kmers observed and one is set as mark.
     pub fn complete_and_update_mark<T: PriExtPosOri>(
         &mut self,
         b2: u8,
-        x_start: usize,
         oks: Option<&KmerStore<T>>,
     ) -> Result<bool> {
         // XXX: function is very hot
         self.increment(b2);
         if self.i >= self.kc.kmerlen {
+            // mark.p hoeft niet gezet te zijn.
             for x in 0..=self.p.x() {
                 if self.set_if_optimum(0, x, oks) {
                     // als we een nieuwe xmer tegenkwamen, wel genoeg kmers?
                     return Ok(self.all_kmers());
                 }
             }
-            // genoeg kmers om mimimum vast te houden en hebben we die vast?
-            if self.all_kmers() {
-                if self.is_mark_leaving() {
-                    return self.set_next_mark(oks);
-                }
-                return Ok(true);
-            }
+            self.mark_set_considering_leaving(oks)
+        } else {
+            Ok(false)
         }
-        Ok(false)
     }
 
     /// is occ complete? call na complete_kmer() - self.i increment.
@@ -274,7 +290,7 @@ impl<'a> Scope<'a> {
             let nk = self.kc.no_kmers;
             let kmer1 = self.d[base.wrapping_sub(d) % nk];
             let mut hash = kmer1.get_idx(e.0 <= e.1);
-            let mut p = match hash.cmp(&self.mark.idx) {
+            let mut p = match hash.cmp(&self.mark.get_idx()) {
                 cmp::Ordering::Less => self.p.with_ext(x) - (d << 1) as u64,
                 cmp::Ordering::Greater => return false,
                 cmp::Ordering::Equal => {
@@ -318,6 +334,7 @@ impl<'a> Scope<'a> {
                 p,
                 x
             );
+            // XXX maybe return self.all_kmers() ??
             true
         } else {
             false
@@ -339,7 +356,7 @@ impl<'a> fmt::Display for Scope<'a> {
             } else {
                 String::from("")
             };
-            write!(f, "{2}<{3}{: ^1$x}>", self.mark.idx, n << 2, o, s)
+            write!(f, "{2}<{3}{: ^1$x}>", self.mark.get_idx(), n << 2, o, s)
         } else if r + self.kc.kmerlen == self.kc.venster {
             let x = self.kc.venster - n;
             let s = if x != 0 {
@@ -347,7 +364,7 @@ impl<'a> fmt::Display for Scope<'a> {
             } else {
                 String::from("")
             };
-            write!(f, "{2}<{: ^1$x}{3}>", self.mark.idx, n << 2, o, s)
+            write!(f, "{2}<{: ^1$x}{3}>", self.mark.get_idx(), n << 2, o, s)
         } else {
             //let l = self.kc.venster - r - n;
             //let ls = if o {" ".repeat(o) + "|"} else {String::from("")};

@@ -148,11 +148,20 @@ impl PriExtPosOri for u64 {
 }
 
 #[derive(new, Clone, PartialEq)]
-pub struct KmerLoc<T> {
-    pub idx: usize,
+pub struct KmerLoc<T>
+where
+    T: Copy,
+{
+    idx: usize,
     pub p: T,
 }
-impl<T: PriExtPosOri> KmerLoc<T> {
+impl<T: PriExtPosOri + Copy> KmerLoc<T> {
+    pub fn get(&self) -> (usize, T) {
+        (self.idx, self.p)
+    }
+    pub fn get_idx(&self) -> usize {
+        self.idx
+    }
     pub fn reset(&mut self) {
         self.idx = usize::max_value();
         self.p.clear();
@@ -163,6 +172,8 @@ impl<T: PriExtPosOri> KmerLoc<T> {
     }
 
     pub fn set(&mut self, idx: usize, p: T, x: usize) {
+        // during rebuilding the strange case occurs that mark is not set, but p is (extension)
+        assert!(self.is_set() || self.p.is_no_pos() || self.p.extension() == p.extension());
         self.idx = idx;
         self.p = p;
         self.p.set_extension(x as u64);
@@ -174,7 +185,7 @@ mod tests {
     use super::*;
     use rand::{thread_rng, Rng};
 
-    impl<T: PriExtPosOri> KmerLoc<T> {
+    impl<T: PriExtPosOri + Copy> KmerLoc<T> {
         fn next(&mut self, p: u64, is_template: bool) {
             if is_template {
                 self.p.incr()

@@ -79,7 +79,7 @@ impl<'a> KmerIter<'a> {
                         // everything but optimum re-evaluation.
                         self.scp.increment(b2);
 
-                        let idx = self.scp.mark.idx;
+                        let idx = self.scp.mark.get_idx();
                         let stored = self.ks.kmp[idx];
                         assert!(stored.is_set());
 
@@ -108,7 +108,7 @@ impl<'a> KmerIter<'a> {
                     self.scp.period = 0;
 
                     // scp funcs also used for scope rebuild, therefore ext is set here.
-                    match self.scp.complete_and_update_mark::<u64>(b2, 0, None) {
+                    match self.scp.complete_and_update_mark::<u64>(b2, None) {
                         Ok(true) => {
                             if !self.scp.handle_mark(&mut self.ks)? {
                                 dbg_print!("Unable to find mark");

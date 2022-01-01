@@ -73,9 +73,8 @@ impl<'a> Scope<'a> {
             dbg_print!("=> b2 {:x}, p: {:#x} <=", b2, scp.p);
             if scp.increment(b2) {
                 // we weten extension op voorhand.
-                let oks = Some(ks);
-                if (scp.set_if_optimum(0, scp.mark.p.x(), oks) && scp.all_kmers())
-                    || scp.mark_set_considering_leaving(oks, false)?
+                if (scp.set_if_optimum(0, scp.mark.p.x(), Some(ks)) && scp.all_kmers())
+                    || scp.mark_set_considering_leaving(ks, false)?
                 {
                     if p.same_pos_and_ext(scp.mark.p) {
                         break;
@@ -182,7 +181,7 @@ impl<'a> Scope<'a> {
                 }
             }
             // in repetitive dna, mark may not be assigned
-            if self.set_next_mark(Some(ks))? {
+            if self.set_next_mark(ks)? {
                 return Ok(true); // extended and mark set.
             }
         }
@@ -226,7 +225,7 @@ impl<'a> Scope<'a> {
     /// sufficient kmers to have mimimum and do we have minimum?
     fn mark_set_considering_leaving<T: PriExtPosOri>(
         &mut self,
-        oks: Option<&KmerStore<T>>,
+        ks: &KmerStore<T>,
         reset_extension_if_leaving: bool,
     ) -> Result<bool> {
         if self.all_kmers() && self.mark.is_set() {
@@ -234,7 +233,7 @@ impl<'a> Scope<'a> {
                 if reset_extension_if_leaving {
                     self.p.clear_extension();
                 }
-                return self.set_next_mark(oks);
+                return self.set_next_mark(ks);
             }
             Ok(true)
         } else {
@@ -263,7 +262,7 @@ impl<'a> Scope<'a> {
                 // nieuwe xmer, maar ook wel genoeg kmers?
                 test = self.all_kmers();
             } else {
-                test = self.mark_set_considering_leaving(Some(ks), true)?;
+                test = self.mark_set_considering_leaving(ks, true)?;
             }
             if test && !self.handle_mark(ks)? {
                 dbg_print!("Unable to find mark");
@@ -283,12 +282,12 @@ impl<'a> Scope<'a> {
 
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)
     /// geen enkele optimum kan voorkoment bij repetitive DNA
-    fn set_next_mark<T: PriExtPosOri>(&mut self, oks: Option<&KmerStore<T>>) -> Result<bool> {
+    fn set_next_mark<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) -> Result<bool> {
         self.mark.reset();
         let x = self.p.x();
         // reverse is logischer omdat we bij gelijke extensie voor een lagere positie kiezen.
         for i in (0..self.kc.no_xmers(x)).rev() {
-            let _ = self.set_if_optimum(dbgx!(i), x, oks);
+            let _ = self.set_if_optimum(dbgx!(i), x, Some(ks));
         }
         Ok(self.mark.is_set())
     }
@@ -405,10 +404,10 @@ mod tests {
 
         /// add b2 to kmer, move .p according to occ orientation
         /// return whether required nr of kmers for struct scope were seen.
-        fn update_mark<T: PriExtPosOri>(&mut self, x_start: usize, oks: Option<&KmerStore<T>>) {
+        fn update_mark<T: PriExtPosOri>(&mut self, x_start: usize) {
             if self.i >= self.kc.kmerlen {
                 for x in x_start..=self.p.x() {
-                    if self.set_if_optimum(0, x, oks) {
+                    if self.set_if_optimum::<u64>(0, x, None) {
                         return;
                     }
                 }
@@ -424,7 +423,7 @@ mod tests {
         let mut occ = Scope::new((0, 100), &kc, 0);
         for _ in 0..6 {
             let _ = occ.increment(1);
-            occ.update_mark::<u64>(0, None);
+            occ.update_mark::<u64>(0);
         }
         let mut kmer = occ.kmer();
         dbg_assert_eq!(kmer.dna, 0x55);
@@ -432,7 +431,7 @@ mod tests {
         dbg_assert_eq!(occ.p, 0xd);
 
         occ.increment(2);
-        occ.update_mark::<u64>(0, None);
+        occ.update_mark::<u64>(0);
         kmer = occ.kmer();
         dbg_assert_eq!(kmer.dna, 0x95);
         dbg_assert_eq!(kmer.rc, 0xfc);
@@ -445,19 +444,19 @@ mod tests {
         let mut occ = Scope::new((0, 100), &kc, 0);
         for _ in 0..8 {
             let _ = occ.increment(0);
-            occ.update_mark::<u64>(0, None);
+            occ.update_mark::<u64>(0);
         }
         for _ in 0..8 {
             let _ = occ.increment(1);
-            occ.update_mark::<u64>(0, None);
+            occ.update_mark::<u64>(0);
         }
         for _ in 0..8 {
             let _ = occ.increment(2);
-            occ.update_mark::<u64>(0, None);
+            occ.update_mark::<u64>(0);
         }
         for _ in 0..8 {
             let _ = occ.increment(3);
-            occ.update_mark::<u64>(0, None);
+            occ.update_mark::<u64>(0);
         }
     }
 }

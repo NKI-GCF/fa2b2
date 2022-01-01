@@ -236,12 +236,14 @@ impl<'a> Scope<'a> {
         self.i >= self.kc.venster
     }
 
+    fn is_mark_leaving(&self) -> bool {
+        self.p.pos() >= self.mark.p.pos() + (self.kc.no_xmers(self.p.x()) << 1) as u64
+    }
+
     /// is de minimum/optimum leaving? eerste is speciaal.
     fn handle_leaving<T: PriExtPosOri>(&mut self, oks: Option<&KmerStore<T>>) -> Result<bool> {
         if self.i > self.kc.venster {
-            let x = self.p.x();
-            let dist = (self.kc.no_xmers(x) << 1) as u64;
-            if self.p.pos() >= self.mark.p.pos() + dist {
+            if self.is_mark_leaving() {
                 return self.set_next_mark(oks);
             }
         } else if self.i == self.kc.venster {

@@ -72,7 +72,8 @@ impl<'a> KmerIter<'a> {
                 self.ks.p_max = p.pos() + 4;
                 if self.n_stretch > 0 {
                     self.finalize_n_stretch();
-                } else if self.scp.period != 0 {
+                } else if self.scp.period != 0 && dbg_dump_if!(self.scp.mark.is_set(), false) {
+                    // XXX self.scp.mark.is_set() can be false here, it seems.
                     let pd = self.scp.period;
                     if self.ks.b2_for_p(self.scp.p - pd)? == b2 {
                         let idx = self.scp.mark.get_idx();

@@ -131,7 +131,9 @@ impl<'a> Scope<'a> {
                     dbg_print!("unresolved new_scp mark");
                 }
             } else if ks.kmp[min_idx].is_no_pos() {
-                ks.kmp[min_idx].set(min_p);
+                if self.period == 0 {
+                    ks.kmp[min_idx].set(min_p);
+                }
                 // If already set it was min_p. Then leave dupbit state.
             }
             return Ok(true);
@@ -150,7 +152,9 @@ impl<'a> Scope<'a> {
                     return Ok(false);
                 }
             }
-            ks.kmp[min_idx].set_dup();
+            if self.period == 0 {
+                ks.kmp[min_idx].set_dup();
+            }
         } else {
             dbg_print!("\t\t<!>");
         }

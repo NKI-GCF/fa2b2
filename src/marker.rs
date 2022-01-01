@@ -6,7 +6,7 @@ extern crate num;
 extern crate num_traits;
 
 use crate::kmerconst::KmerConst;
-use std::slice::Iter;
+use std::{cmp, slice::Iter};
 
 use crate::kmerloc::PriExtPosOri;
 use crate::kmerstore::KmerStore;
@@ -40,11 +40,6 @@ impl<'a> KmerIter<'a> {
         self.n_stretch = 0;
     }
 
-    fn is_repetitive(&self, b2: u8) -> Result<bool> {
-        let dist = self.scp.period;
-        Ok(dist != 0 && self.ks.b2_for_p(self.scp.p - dist)? == b2)
-    }
-
     pub fn markcontig<T: PriExtPosOri>(&mut self, chrname: &str, seq: &mut Iter<u8>) -> Result<()> {
         self.goffs = 0;
         self.ks.push_contig(self.scp.p.pos(), self.goffs);
@@ -71,41 +66,32 @@ impl<'a> KmerIter<'a> {
                     if self.n_stretch > 0 {
                         self.finalize_n_stretch();
                         self.scp.plim.0 = p.pos();
+                        self.scp.period = 0;
                         // If a repetition ends in an N-stretch, thereafter offset to period
                         // may differ or the repetition could be different or entirely gone.
-                    } else if self.is_repetitive(b2)? {
-                        // XXX somethings goes wrong while taking this path
-                        repetitive += 1;
-                        // everything but optimum re-evaluation.
-                        self.scp.increment(b2);
-
-                        let idx = self.scp.mark.get_idx();
-                        let stored = self.ks.kmp[idx];
-                        assert!(stored.is_set());
-
-                        assert!(self.scp.mark.p.pos() >= stored.pos());
-                        let dist = dbgx!(self.scp.mark.p.pos() - stored.pos());
-                        // Repeats can be more complex than a regular repetition. e.g.
-                        // if a transposon is inserted + inserted inverted, and this is the
-                        // repeat, then an xmers could recur at irregular intervals.
-                        // but then the xmer out of line is extended and gets its own period,
-                        // so it resolves that way too.
-                        if dist == 0 {
-                            dbg_assert!(
-                                false,
-                                "FIXME: waarom komen we opnieuw bij stored uit? [{:x}]: {:#x}",
-                                idx,
-                                stored
-                            );
-                        } else if dist % self.scp.period == 0 {
-                            // XXX A xmer could recur exacly on period but not be a(n exact) repeat.
-                            // The xmer of a repeat on a different contig is not a problem.
-                            // period does not get assigned in that case.
-                            self.ks.extend_repetitive(idx, dist as u32);
+                    } else if self.scp.period != 0 {
+                        if self.ks.b2_for_p(self.scp.p - self.scp.period)? == b2 {
+                            let idx = self.scp.mark.get_idx();
+                            let stored = self.ks.kmp[idx];
+                            let dist = match self.scp.mark.p.pos().cmp(&stored.pos()) {
+                                cmp::Ordering::Greater => self.scp.mark.p.pos() - stored.pos(),
+                                cmp::Ordering::Less => {
+                                    dbg_print!("repetitive occurs before non-repetitive?");
+                                    stored.pos() - self.scp.mark.p.pos()
+                                }
+                                cmp::Ordering::Equal => panic!(
+                                    "revisit [{:x}] {:x} (pd: {})?",
+                                    idx, stored, self.scp.period
+                                ),
+                            };
+                            if dist % self.scp.period == 0 {
+                                repetitive += 1;
+                                self.ks.extend_repetitive(idx, dist as u32);
+                            }
+                        } else {
+                            self.scp.period = 0;
                         }
-                        continue;
                     }
-                    self.scp.period = 0;
 
                     // scp funcs also used for scope rebuild, therefore ext is set here.
                     match self.scp.complete_and_update_mark::<u64>(b2, None) {

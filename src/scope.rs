@@ -180,6 +180,7 @@ impl<'a> Scope<'a> {
     }
 
     fn can_extend(&self) -> bool {
+        dbg_assert!(self.p.is_set());
         self.p.x() + 1 < self.kc.extent.len()
     }
 
@@ -188,6 +189,7 @@ impl<'a> Scope<'a> {
     }
 
     fn is_p_beyond_contig(&self) -> bool {
+        dbg_assert!(self.p.is_set());
         dbgx!(self.p.pos() >= self.plim.1)
     }
 
@@ -203,6 +205,7 @@ impl<'a> Scope<'a> {
             }
             self.d[self.mod_i] = old_d;
         }
+        dbg_assert!(self.p.is_set());
         // first bit is strand bit, set according to kmer orientation bit.
         self.p &= !1;
         self.p += 2 + self.d[self.mod_i].update(b2);

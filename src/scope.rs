@@ -167,7 +167,7 @@ impl<'a> Scope<'a> {
                 dbg_assert!(self.increment(b2));
                 if !self.is_p_beyond_contig() {
                     dbg_print!("running into end of contig");
-                    self.p.clear();
+                    self.p.clear_extension();
                     break;
                 }
             }

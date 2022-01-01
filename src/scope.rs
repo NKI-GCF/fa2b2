@@ -37,21 +37,6 @@ impl<'a> Scope<'a> {
         p: &T,
         idx: usize,
     ) -> Result<Self> {
-        /* Er gaat iets mis, blijkt uit repetitie telling die afwijkt afhankelijk
-        van de scope heropbouw. Indien met plim.0, geeft dit andere repetition
-        aantallen dan wanneer de eerste 2bit in scope wordt gebruikt. Voor de
-        meeste contigs meer repetitie, enkele minder. Duizendtallen op de primary
-        contigs.
-        De positie waarvoor herbouwt wordt zou een repetition of duplicaat kunnen
-        zijn, maar repetition wordt alleen geteld bij nieuwe sequentie. Dus afh
-        van scope rebuilding moeten er verschillende xmers 'bezet' zijn, wat dan
-        invloed heeft op de telling bij nieuwe sequence, lijkt mij de logischte
-        verklaring. */
-
-        // FIXME: dit zou hetzelfde resultaat moeten geven!
-        // TODO: verbeter rebuild code en test impact hierop.
-        // Minder of geen verschil bij deze twee alternatieven is beter:
-        // self.p = p.extension() | plim.0;
         let pos = p.pos();
         ensure!(pos != PriExtPosOri::no_pos());
         let plim = ks.get_contig_start_end_for_p(pos);

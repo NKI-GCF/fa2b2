@@ -239,9 +239,9 @@ impl<'a> Scope<'a> {
     /// is de minimum/optimum leaving? eerste is speciaal.
     fn handle_leaving<T: PriExtPosOri>(&mut self, oks: Option<&KmerStore<T>>) -> Result<bool> {
         if self.i > self.kc.venster {
-            let p_pos = self.p.pos();
-            let dist = (self.kc.no_kmers << 1) as u64;
-            if p_pos >= self.mark.p.pos() + dist {
+            let x = self.p.x();
+            let dist = (self.kc.no_xmers(x) << 1) as u64;
+            if self.p.pos() >= self.mark.p.pos() + dist {
                 return self.set_next_mark(oks);
             }
         } else if self.i == self.kc.venster {

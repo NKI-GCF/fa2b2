@@ -111,58 +111,68 @@ impl<'a> Scope<'a> {
     where
         T: PriExtPosOri + fmt::LowerHex + Copy,
     {
-        let (min_idx, min_p) = self.mark.get();
-        let stored_p = ks.kmp[min_idx];
+        if self.mark.is_set() {
+            let (min_idx, min_p) = self.mark.get();
+            let stored_p = ks.kmp[min_idx];
 
-        if stored_p.is_replaceable_by(min_p) {
-            //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
-            // dbg_print!("{}", self);
-            if dbgx!(stored_p.is_set_and_not(min_p)) {
-                let mut new_scp = Scope::rebuild(ks, self.kc, &stored_p, min_idx)?;
-                if !new_scp.p.is_set() {
-                    // unset when kmer is not observed (zie dbg_print..)
-                    return Ok(false);
+            if stored_p.is_replaceable_by(min_p) {
+                //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
+                // dbg_print!("{}", self);
+                if dbgx!(stored_p.is_set_and_not(min_p)) {
+                    let mut new_scp = Scope::rebuild(ks, self.kc, &stored_p, min_idx)?;
+                    if !new_scp.p.is_set() {
+                        // unset when kmer is not observed (zie dbg_print..)
+                        return Ok(false);
+                    }
+                    if let Some(storage) = ks.kmp.get_mut(min_idx) {
+                        storage.set(min_p);
+                    }
+                    dbg_print!("resolving past for [{:x}], {:#x}", min_idx, stored_p);
+                    if !new_scp.handle_mark(ks)? {
+                        dbg_print!("unresolved new_scp mark");
+                    }
+                } else if ks.kmp[min_idx].is_no_pos() {
+                    if self.period == 0 {
+                        ks.kmp[min_idx].set(min_p);
+                    }
+                    // If already set it was min_p. Then leave dupbit state.
                 }
-                if let Some(storage) = ks.kmp.get_mut(min_idx) {
-                    storage.set(min_p);
+                return Ok(true);
+            }
+            if stored_p.extension() == min_p.extension() {
+                // If a kmer occurs multiple times within an extending readlength (repetition),
+                // only the first gets a position. During mapping this rule should also apply.
+                // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
+                let stored_pos = stored_p.pos();
+                assert!(self.mark.p.pos() > stored_pos);
+                if dbgx!(stored_pos >= self.plim.0.pos() && stored_pos < self.plim.1.pos()) {
+                    let dist = self.mark.p.pos() - stored_pos;
+                    if dbgx!(dist < self.kc.repetition_max_dist) {
+                        self.period = dist;
+                        // niet gezet, doen we niet bij repetition, extensie is niet nodig.
+                        return Ok(false);
+                    }
                 }
-                dbg_print!("resolving past for [{:x}], {:#x}", min_idx, stored_p);
-                if !new_scp.handle_mark(ks)? {
-                    dbg_print!("unresolved new_scp mark");
-                }
-            } else if ks.kmp[min_idx].is_no_pos() {
                 if self.period == 0 {
-                    ks.kmp[min_idx].set(min_p);
+                    ks.kmp[min_idx].set_dup();
                 }
-                // If already set it was min_p. Then leave dupbit state.
+            } else {
+                dbg_print!("\t\t<!>");
             }
-            return Ok(true);
-        }
-        if stored_p.extension() == min_p.extension() {
-            // If a kmer occurs multiple times within an extending readlength (repetition),
-            // only the first gets a position. During mapping this rule should also apply.
-            // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
-            let stored_pos = stored_p.pos();
-            assert!(self.mark.p.pos() > stored_pos);
-            if dbgx!(stored_pos >= self.plim.0.pos() && stored_pos < self.plim.1.pos()) {
-                let dist = self.mark.p.pos() - stored_pos;
-                if dbgx!(dist < self.kc.repetition_max_dist) {
-                    self.period = dist;
-                    // niet gezet, doen we niet bij repetition, extensie is niet nodig.
-                    return Ok(false);
-                }
-            }
-            if self.period == 0 {
-                ks.kmp[min_idx].set_dup();
-            }
-        } else {
-            dbg_print!("\t\t<!>");
         }
         while self.can_extend() {
             self.p.extend();
-            dbg_assert!(self.p.pos() >= self.mark.p.pos());
+            // XXX this happens
+            dbg_assert!(
+                !self.mark.is_set() || self.p.pos() >= self.mark.p.pos(),
+                "{:#x}, {:#x}",
+                self.p,
+                self.mark.p
+            );
 
-            if self.p.pos() - self.mark.p.pos() > (self.kc.afstand(self.p.x()) * 2) as u64 {
+            if !self.mark.is_set()
+                || self.p.pos() - self.mark.p.pos() > (self.kc.afstand(self.p.x()) * 2) as u64
+            {
                 let b2 = ks.b2_for_p(self.p).unwrap();
                 dbg_assert!(self.increment(b2));
                 if !self.is_p_beyond_contig() {

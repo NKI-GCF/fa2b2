@@ -3,7 +3,7 @@ name = "fa2b2"
 
 [package]
 name = "fa2b2"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Roel Kluin <r.kluin@nki.nl>"]
 edition = "2021"
 

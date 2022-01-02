@@ -162,10 +162,15 @@ impl<'a> Scope<'a> {
             if !self.mark.is_set()
                 || self.p.pos() - self.mark.p.pos() > (self.kc.afstand(self.p.x()) * 2) as u64
             {
-                let b2 = ks.b2_for_p(self.p).unwrap();
-                dbg_print!("=> b2 {:x}, p: {:#x} <= (extension)", b2, self.p);
-                dbg_assert!(self.increment(b2));
-                if !self.is_p_beyond_contig() {
+                if let Ok(b2) = ks.b2_for_p(self.p) {
+                    dbg_print!("=> b2 {:x}, p: {:#x} <= (extension)", b2, self.p);
+                    dbg_assert!(self.increment(b2));
+                } else {
+                    dbg_print!("running into sequence head");
+                    self.p.clear_extension();
+                    break;
+                }
+                if self.is_p_beyond_contig() {
                     dbg_print!("running into end of contig");
                     self.p.clear_extension();
                     break;

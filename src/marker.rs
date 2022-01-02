@@ -69,7 +69,7 @@ impl<'a> KmerIter<'a> {
                 if let Some(qb) = self.ks.b2.get_mut(p.byte_pos()) {
                     *qb |= b2 << (p & 6);
                 }
-                self.ks.p_max = p.pos() + 4;
+                self.ks.p_max = p.pos() + 2;
                 if self.n_stretch > 0 {
                     self.finalize_n_stretch();
                 } else if self.scp.period != 0 && dbg_dump_if!(self.scp.mark.is_set(), false) {
@@ -81,7 +81,7 @@ impl<'a> KmerIter<'a> {
                         let dist = match self.scp.mark.p.pos().cmp(&stored.pos()) {
                             cmp::Ordering::Greater => self.scp.mark.p.pos() - stored.pos(),
                             cmp::Ordering::Less => {
-                                dbg_print!("repetitive occurs before non-repetitive?");
+                                dbg_print!("repetitive occurs before stored?");
                                 stored.pos() - self.scp.mark.p.pos()
                             }
                             cmp::Ordering::Equal => {

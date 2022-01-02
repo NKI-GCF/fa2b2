@@ -111,7 +111,12 @@ impl<'a> Scope<'a> {
                     if let Some(storage) = ks.kmp.get_mut(min_idx) {
                         storage.set(min_p);
                     }
-                    dbg_print!("resolving past for [{:x}], {:#x}", min_idx, stored_p);
+                    dbg_print!(
+                        "resolving past for [{:x}], {:#x} <= {:#x}",
+                        min_idx,
+                        stored_p,
+                        min_p
+                    );
                     if !new_scp.handle_mark(ks)? {
                         dbg_print!("unresolved new_scp mark");
                     }
@@ -158,6 +163,7 @@ impl<'a> Scope<'a> {
                 || self.p.pos() - self.mark.p.pos() > (self.kc.afstand(self.p.x()) * 2) as u64
             {
                 let b2 = ks.b2_for_p(self.p).unwrap();
+                dbg_print!("=> b2 {:x}, p: {:#x} <= (extension)", b2, self.p);
                 dbg_assert!(self.increment(b2));
                 if !self.is_p_beyond_contig() {
                     dbg_print!("running into end of contig");

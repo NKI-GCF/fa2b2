@@ -88,6 +88,7 @@ impl<'a> KmerIter<'a> {
                                 // FIXME: waarom gebeurt dit? TODO: ignore het niet.
                                 //dbg_panic!("revisit [{:x}] {:x} (pd: {})?", idx, stored, pd);
                                 dbg_print!("revisit [{:x}] {:x} (pd: {})?", idx, stored, pd);
+                                dbg_dump!();
                                 pd - 1
                             }
                         };

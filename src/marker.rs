@@ -38,6 +38,7 @@ impl<'a> KmerIter<'a> {
         self.ks.offset_contig(self.n_stretch);
         self.goffs += self.n_stretch;
         self.n_stretch = 0;
+        // clear all except orientation and position to rebuild at the start of a new contig.
         self.scp.p.clear_extension();
         self.scp.mark.reset();
         self.scp.plim.0 = self.scp.p.pos();
@@ -110,7 +111,6 @@ impl<'a> KmerIter<'a> {
                         self.scp.period = 0;
                     }
                 }
-                // scp funcs also used for scope rebuild, therefore ext is set here.
                 self.scp.complete_and_update_mark::<u64>(b2, &mut self.ks)?;
             } else {
                 if self.scp.i != 0 {
@@ -118,7 +118,6 @@ impl<'a> KmerIter<'a> {
                     self.goffs += self.scp.i as u64;
                     self.ks.push_contig(p, self.goffs);
 
-                    // clear all except orientation and position to rebuild at the start of a new contig.
                     self.n_stretch = 0;
                     self.scp.i = 0;
                 }

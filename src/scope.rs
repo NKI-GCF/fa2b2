@@ -58,7 +58,7 @@ impl<'a> Scope<'a> {
             dbg_print!("=> b2 {:x}, p: {:#x} <=", b2, scp.p);
             if scp.increment(b2) {
                 // we weten extension op voorhand.
-                if (scp.set_if_optimum(0, scp.mark.p.x(), Some(ks)) && scp.all_kmers())
+                if (scp.set_if_optimum(0, scp.p.x(), Some(ks)) && scp.all_kmers())
                     || scp.mark_set_considering_leaving(ks, false)?
                 {
                     if p.same_pos_and_ext(scp.mark.p) {

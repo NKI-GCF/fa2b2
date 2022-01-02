@@ -105,17 +105,16 @@ impl<'a> Scope<'a> {
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
                     let mut new_scp = Scope::rebuild(ks, self.kc, &stored_p, min_idx)?;
                     if !new_scp.p.is_set() {
-                        // unset when kmer is not observed (zie dbg_print..)
+                        // unset when kmer is not observed before bound.1
                         return Ok(false);
                     }
-                    ks.kmp[min_idx].set(min_p);
-
                     dbg_print!(
                         "resolving past for [{:x}], {:#x} <= {:#x}",
                         min_idx,
                         stored_p,
                         min_p
                     );
+                    ks.kmp[min_idx].set(min_p);
                     if !new_scp.handle_mark(ks)? {
                         dbg_print!("unresolved new_scp mark");
                     }

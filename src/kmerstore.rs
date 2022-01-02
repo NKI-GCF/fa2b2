@@ -87,7 +87,8 @@ impl<T: PriExtPosOri> KmerStore<T> {
         Ok(self.contig[i - 1].twobit)
     }
     pub fn b2_for_p(&self, p: u64) -> Result<u8> {
-        ensure!(p.pos() < self.p_max);
+        let pos = p.pos();
+        ensure!(pos < self.p_max);
         self.b2
             .get(p.byte_pos())
             .map(|x| (x >> (p & 6)) & 3)

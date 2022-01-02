@@ -131,9 +131,10 @@ impl<'a> Scope<'a> {
                 // only the first gets a position. During mapping this rule should also apply.
                 // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
                 let stored_pos = stored_p.pos();
-                assert!(self.mark.p.pos() > stored_pos);
+                let mark_pos = self.mark.p.pos();
+                assert!(mark_pos > stored_pos);
                 if dbgx!(stored_pos >= self.plim.0.pos() && stored_pos < self.plim.1.pos()) {
-                    let dist = self.mark.p.pos() - stored_pos;
+                    let dist = mark_pos - stored_pos;
                     if dbgx!(dist < self.kc.repetition_max_dist) {
                         self.period = dist;
                         // niet gezet, doen we niet bij repetition, extensie is niet nodig.

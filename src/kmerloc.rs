@@ -40,9 +40,11 @@ impl PriExtPosOri for u64 {
         *self = p;
     }
     fn get(&self) -> u64 {
+        assert!(self.is_set());
         *self
     }
     fn pos(&self) -> u64 {
+        //assert!(self.is_set());
         *self & 0xF_FFFF_FFFF_FFFE
     }
     fn no_pos() -> Self {
@@ -58,28 +60,35 @@ impl PriExtPosOri for u64 {
         self.pos() == PriExtPosOri::no_pos()
     }
     fn set_ori(&mut self, p: u64) {
+        assert!(self.is_set());
         *self ^= (*self ^ p) & 1
     }
     fn get_ori(&self) -> u64 {
+        assert!(self.is_set());
         self & 1
     }
     fn incr(&mut self) {
+        assert!(self.is_set());
         *self += 0x2;
     }
     fn decr(&mut self) {
+        assert!(self.is_set());
         *self -= 0x2;
     }
     // not all extensions may apply, it's dependent on genome size.
     fn extension(&self) -> u64 {
+        //assert!(self.is_set());
         self & 0xFF00_0000_0000_0000
     }
     fn x(&self) -> usize {
         (self.extension() >> 56) as usize
     }
     fn same_ori(&self, p: u64) -> bool {
+        assert!(self.is_set());
         self.get_ori() == (p & 1)
     }
     fn byte_pos(&self) -> usize {
+        assert!(self.is_set());
         // the strand bit and 2b encoded, so 4 twobits per byte.
         self.pos() as usize >> 3
     }
@@ -90,35 +99,44 @@ impl PriExtPosOri for u64 {
         }
     }
     fn extend(&mut self) {
+        assert!(self.is_set());
         *self += 1 << 56;
     }
     fn set_extension(&mut self, x: u64) {
+        assert!(self.is_set());
         dbg_assert!(x <= 0xFF);
         *self &= 0xF_FFFF_FFFF_FFFF;
         *self |= x << 56;
     }
     fn clear_extension(&mut self) {
+        assert!(self.is_set());
         *self &= 0xF_FFFF_FFFF_FFFF;
     }
     fn is_same(&self, other: u64) -> bool {
+        assert!(self.is_set());
         *self == other
     }
     fn with_ext(&self, x: usize) -> u64 {
         self.pos() | ((x as u64) << 56)
     }
     fn set_dup(&mut self) {
+        assert!(self.is_set());
         *self |= 0x80_0000_0000_0000;
     }
     fn is_dup(&self) -> bool {
+        assert!(self.is_set());
         *self & 0x80_0000_0000_0000 != 0
     }
     fn set_repetitive(&mut self) {
+        assert!(self.is_set());
         *self |= 0x40_0000_0000_0000;
     }
     fn is_repetitive(&self) -> bool {
+        assert!(self.is_set());
         *self & 0x40_0000_0000_0000 != 0
     }
     fn rep_dup_masked(&self) -> u64 {
+        assert!(self.is_set());
         *self & !0xc0_0000_0000_0000
     }
     fn is_replaceable_by(&self, new_entry: u64) -> bool {
@@ -131,6 +149,7 @@ impl PriExtPosOri for u64 {
         self.is_set() && !self.is_same(other)
     }
     fn same_pos_and_ext(&self, new_entry: u64) -> bool {
+        assert!(self.is_set());
         (*self ^ new_entry) & 0xFF0F_FFFF_FFFF_FFFE == 0
     }
     fn has_samepos(&self, other: u64) -> bool {
@@ -173,7 +192,9 @@ impl<T: PriExtPosOri + Copy> KmerLoc<T> {
 
     pub fn set(&mut self, idx: usize, p: T, x: usize) {
         // during rebuilding the strange case occurs that mark is not set, but p is (extension)
-        assert!(self.is_set() || self.p.is_no_pos() || self.p.extension() == p.extension());
+        let self_p_extension = self.p.extension();
+        let p_extension = p.extension();
+        assert!(self.is_set() || self.p.is_no_pos() || self_p_extension == p_extension);
         self.idx = idx;
         self.p = p;
         self.p.set_extension(x as u64);

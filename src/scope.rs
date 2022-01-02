@@ -108,9 +108,8 @@ impl<'a> Scope<'a> {
                         // unset when kmer is not observed (zie dbg_print..)
                         return Ok(false);
                     }
-                    if let Some(storage) = ks.kmp.get_mut(min_idx) {
-                        storage.set(min_p);
-                    }
+                    ks.kmp[min_idx].set(min_p);
+
                     dbg_print!(
                         "resolving past for [{:x}], {:#x} <= {:#x}",
                         min_idx,

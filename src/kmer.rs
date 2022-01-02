@@ -55,13 +55,8 @@ where
         }
     }
 
-    pub fn hash(&mut self, other: Kmer<T>) {
-        self.dna ^= other.rc;
-        self.rc ^= other.dna;
-    }
-
     /// adds twobit to kmer sequences, to dna in the top two bits.
-    pub fn add(&mut self, b2: u8) {
+    fn add(&mut self, b2: u8) {
         dbg_assert!(b2 <= 3);
         let topb2 = T::to_u64(&self.topb2).unwrap();
         let topless = (1 << topb2) - 1;
@@ -94,18 +89,6 @@ where
             &self.rc
         })
         .unwrap();
-
-        // flipped if the top bit is set, to reduce size.
-        let overbit = 1 << (T::to_u64(&self.topb2).unwrap() + 1);
-        if (seq & overbit) == 0 {
-            seq
-        } else {
-            (overbit - 1) & !seq
-        }
-    }
-
-    pub fn get_idx_complement(&self) -> usize {
-        let seq = T::to_usize(cmp::max(&self.dna, &self.rc)).unwrap();
 
         // flipped if the top bit is set, to reduce size.
         let overbit = 1 << (T::to_u64(&self.topb2).unwrap() + 1);

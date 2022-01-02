@@ -75,14 +75,14 @@ impl<T: PriExtPosOri> KmerStore<T> {
             self.get_twobit_after(i).unwrap_or(self.p_max),
         )
     }
-    pub fn get_twobit_after(&self, i: usize) -> Result<u64> {
+    fn get_twobit_after(&self, i: usize) -> Result<u64> {
         ensure!(
             i + 1 < self.contig.len(),
             "get_twobit_after(): End of contig"
         );
         Ok(self.contig[i + 1].twobit)
     }
-    pub fn get_twobit_before(&self, i: usize) -> Result<u64> {
+    fn get_twobit_before(&self, i: usize) -> Result<u64> {
         ensure!(i != 0, "get_twobit_before(): Start of contig");
         Ok(self.contig[i - 1].twobit)
     }

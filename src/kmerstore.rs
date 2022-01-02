@@ -1,6 +1,6 @@
+use ahash::AHashMap;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering::{Equal, Greater, Less};
-use std::collections::HashMap;
 
 use crate::kmerloc::PriExtPosOri;
 use crate::rdbg::STAT_DB;
@@ -23,7 +23,7 @@ pub struct KmerStore<T> {
     pub b2: Vec<u8>,
     pub kmp: Vec<T>, // position + strand per k-mer.
     pub contig: Vec<Contig>,
-    pub repeat: HashMap<usize, Repeat>,
+    pub repeat: AHashMap<usize, Repeat>,
 }
 
 impl<T: PriExtPosOri> KmerStore<T> {
@@ -36,7 +36,7 @@ impl<T: PriExtPosOri> KmerStore<T> {
             kmp: vec![T::no_pos(); 1 << (shift + 1)], // kmer positions
             //kmp,
             contig: Vec::new(), // contig info
-            repeat: HashMap::new(),
+            repeat: AHashMap::new(),
         }
     }
     pub fn push_contig(&mut self, p: u64, goffs: u64) {

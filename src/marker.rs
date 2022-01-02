@@ -48,6 +48,12 @@ impl<'a> KmerIter<'a> {
         self.scp.period = 0;
     }
 
+    fn extend_repetive_on_cycle(&mut self, dist: u64, pd: u64, idx: usize) {
+        if dist % pd == 0 {
+            self.ks.extend_repetitive(idx, dist as u32);
+        }
+    }
+
     pub fn markcontig<T: PriExtPosOri>(&mut self, chrname: &str, seq: &mut Iter<u8>) -> Result<()> {
         self.goffs = 0;
         self.ks.push_contig(self.scp.p.pos(), self.goffs);
@@ -78,23 +84,27 @@ impl<'a> KmerIter<'a> {
                     if self.ks.b2_for_p(self.scp.p - pd)? == b2 {
                         let idx = self.scp.mark.get_idx();
                         let stored = self.ks.kmp[idx];
-                        let dist = match self.scp.mark.p.pos().cmp(&stored.pos()) {
-                            cmp::Ordering::Greater => self.scp.mark.p.pos() - stored.pos(),
-                            cmp::Ordering::Less => {
-                                dbg_print!("repetitive occurs before stored?");
-                                stored.pos() - self.scp.mark.p.pos()
+                        repetitive += 1;
+                        if stored.is_set() {
+                            match self.scp.mark.p.pos().cmp(&stored.pos()) {
+                                cmp::Ordering::Greater => {
+                                    let dist = self.scp.mark.p.pos() - stored.pos();
+                                    self.extend_repetive_on_cycle(dist, pd, idx);
+                                }
+                                cmp::Ordering::Less => {
+                                    dbg_print!("repetitive occurs before already stored [{:x}] p {:#x} <=> stored {:#x}", idx, self.scp.mark.p, stored);
+                                    let _x = self.scp.p.x();
+                                    dbg_assert!(_x > 0);
+                                    let dist = stored.pos() - self.scp.mark.p.pos();
+                                    self.extend_repetive_on_cycle(dist, pd, idx);
+                                }
+                                cmp::Ordering::Equal => {
+                                    dbg_print!("minimum remained [{:x}] {:#x}", idx, stored)
+                                }
                             }
-                            cmp::Ordering::Equal => {
-                                // FIXME: waarom gebeurt dit? TODO: ignore het niet.
-                                //dbg_panic!("revisit [{:x}] {:x} (pd: {})?", idx, stored, pd);
-                                dbg_print!("revisit [{:x}] {:x} (pd: {})?", idx, stored, pd);
-                                dbg_dump!();
-                                pd - 1
-                            }
-                        };
-                        if dist % pd == 0 {
-                            repetitive += 1;
-                            self.ks.extend_repetitive(idx, dist as u32);
+                        } else {
+                            // XXX this occurs, is it an edge case or a bug?
+                            dbg_print!("repeat with unset mark.idx (b2 corresponds) ??");
                         }
                     } else {
                         self.scp.period = 0;

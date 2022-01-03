@@ -54,17 +54,16 @@ pub trait Scope {
         }
     }
 
-    fn set_if_repetitive(&mut self, stored_pos: u64, mark_pos: u64) -> bool {
+    fn get_if_repetitive(&self, stored_pos: u64, mark_pos: u64) -> Option<u64> {
         assert!(mark_pos > stored_pos);
         let dist = mark_pos - stored_pos;
         let plim = self.get_plim();
         if dbgx!(stored_pos >= plim.0.pos() && stored_pos < plim.1.pos())
             && dbgx!(dist < self.get_kc().repetition_max_dist)
         {
-            self.set_period(dist);
-            true
+            Some(dist)
         } else {
-            false
+            None
         }
     }
     fn can_extend(&self) -> bool {
@@ -124,8 +123,9 @@ pub trait Scope {
                 // only the first gets a position. During mapping this rule should also apply.
                 // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
                 let mark_pos = mark.p.pos();
-                if self.set_if_repetitive(stored_p.pos(), mark_pos) {
-                    return Ok(true);
+                if let Some(dist) = self.get_if_repetitive(stored_p.pos(), mark_pos) {
+                    self.set_period(dist);
+                    return Ok(false);
                 }
                 if !self.is_repetitive() {
                     ks.kmp[min_idx].set_dup();

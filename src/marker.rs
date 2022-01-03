@@ -8,22 +8,22 @@ extern crate num_traits;
 use crate::kmerconst::KmerConst;
 use std::{cmp, slice::Iter};
 
+use crate::head_scope::HeadScope;
 use crate::kmerloc::PriExtPosOri;
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
-use crate::scope::Scope;
 use anyhow::Result;
 
 pub struct KmerIter<'a> {
     n_stretch: u64,
     goffs: u64,
-    pub(super) scp: Scope<'a>,
+    pub(super) scp: HeadScope<'a>,
     pub(super) ks: &'a mut KmerStore<u64>,
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
     pub fn new(ks: &'a mut KmerStore<u64>, kc: &'a KmerConst) -> Self {
-        let scp = Scope::new((0, u64::max_value()), kc, 0);
+        let scp = HeadScope::new((0, u64::max_value()), kc, 0);
         KmerIter {
             n_stretch: 0,
             goffs: 0,
@@ -111,7 +111,7 @@ impl<'a> KmerIter<'a> {
                         self.scp.period = 0;
                     }
                 }
-                self.scp.complete_and_update_mark::<u64>(b2, &mut self.ks)?;
+                self.scp.complete_and_update_mark::<u64>(b2, self.ks)?;
             } else {
                 if self.scp.i != 0 {
                     dbg_print!("started N-stretch at {}.", p);
@@ -265,66 +265,6 @@ mod tests {
                 i,
                 ks.kmp[i]
             );
-        }
-        Ok(())
-    }
-    #[test]
-    fn test_reconstruct1() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, 1000);
-        let mut ks = KmerStore::<u64>::new(kc.bitlen);
-        let mut kmi = KmerIter::new(&mut ks, &kc);
-        let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
-            .to_owned();
-        let mut seq = seq_vec.iter();
-        kmi.markcontig::<u64>("test", &mut seq)?;
-        let mut seen = 0;
-        for hash in 0..kmi.ks.kmp.len() {
-            let p = kmi.ks.kmp[hash];
-            if p.is_set() {
-                dbg_print!("---[ {:#x} ]---", hash);
-                let scp = Scope::rebuild(&kmi.ks, &kc, &p, hash)?;
-                dbg_assert_eq!(scp.mark.p, p, "[{}]: {:x}", seen, hash);
-                seen += 1;
-            }
-        }
-        dbg_assert_eq!(
-            seen,
-            23,
-            "XXX: the number of seen kmers could change, though"
-        );
-        Ok(())
-    }
-    #[test]
-    fn test_reconstruct_gs4_all() -> Result<()> {
-        // all mappable.
-        let seqlen: usize = 8;
-        let kc = KmerConst::new(seqlen, 1000);
-
-        for gen in 0..=4_usize.pow(seqlen as u32) {
-            let mut ks = KmerStore::<u64>::new(kc.bitlen);
-            let mut kmi = KmerIter::new(&mut ks, &kc);
-            let seq_vec: Vec<_> = (0..seqlen)
-                .map(|i| match (gen >> (i << 1)) & 3 {
-                    0 => 'A',
-                    1 => 'C',
-                    2 => 'T',
-                    3 => 'G',
-                    _ => unreachable!(),
-                })
-                .collect();
-            dbg_print!("-- k: {} rl: {} {:#x} seq:", kc.kmerlen, kc.venster, gen);
-            dbg_print!("{:?}", seq_vec);
-
-            let vv: Vec<u8> = seq_vec.into_iter().map(|c| c as u8).collect();
-            kmi.markcontig::<u64>("test", &mut vv.iter())?;
-            for hash in 0..kmi.ks.kmp.len() {
-                let p = kmi.ks.kmp[hash];
-                if p.is_set() {
-                    dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
-                    let scp = Scope::rebuild(&kmi.ks, &kc, &p, hash)?;
-                    dbg_assert_eq!(scp.mark.p, p, "reps: {}", kmi.ks.repeat.len());
-                }
-            }
         }
         Ok(())
     }

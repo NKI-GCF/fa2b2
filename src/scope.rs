@@ -225,13 +225,7 @@ pub trait Scope {
                     return false;
                 }
             }
-            dbgf!(
-                self.set_mark(hash, p, x),
-                "{:?} [{:x}] = {:x} | x({})",
-                hash,
-                p,
-                x
-            );
+            self.set_mark(hash, p, x);
             // XXX maybe return self.all_kmers() ??
             true
         } else {

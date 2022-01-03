@@ -112,6 +112,7 @@ impl<'a> Scope for HeadScope<'a> {
         self.mark.reset();
     }
     fn set_mark(&mut self, idx: usize, p: u64, x: usize) {
+        dbg_print!("[{:x}] = {:x} | x({}) <head>", idx, p, x);
         self.mark.set(idx, p, x);
     }
 }

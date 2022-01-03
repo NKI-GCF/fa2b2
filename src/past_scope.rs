@@ -134,6 +134,7 @@ impl<'a> Scope for PastScope<'a> {
         self.mark.reset();
     }
     fn set_mark(&mut self, idx: usize, p: u64, x: usize) {
+        dbg_print!("[{:x}] = {:x} | x({}) <past>", idx, p, x);
         self.mark.set(idx, p, x);
     }
     fn set_period(&mut self, period: u64) {

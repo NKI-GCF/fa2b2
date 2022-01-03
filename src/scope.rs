@@ -27,9 +27,9 @@ pub trait Scope {
         self.get_i() >= self.get_kc().venster
     }
 
-    fn is_mark_leaving(&self) -> bool {
+    fn is_mark_out_of_scope(&self, mark: &KmerLoc<u64>) -> bool {
         let p = self.get_p();
-        let mark = self.get_mark().expect("mark unset while testing leaving");
+        dbg_assert!(p.pos() >= mark.p.pos(), "{:#x}, {:#x}", p, mark.p);
         p.pos() >= mark.p.pos() + (self.get_kc().no_xmers(p.x()) << 1) as u64
     }
 
@@ -39,8 +39,10 @@ pub trait Scope {
         ks: &KmerStore<T>,
         reset_extension_if_leaving: bool,
     ) -> Result<bool> {
-        if self.all_kmers() && self.get_mark().is_some() {
-            if self.is_mark_leaving() {
+        if !self.all_kmers() {
+            Ok(false)
+        } else if let Some(mark) = self.get_mark() {
+            if self.is_mark_out_of_scope(mark) {
                 if reset_extension_if_leaving {
                     self.clear_p_extension();
                 }
@@ -64,6 +66,21 @@ pub trait Scope {
         } else {
             false
         }
+    }
+    fn can_extend(&self) -> bool {
+        self.get_p().x() + 1 < self.get_kc().extent.len()
+    }
+
+    fn increment_for_extension<T>(&mut self, ks: &KmerStore<T>, p: u64) -> Result<()>
+    where
+        T: PriExtPosOri + fmt::LowerHex + Copy,
+    {
+        let p = self.get_p();
+        let b2 = ks.b2_for_p(p)?;
+        dbg_print!("=> b2 {:x}, p: {:#x} <= (extension)", b2, p);
+        dbg_assert!(self.increment(b2));
+        ensure!(p.pos() < self.get_plim().1, "running into end of contig");
+        Ok(())
     }
 
     /// return toont of er een oplossing (mark gezet) was
@@ -116,33 +133,23 @@ pub trait Scope {
                 dbg_print!("\t\t<!>");
             }
         }
-        while self.get_p().x() + 1 < self.get_kc().extent.len() {
+        while self.can_extend() {
             self.extend_p();
-            let kc = self.get_kc();
-            let p = self.get_p();
-            if let Some(mark) = self.get_mark() {
-                if p.pos() - mark.p.pos() <= (kc.afstand(p.x()) * 2) as u64 {
-                    dbg_assert!(p.pos() >= mark.p.pos(), "{:#x}, {:#x}", p, mark.p);
-                    continue;
-                }
-            }
-            match ks.b2_for_p(p).and_then(|b2| {
-                dbg_print!("=> b2 {:x}, p: {:#x} <= (extension)", b2, p);
-                dbg_assert!(self.increment(b2));
-                ensure!(p.pos() < self.get_plim().1, "running into end of contig");
-                Ok(())
-            }) {
-                Ok(()) => {
-                    // in repetitive dna, mark may not be assigned
-                    if self.set_next_mark(ks)? {
-                        return Ok(true); // extended and mark set.
-                    }
-                }
-                Err(e) => {
+            if self
+                .get_mark()
+                .filter(|m| self.is_mark_out_of_scope(m))
+                .is_some()
+            {
+                if let Err(e) = self.increment_for_extension(ks) {
                     dbg_print!("{}", e);
                     self.clear_p_extension();
                     break;
                 }
+            }
+            // every time we extend, we need to reiterate all for mark.
+            if self.set_next_mark(ks)? {
+                // in repetitive dna, mark may not be assigned
+                return Ok(true); // extended and mark set.
             }
         }
         Ok(false) // too much repetition to get mark or running into end of contig

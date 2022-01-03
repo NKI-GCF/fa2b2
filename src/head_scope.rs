@@ -44,14 +44,14 @@ impl<'a> HeadScope<'a> {
             for x in 0..=self.p.x() {
                 //
                 if self.set_if_optimum(0, x, Some(ks)) {
-                    if self.all_kmers() && !self.handle_mark(ks)? {
-                        dbg_print!("Unable to find mark");
+                    if self.all_kmers() {
+                        self.handle_mark(ks)?;
                     }
                     return Ok(());
                 }
             }
-            if self.mark_set_considering_leaving(ks, true)? && !self.handle_mark(ks)? {
-                dbg_print!("Unable to find mark");
+            if self.remark(ks, true)? {
+                self.handle_mark(ks)?;
             }
         }
         Ok(())

@@ -34,24 +34,23 @@ pub trait Scope {
     }
 
     /// sufficient kmers to have mimimum and do we have minimum?
-    fn mark_set_considering_leaving<T: PriExtPosOri>(
+    fn remark<T: PriExtPosOri>(
         &mut self,
         ks: &KmerStore<T>,
         reset_extension_if_leaving: bool,
     ) -> Result<bool> {
-        if !self.all_kmers() {
-            Ok(false)
-        } else if let Some(mark) = self.get_mark() {
-            if self.is_mark_out_of_scope(mark) {
-                if reset_extension_if_leaving {
-                    self.clear_p_extension();
+        if self.all_kmers() {
+            if let Some(mark) = self.get_mark() {
+                if self.is_mark_out_of_scope(mark) {
+                    if reset_extension_if_leaving {
+                        self.clear_p_extension();
+                    }
+                    return self.set_next_mark(ks);
                 }
-                return self.set_next_mark(ks);
+                return Ok(true);
             }
-            Ok(true)
-        } else {
-            Ok(false)
         }
+        Ok(false)
     }
 
     fn get_if_repetitive(&self, stored_pos: u64, mark_pos: u64) -> Option<u64> {
@@ -84,8 +83,7 @@ pub trait Scope {
         Ok(())
     }
 
-    /// return toont of er een oplossing (mark gezet) was
-    fn handle_mark<T>(&mut self, ks: &mut KmerStore<T>) -> Result<bool>
+    fn handle_mark<T>(&mut self, ks: &mut KmerStore<T>) -> Result<()>
     where
         T: PriExtPosOri + fmt::LowerHex + Copy,
     {
@@ -94,38 +92,33 @@ pub trait Scope {
             let stored_p = ks.kmp[min_idx];
 
             if stored_p.is_replaceable_by(min_p) {
-                //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
-                // dbg_print!("{}", self);
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
                     let mut new_scp = PastScope::new(ks, self.get_kc(), &stored_p, min_idx)?;
-                    if new_scp.get_p().is_no_pos() {
-                        // unset when kmer is not observed before bound.1
-                        return Ok(false);
-                    }
-                    dbg_print!(
-                        "resolving past for [{:x}], {:#x} <= {:#x}",
-                        min_idx,
-                        stored_p,
-                        min_p
-                    );
-                    ks.kmp[min_idx].set(min_p);
-                    if !new_scp.handle_mark(ks)? {
-                        dbg_print!("unresolved new_scp mark");
+
+                    // unset when kmer is not observed before bound.1:
+                    if new_scp.get_p().is_set() {
+                        dbg_print!(
+                            "resolving past for [{:x}], {:#x} <= {:#x}",
+                            min_idx,
+                            stored_p,
+                            min_p
+                        );
+                        ks.kmp[min_idx].set(min_p);
+                        new_scp.handle_mark(ks)?;
                     }
                 } else if ks.kmp[min_idx].is_no_pos() && !self.is_repetitive() {
                     ks.kmp[min_idx].set(min_p);
                 }
                 // .. else set and already min_p. Then leave dupbit state.
-                return Ok(true);
+                return Ok(());
             }
             if stored_p.extension() == min_p.extension() {
                 // If a kmer occurs multiple times within an extending readlength (repetition),
-                // only the first gets a position. During mapping this rule should also apply.
-                // Mark / store recurring xmers. Skippable if repetitive on contig. Else mark as dup.
+                // only the first gets a position. During mapping this should be kept in mind.
                 let mark_pos = mark.p.pos();
                 if let Some(dist) = self.get_if_repetitive(stored_p.pos(), mark_pos) {
                     self.set_period(dist);
-                    return Ok(false);
+                    return Ok(());
                 }
                 if !self.is_repetitive() {
                     ks.kmp[min_idx].set_dup();
@@ -147,23 +140,22 @@ pub trait Scope {
                     break;
                 }
             }
-            // every time we extend, we need to reiterate all for mark.
+            // every time we extend, we reiterate all for mark. May fail in repetitive DNA.
             if self.set_next_mark(ks)? {
-                // in repetitive dna, mark may not be assigned
-                return Ok(true); // extended and mark set.
+                break;
             }
         }
-        Ok(false) // too much repetition to get mark or running into end of contig
+        Ok(())
     }
 
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)
-    /// geen enkele optimum kan voorkoment bij repetitive DNA
+    /// bij repetitive DNA kan geen enkel optimum de uitkomst zijn.
     fn set_next_mark<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) -> Result<bool> {
         self.mark_reset();
         let x = self.get_p().x();
         // reverse is logischer omdat we bij gelijke extensie voor een lagere positie kiezen.
         for i in (0..self.get_kc().no_xmers(x)).rev() {
-            let _ = self.set_if_optimum(dbgx!(i), x, Some(ks));
+            let _ = self.set_if_optimum(i, x, Some(ks));
         }
         Ok(self.get_mark().is_some())
     }

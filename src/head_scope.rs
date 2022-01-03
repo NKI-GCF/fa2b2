@@ -46,7 +46,7 @@ impl<'a> HeadScope<'a> {
                 }
             }
             if self.remark(ks, true)? {
-                self.handle_mark(ks)?;
+                self.handle_mark(ks, None)?;
             }
         }
         Ok(())

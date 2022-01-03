@@ -1,7 +1,7 @@
 use crate::kmer::Kmer;
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::{KmerLoc, PriExtPosOri};
-use crate::kmerstore::KmerStore;
+use crate::kmerstore::{KmerStore, Repeat};
 use crate::past_scope::PastScope;
 use crate::rdbg::STAT_DB;
 use anyhow::{ensure, Result};
@@ -83,7 +83,7 @@ pub trait Scope {
         Ok(())
     }
 
-    fn handle_mark<T>(&mut self, ks: &mut KmerStore<T>) -> Result<()>
+    fn handle_mark<T>(&mut self, ks: &mut KmerStore<T>, stored_repeat: Option<Repeat>) -> Result<()>
     where
         T: PriExtPosOri + fmt::LowerHex + Copy,
     {
@@ -93,6 +93,11 @@ pub trait Scope {
 
             if stored_p.is_replaceable_by(min_p) {
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
+                    let mut new_stored_repeat = None;
+                    if stored_p.is_repetitive() {
+                        new_stored_repeat = ks.repeat.remove(&min_idx);
+                        assert!(new_stored_repeat.is_some());
+                    }
                     let mut new_scp = PastScope::new(ks, self.get_kc(), &stored_p, min_idx)?;
 
                     // unset when kmer is not observed before bound.1:
@@ -103,11 +108,11 @@ pub trait Scope {
                             stored_p,
                             min_p
                         );
-                        ks.kmp[min_idx].set(min_p);
-                        new_scp.handle_mark(ks)?;
+                        ks.set_kmp(min_idx, min_p, stored_repeat);
+                        new_scp.handle_mark(ks, new_stored_repeat)?;
                     }
                 } else if ks.kmp[min_idx].is_no_pos() && !self.is_repetitive() {
-                    ks.kmp[min_idx].set(min_p);
+                    ks.set_kmp(min_idx, min_p, stored_repeat);
                 }
                 // .. else set and already min_p. Then leave dupbit state.
                 return Ok(());
@@ -120,9 +125,7 @@ pub trait Scope {
                     self.set_period(dist);
                     return Ok(());
                 }
-                if !self.is_repetitive() {
-                    ks.kmp[min_idx].set_dup();
-                }
+                ks.kmp[min_idx].set_dup();
             } else {
                 dbg_print!("\t\t<!>");
             }
@@ -220,6 +223,9 @@ pub trait Scope {
                 {
                     return false;
                 }
+            }
+            if self.is_repetitive() {
+                p.set_repetitive();
             }
             self.set_mark(hash, p, x);
             // XXX maybe return self.all_kmers() ??

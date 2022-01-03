@@ -14,7 +14,7 @@ pub struct Contig {
 }
 
 type ContigRng = (u64, u64);
-type Repeat = (u32, u32);
+pub type Repeat = (u32, u32);
 
 #[derive(Serialize, Deserialize)]
 pub struct KmerStore<T> {
@@ -51,6 +51,13 @@ impl<T: PriExtPosOri> KmerStore<T> {
             ctg.genomic += offset;
         }
     }
+    pub fn set_kmp(&mut self, min_idx: usize, min_p: u64, stored_repeat: Option<Repeat>) {
+        self.kmp[min_idx].set(min_p);
+        if let Some(repeat) = stored_repeat {
+            self.repeat.insert(min_idx, repeat);
+        }
+    }
+
     /// binary search contig lower boundary
     fn get_contig(&self, p: u64) -> usize {
         let mut size = self.contig.len();

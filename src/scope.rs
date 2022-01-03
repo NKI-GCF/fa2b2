@@ -157,7 +157,7 @@ pub trait Scope {
         let bin = kc.get_kmers(x);
         // reverse is logischer omdat we bij gelijke extensie voor een lagere positie kiezen.
         for i in (0..kc.no_xmers(x)).rev() {
-            let _ = self.set_if_optimum(i, x, bin, Some(ks));
+            let _ = self.set_if_optimum(x, (bin.0 + i, bin.1 + i), Some(ks));
         }
         Ok(self.get_mark().is_some())
     }
@@ -169,7 +169,6 @@ pub trait Scope {
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
     fn set_if_optimum<T: PriExtPosOri>(
         &mut self,
-        i: usize,
         x: usize,
         bin: (usize, usize),
         oks: Option<&KmerStore<T>>,
@@ -178,16 +177,15 @@ pub trait Scope {
         if self.is_xmer_complete(x) {
             let kc = self.get_kc();
             let base = self.get_i() - kc.kmerlen;
-            let d = i + bin.0;
             let nk = kc.no_kmers;
-            let kmer1 = self.get_d(base.wrapping_sub(d) % nk);
+            let kmer1 = self.get_d(base.wrapping_sub(bin.0) % nk);
             let mut hash = kmer1.get_idx(bin.0 <= bin.1);
             let mut p = if let Some(mark) = self.get_mark() {
                 match hash.cmp(&mark.get_idx()) {
-                    cmp::Ordering::Less => self.get_p().with_ext(x) - (d << 1) as u64,
+                    cmp::Ordering::Less => self.get_p().with_ext(x) - (bin.0 << 1) as u64,
                     cmp::Ordering::Greater => return false,
                     cmp::Ordering::Equal => {
-                        let p = self.get_p().with_ext(x) - (d << 1) as u64;
+                        let p = self.get_p().with_ext(x) - (bin.0 << 1) as u64;
                         if p >= mark.p {
                             return false;
                         }
@@ -195,15 +193,15 @@ pub trait Scope {
                     }
                 }
             } else {
-                self.get_p().with_ext(x) - (d << 1) as u64
+                self.get_p().with_ext(x) - (bin.0 << 1) as u64
             };
             p ^= match bin.0.cmp(&bin.1) {
                 cmp::Ordering::Less => {
-                    hash ^= self.get_d(base.wrapping_sub(i + bin.1) % nk).get_idx(true);
+                    hash ^= self.get_d(base.wrapping_sub(bin.1) % nk).get_idx(true);
                     p & 1
                 }
                 cmp::Ordering::Greater => {
-                    hash ^= self.get_d(base.wrapping_sub(i + bin.1) % nk).get_idx(false);
+                    hash ^= self.get_d(base.wrapping_sub(bin.1) % nk).get_idx(false);
                     !p & 1
                 }
                 cmp::Ordering::Equal => (p ^ kmer1.dna) & 1,

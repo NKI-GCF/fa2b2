@@ -47,7 +47,7 @@ impl<'a> PastScope<'a> {
             let b2 = ks.b2_for_p(scp.p, Some("(past)")).unwrap();
             if scp.increment(b2) {
                 // we weten extension op voorhand.
-                if (scp.set_if_optimum(0, x, bin, Some(ks)) && scp.all_kmers())
+                if (scp.set_if_optimum(x, bin, Some(ks)) && scp.all_kmers())
                     || scp.remark(ks, false)?
                 {
                     if p.same_pos_and_ext(scp.mark.p) {

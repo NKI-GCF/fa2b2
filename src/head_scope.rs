@@ -41,7 +41,7 @@ impl<'a> HeadScope<'a> {
         // XXX: function is very hot
         if self.increment(b2) {
             for x in 0..=self.p.x() {
-                if self.set_if_optimum(0, x, self.kc.get_kmers(x), Some(ks)) {
+                if self.set_if_optimum(x, self.kc.get_kmers(x), Some(ks)) {
                     break;
                 }
             }

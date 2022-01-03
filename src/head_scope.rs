@@ -40,14 +40,9 @@ impl<'a> HeadScope<'a> {
     {
         // XXX: function is very hot
         if self.increment(b2) {
-            // mark.p hoeft niet gezet te zijn.
             for x in 0..=self.p.x() {
-                //
                 if self.set_if_optimum(0, x, Some(ks)) {
-                    if self.all_kmers() {
-                        self.handle_mark(ks)?;
-                    }
-                    return Ok(());
+                    break;
                 }
             }
             if self.remark(ks, true)? {

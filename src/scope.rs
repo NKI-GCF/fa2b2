@@ -71,15 +71,17 @@ pub trait Scope {
         self.get_p().x() + 1 < self.get_kc().extent.len()
     }
 
-    fn increment_for_extension<T>(&mut self, ks: &KmerStore<T>, p: u64) -> Result<()>
+    fn is_before_end_of_contig(&self) -> bool {
+        self.get_p().pos() < self.get_plim().1
+    }
+
+    fn increment_for_extension<T>(&mut self, ks: &KmerStore<T>) -> Result<()>
     where
         T: PriExtPosOri + fmt::LowerHex + Copy,
     {
-        let p = self.get_p();
-        let b2 = ks.b2_for_p(p)?;
-        dbg_print!("=> b2 {:x}, p: {:#x} <= (extension)", b2, p);
+        let b2 = ks.b2_for_p(self.get_p(), Some("(extension)"))?;
+        ensure!(self.is_before_end_of_contig(), "running into end of contig");
         dbg_assert!(self.increment(b2));
-        ensure!(p.pos() < self.get_plim().1, "running into end of contig");
         Ok(())
     }
 
@@ -96,9 +98,8 @@ pub trait Scope {
                 //dbg_print!("[{:#x}] (={:#x}) <= {:#x}", min_idx, stored_p, min_p);
                 // dbg_print!("{}", self);
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
-                    let kc = self.get_kc();
-                    let mut new_scp = PastScope::new(ks, kc, &stored_p, min_idx)?;
-                    if !new_scp.get_p().is_set() {
+                    let mut new_scp = PastScope::new(ks, self.get_kc(), &stored_p, min_idx)?;
+                    if new_scp.get_p().is_no_pos() {
                         // unset when kmer is not observed before bound.1
                         return Ok(false);
                     }
@@ -114,8 +115,8 @@ pub trait Scope {
                     }
                 } else if ks.kmp[min_idx].is_no_pos() && !self.is_repetitive() {
                     ks.kmp[min_idx].set(min_p);
-                    // If already set it was min_p. Then leave dupbit state.
                 }
+                // .. else set and already min_p. Then leave dupbit state.
                 return Ok(true);
             }
             if stored_p.extension() == min_p.extension() {

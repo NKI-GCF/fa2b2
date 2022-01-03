@@ -86,12 +86,18 @@ impl<T: PriExtPosOri> KmerStore<T> {
         ensure!(i != 0, "get_twobit_before(): Start of contig");
         Ok(self.contig[i - 1].twobit)
     }
-    pub fn b2_for_p(&self, p: u64) -> Result<u8> {
+    pub fn b2_for_p(&self, p: u64, opt_tag: Option<&str>) -> Result<u8> {
         let pos = p.pos();
-        ensure!(pos < self.p_max);
+        ensure!(pos < self.p_max, "running into sequence head");
         self.b2
             .get(p.byte_pos())
-            .map(|x| (x >> (p & 6)) & 3)
+            .map(|x| {
+                let b2 = (x >> (p & 6)) & 3;
+                if let Some(tag) = opt_tag {
+                    dbg_print!("=> b2 {:x}, p: {:#x} <= {}", b2, p, tag);
+                }
+                b2
+            })
             .ok_or_else(|| anyhow!("stored pos past contig? {:#}", p))
     }
     pub fn extend_repetitive(&mut self, min_idx: usize, dist: u32) {

@@ -42,8 +42,7 @@ impl<'a> PastScope<'a> {
         };
 
         loop {
-            let b2 = ks.b2_for_p(scp.p).unwrap();
-            dbg_print!("=> b2 {:x}, p: {:#x} <=", b2, scp.p);
+            let b2 = ks.b2_for_p(scp.p, Some("(past)")).unwrap();
             if scp.increment(b2) {
                 // we weten extension op voorhand.
                 if (scp.set_if_optimum(0, scp.p.x(), Some(ks)) && scp.all_kmers())

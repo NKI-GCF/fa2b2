@@ -103,13 +103,13 @@ pub trait Scope {
                         ks.set_kmp(min_idx, min_p);
                         new_scp.handle_mark(ks)?;
                     }
-                } else if ks.kmp[min_idx].is_no_pos() && !self.is_repetitive() {
+                } else if ks.kmp[min_idx].is_no_pos() {
                     ks.set_kmp(min_idx, min_p);
                 }
                 // .. else set and already min_p. Then leave dupbit state.
                 return Ok(());
             }
-            if stored_p.extension() == min_p.extension() && !self.is_repetitive() {
+            if stored_p.extension() == min_p.extension() {
                 // If a kmer occurs multiple times within an extending readlength (repetition),
                 // only the first gets a position. During mapping this should be kept in mind.
                 let mark_pos = mark.p.pos();

@@ -197,7 +197,7 @@ mod tests {
             if p.is_set() {
                 dbg_print!("---[ {:#x} ]---", hash);
                 let scp = PastScope::new(&kmi.ks, &kc, &p, hash)?;
-                dbg_assert_eq!(scp.mark.p, p, "[{}]: {:x}", seen, hash);
+                dbg_assert_eq!(scp.mark.p, p.rep_dup_masked(), "[{}]: {:x}", seen, hash);
                 seen += 1;
             }
         }
@@ -236,7 +236,12 @@ mod tests {
                 if p.is_set() {
                     dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
                     let scp = PastScope::new(&kmi.ks, &kc, &p, hash)?;
-                    dbg_assert_eq!(scp.mark.p, p, "reps: {}", kmi.ks.repeat.len());
+                    dbg_assert_eq!(
+                        scp.mark.p,
+                        p.rep_dup_masked(),
+                        "reps: {}",
+                        kmi.ks.repeat.len()
+                    );
                 }
             }
         }

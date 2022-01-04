@@ -45,7 +45,7 @@ impl<'a> HeadScope<'a> {
                     break;
                 }
             }
-            if self.remark(true)? && !self.is_repetitive() {
+            if self.remark(true)? {
                 self.handle_mark(ks)?;
             }
         }

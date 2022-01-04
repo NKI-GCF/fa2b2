@@ -216,7 +216,8 @@ mod tests {
             process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.kmp.len(), 128);
-        let first_pos = 1 | (kc.kmerlen as u64) << 1;
+        let mut first_pos = 1 | (kc.kmerlen as u64) << 1;
+        first_pos.set_repetitive();
         let mut seen = 0;
         for i in 1..ks.kmp.len() {
             if ks.kmp[i].is_set() {
@@ -234,7 +235,8 @@ mod tests {
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
         }
-        let first_pos = 1 | (kc.kmerlen as u64) << 1;
+        let mut first_pos = 1 | (kc.kmerlen as u64) << 1;
+        first_pos.set_repetitive();
         let mut seen = 0;
         for i in 1..ks.kmp.len() {
             if ks.kmp[i].is_set() {
@@ -253,7 +255,8 @@ mod tests {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         let mut seen = 0;
-        let first_pos = 1 | (kc.kmerlen as u64) << 1;
+        let mut first_pos = 1 | (kc.kmerlen as u64) << 1;
+        first_pos.set_repetitive();
         for i in 1..ks.kmp.len() {
             if ks.kmp[i].is_set() {
                 dbg_assert!(ks.kmp[i] == first_pos, "[{:x}], {:x}", i, ks.kmp[i]);

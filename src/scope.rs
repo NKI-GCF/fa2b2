@@ -86,6 +86,11 @@ pub trait Scope {
     {
         if let Some(mark) = self.get_mark() {
             let (min_idx, min_p) = mark.get();
+            if self.is_repetitive() && ks.kmp[min_idx].is_set() {
+                assert!(self.is_on_contig(min_p.pos()));
+                ks.kmp[min_idx].set_repetitive();
+                return Ok(());
+            }
             let stored_p = ks.kmp[min_idx];
 
             if stored_p.is_replaceable_by(min_p) {
@@ -115,6 +120,7 @@ pub trait Scope {
                 let mark_pos = mark.p.pos();
                 if let Some(dist) = self.get_if_repetitive(stored_p.pos(), mark_pos) {
                     self.set_period(dist);
+                    ks.kmp[min_idx].set_repetitive();
                     return Ok(());
                 }
                 ks.kmp[min_idx].set_dup();

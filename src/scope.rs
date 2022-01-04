@@ -137,6 +137,7 @@ pub trait Scope {
             }
             // every time we extend, we reiterate all for mark. May fail in repetitive DNA.
             if self.set_next_mark()? {
+                self.handle_mark(ks)?;
                 break;
             }
         }

@@ -48,14 +48,16 @@ pub trait Scope {
         }
         Ok(false)
     }
+    fn is_on_contig(&self, pos: u64) -> bool {
+        let plim = self.get_plim();
+        pos >= plim.0.pos() && pos < plim.1.pos()
+    }
 
     fn get_if_repetitive(&self, stored_pos: u64, mark_pos: u64) -> Option<u64> {
         assert!(mark_pos > stored_pos);
         let dist = mark_pos - stored_pos;
         let plim = self.get_plim();
-        if dbgx!(stored_pos >= plim.0.pos() && stored_pos < plim.1.pos())
-            && dbgx!(dist < self.get_kc().repetition_max_dist)
-        {
+        if self.is_on_contig(stored_pos) && dist < self.get_kc().repetition_max_dist {
             Some(dist)
         } else {
             None

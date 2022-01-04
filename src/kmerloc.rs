@@ -48,7 +48,7 @@ impl PriExtPosOri for u64 {
         *self & 0xF_FFFF_FFFF_FFFE
     }
     fn no_pos() -> Self {
-        0xF_FFFF_FFFF_FFFE
+        0x0
     }
     fn clear(&mut self) {
         *self = PriExtPosOri::no_pos();
@@ -88,9 +88,9 @@ impl PriExtPosOri for u64 {
         self.get_ori() == (p & 1)
     }
     fn byte_pos(&self) -> usize {
-        assert!(self.is_set());
+        // bytepos is calculated before kmer is complete, so we can't assert self.is.set()
         // the strand bit and 2b encoded, so 4 twobits per byte.
-        self.pos() as usize >> 3
+        ((*self & 0xF_FFFF_FFFF_FFFE) >> 3) as usize
     }
     fn blacklist(&mut self) {
         if self.is_set() {

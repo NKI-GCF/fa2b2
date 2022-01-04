@@ -39,7 +39,10 @@ impl<'a> KmerIter<'a> {
         self.goffs += self.n_stretch;
         self.n_stretch = 0;
         // clear all except orientation and position to rebuild at the start of a new contig.
-        self.scp.p.clear_extension();
+        if self.scp.p.is_set() {
+            // clearing extension on first position fails assert on is_set()
+            self.scp.p.clear_extension();
+        }
         self.scp.mark.reset();
         self.scp.plim.0 = self.scp.p.pos();
         self.scp.mod_i = 0;

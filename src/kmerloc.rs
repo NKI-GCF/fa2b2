@@ -141,8 +141,7 @@ impl PriExtPosOri for u64 {
     }
     fn is_replaceable_by(&self, new_entry: u64) -> bool {
         // only extension bits means blacklisting, except for extension 0. pos is always > kmerlen
-        self.is_no_pos()
-            || new_entry.extension() > self.rep_dup_masked() // TODO: count down extension?
+        new_entry.extension() > self.rep_dup_masked() // TODO: count down extension?
             || (new_entry.extension() == self.extension() && new_entry.pos() <= self.pos())
     }
     fn is_set_and_not(&self, other: u64) -> bool {

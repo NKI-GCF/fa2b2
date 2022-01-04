@@ -93,7 +93,10 @@ pub trait Scope {
             }
             let stored_p = ks.kmp[min_idx];
 
-            if stored_p.is_replaceable_by(min_p) {
+            if ks.kmp[min_idx].is_no_pos() {
+                ks.set_kmp(min_idx, min_p);
+                return Ok(());
+            } else if stored_p.is_replaceable_by(min_p) {
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
                     let mut new_scp = PastScope::new(ks, self.get_kc(), &stored_p, min_idx)?;
 
@@ -108,8 +111,6 @@ pub trait Scope {
                         ks.set_kmp(min_idx, min_p);
                         new_scp.handle_mark(ks)?;
                     }
-                } else if ks.kmp[min_idx].is_no_pos() {
-                    ks.set_kmp(min_idx, min_p);
                 }
                 // .. else set and already min_p. Then leave dupbit state.
                 return Ok(());

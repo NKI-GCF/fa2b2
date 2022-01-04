@@ -49,9 +49,15 @@ impl<'a> KmerIter<'a> {
         self.scp.period = 0;
     }
 
-    fn extend_repetive_on_cycle(&mut self, dist: u64, pd: u64, idx: usize) {
+    fn extend_repetive_on_cycle(&mut self, mark_pos: u64, dist: u64, pd: u64) {
         if dist % pd == 0 {
-            self.ks.extend_repetitive(idx, dist as u32);
+            self.ks.extend_repetitive(mark_pos, dist as u32);
+        }
+    }
+
+    fn replace_repetive_on_cycle(&mut self, old_pos: u64, new_pos: u64, dist: u64, pd: u64) {
+        if dist % pd == 0 {
+            self.ks.replace_repetitive(old_pos, new_pos, dist as u32);
         }
     }
 
@@ -87,17 +93,20 @@ impl<'a> KmerIter<'a> {
                         let stored = self.ks.kmp[idx];
                         repetitive += 1;
                         if stored.is_set() {
-                            match self.scp.mark.p.pos().cmp(&stored.pos()) {
+                            let mark_pos = self.scp.mark.p.pos();
+                            let stored_pos = stored.pos();
+                            match mark_pos.cmp(&stored_pos) {
                                 cmp::Ordering::Greater => {
-                                    let dist = self.scp.mark.p.pos() - stored.pos();
-                                    self.extend_repetive_on_cycle(dist, pd, idx);
+                                    let dist = mark_pos - stored_pos;
+                                    self.extend_repetive_on_cycle(mark_pos, dist, pd);
                                 }
                                 cmp::Ordering::Less => {
                                     dbg_print!("repetitive occurs before already stored [{:x}] p {:#x} <=> stored {:#x}", idx, self.scp.mark.p, stored);
                                     let _x = self.scp.p.x();
                                     dbg_assert!(_x > 0);
-                                    let dist = stored.pos() - self.scp.mark.p.pos();
-                                    self.extend_repetive_on_cycle(dist, pd, idx);
+                                    let dist = stored_pos - mark_pos;
+                                    self.replace_repetive_on_cycle(stored_pos, mark_pos, dist, pd);
+                                    // FIXME: moet positie nu niet gezet worden, bij less?
                                 }
                                 cmp::Ordering::Equal => {
                                     dbg_print!("minimum remained [{:x}] {:#x}", idx, stored)

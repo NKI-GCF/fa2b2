@@ -23,7 +23,7 @@ pub struct KmerStore<T> {
     pub b2: Vec<u8>,
     pub kmp: Vec<T>, // position + strand per k-mer.
     pub contig: Vec<Contig>,
-    pub repeat: AHashMap<usize, Repeat>,
+    pub repeat: AHashMap<u64, Repeat>,
 }
 
 impl<T: PriExtPosOri> KmerStore<T> {
@@ -51,11 +51,8 @@ impl<T: PriExtPosOri> KmerStore<T> {
             ctg.genomic += offset;
         }
     }
-    pub fn set_kmp(&mut self, min_idx: usize, min_p: u64, stored_repeat: Option<Repeat>) {
+    pub fn set_kmp(&mut self, min_idx: usize, min_p: u64) {
         self.kmp[min_idx].set(min_p);
-        if let Some(repeat) = stored_repeat {
-            self.repeat.insert(min_idx, repeat);
-        }
     }
 
     /// binary search contig lower boundary
@@ -107,9 +104,16 @@ impl<T: PriExtPosOri> KmerStore<T> {
             })
             .ok_or_else(|| anyhow!("stored pos past contig? {:#}", p))
     }
-    pub fn extend_repetitive(&mut self, min_idx: usize, dist: u32) {
-        let repeat = self.repeat.entry(min_idx).or_insert((dist, 0));
+    pub fn extend_repetitive(&mut self, min_pos: u64, dist: u32) {
+        let repeat = self.repeat.entry(min_pos).or_insert((dist, 0));
         repeat.1 = dist;
+    }
+
+    pub fn replace_repetitive(&mut self, old_pos: u64, new_pos: u64, dist: u32) {
+        let old_repeat = self.repeat.remove(&old_pos).expect("oldpos not stored");
+
+        let repeat = self.repeat.entry(new_pos).or_insert(old_repeat);
+        repeat.1 += dist;
     }
 }
 

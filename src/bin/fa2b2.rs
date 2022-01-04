@@ -138,7 +138,7 @@ fn dump_stats(ks: &KmerStore<u64>, extent_len: usize) {
         }
     }
     println!("{} sections of non-ambiguous code", ks.contig.len());
-    println!("{} k-mers stored for repetitive code", ks.repeat.len());
+    println!("{} positions stored for repetitive code", ks.repeat.len());
 
     let mut period_counter = HashMap::new();
     for v in ks.repeat.values() {

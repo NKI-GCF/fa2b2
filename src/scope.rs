@@ -1,7 +1,7 @@
 use crate::kmer::Kmer;
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::{KmerLoc, PriExtPosOri};
-use crate::kmerstore::{KmerStore, Repeat};
+use crate::kmerstore::KmerStore;
 use crate::past_scope::PastScope;
 use crate::rdbg::STAT_DB;
 use anyhow::{ensure, Result};
@@ -34,18 +34,14 @@ pub trait Scope {
     }
 
     /// sufficient kmers to have mimimum and do we have minimum?
-    fn remark<T: PriExtPosOri>(
-        &mut self,
-        ks: &KmerStore<T>,
-        reset_extension_if_leaving: bool,
-    ) -> Result<bool> {
+    fn remark(&mut self, reset_extension_if_leaving: bool) -> Result<bool> {
         if self.all_kmers() {
             if let Some(mark) = self.get_mark() {
                 if self.is_mark_out_of_scope(mark) {
                     if reset_extension_if_leaving {
                         self.clear_p_extension();
                     }
-                    return self.set_next_mark(ks);
+                    return self.set_next_mark();
                 }
                 return Ok(true);
             }
@@ -83,7 +79,7 @@ pub trait Scope {
         Ok(())
     }
 
-    fn handle_mark<T>(&mut self, ks: &mut KmerStore<T>, stored_repeat: Option<Repeat>) -> Result<()>
+    fn handle_mark<T>(&mut self, ks: &mut KmerStore<T>) -> Result<()>
     where
         T: PriExtPosOri + fmt::LowerHex + Copy,
     {
@@ -93,11 +89,6 @@ pub trait Scope {
 
             if stored_p.is_replaceable_by(min_p) {
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
-                    let mut new_stored_repeat = None;
-                    if stored_p.is_repetitive() {
-                        new_stored_repeat = ks.repeat.remove(&min_idx);
-                        assert!(new_stored_repeat.is_some());
-                    }
                     let mut new_scp = PastScope::new(ks, self.get_kc(), &stored_p, min_idx)?;
 
                     // unset when kmer is not observed before bound.1:
@@ -108,16 +99,16 @@ pub trait Scope {
                             stored_p,
                             min_p
                         );
-                        ks.set_kmp(min_idx, min_p, stored_repeat);
-                        new_scp.handle_mark(ks, new_stored_repeat)?;
+                        ks.set_kmp(min_idx, min_p);
+                        new_scp.handle_mark(ks)?;
                     }
                 } else if ks.kmp[min_idx].is_no_pos() && !self.is_repetitive() {
-                    ks.set_kmp(min_idx, min_p, stored_repeat);
+                    ks.set_kmp(min_idx, min_p);
                 }
                 // .. else set and already min_p. Then leave dupbit state.
                 return Ok(());
             }
-            if stored_p.extension() == min_p.extension() {
+            if stored_p.extension() == min_p.extension() && !self.is_repetitive() {
                 // If a kmer occurs multiple times within an extending readlength (repetition),
                 // only the first gets a position. During mapping this should be kept in mind.
                 let mark_pos = mark.p.pos();
@@ -144,7 +135,7 @@ pub trait Scope {
                 }
             }
             // every time we extend, we reiterate all for mark. May fail in repetitive DNA.
-            if self.set_next_mark(ks)? {
+            if self.set_next_mark()? {
                 break;
             }
         }
@@ -153,14 +144,14 @@ pub trait Scope {
 
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)
     /// bij repetitive DNA kan geen enkel optimum de uitkomst zijn.
-    fn set_next_mark<T: PriExtPosOri>(&mut self, ks: &KmerStore<T>) -> Result<bool> {
+    fn set_next_mark(&mut self) -> Result<bool> {
         self.mark_reset();
         let x = self.get_p().x();
         let kc = self.get_kc();
         let bin = kc.get_kmers(x);
         // reverse is logischer omdat we bij gelijke extensie voor een lagere positie kiezen.
         for i in (0..kc.no_xmers(x)).rev() {
-            let _ = self.set_if_optimum(x, (bin.0 + i, bin.1 + i), Some(ks));
+            let _ = self.set_if_optimum(x, (bin.0 + i, bin.1 + i));
         }
         Ok(self.get_mark().is_some())
     }
@@ -170,12 +161,7 @@ pub trait Scope {
         self.get_i() >= kc.kmerlen + kc.afstand(x)
     }
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
-    fn set_if_optimum<T: PriExtPosOri>(
-        &mut self,
-        x: usize,
-        bin: (usize, usize),
-        oks: Option<&KmerStore<T>>,
-    ) -> bool {
+    fn set_if_optimum(&mut self, x: usize, bin: (usize, usize)) -> bool {
         // XXX function is hot
         if self.is_xmer_complete(x) {
             let kc = self.get_kc();
@@ -209,21 +195,6 @@ pub trait Scope {
                 }
                 cmp::Ordering::Equal => (p ^ kmer1.dna) & 1,
             };
-            if let Some(rep) = oks.and_then(|ks| ks.repeat.get(&hash)) {
-                let ks = oks.unwrap();
-                let stored_p = &ks.kmp[hash];
-                if stored_p.is_set()
-                    && p.pos() != stored_p.pos()
-                    && dbgf!(
-                        p.pos() < stored_p.pos() + rep.1 as u64,
-                        "{} {:#x} Rep:{:?}",
-                        hash,
-                        rep
-                    )
-                {
-                    return false;
-                }
-            }
             if self.is_repetitive() {
                 p.set_repetitive();
             }

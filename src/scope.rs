@@ -54,7 +54,7 @@ pub trait Scope {
     }
 
     fn get_if_repetitive(&self, stored_pos: u64, mark_pos: u64) -> Option<u64> {
-        assert!(mark_pos > stored_pos);
+        dbg_assert!(mark_pos > stored_pos);
         let dist = mark_pos - stored_pos;
         if self.is_on_contig(stored_pos) && dist < self.get_kc().repetition_max_dist {
             Some(dist)
@@ -87,7 +87,7 @@ pub trait Scope {
         if let Some(mark) = self.get_mark() {
             let (min_idx, min_p) = mark.get();
             if self.is_repetitive() && ks.kmp[min_idx].is_set() {
-                assert!(self.is_on_contig(min_p.pos()));
+                dbg_assert!(self.is_on_contig(min_p.pos()));
                 ks.kmp[min_idx].set_repetitive();
                 return Ok(());
             }

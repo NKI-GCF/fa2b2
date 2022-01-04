@@ -44,7 +44,7 @@ impl<'a> PastScope<'a> {
         let bin = kc.get_kmers(x);
 
         loop {
-            let b2 = ks.b2_for_p(scp.p, Some("(past)")).unwrap();
+            let b2 = ks.b2_for_p(scp.p, Some("(P)")).unwrap();
             if scp.increment(b2) {
                 // we weten extension op voorhand.
                 if (scp.set_if_optimum(x, bin) && scp.all_kmers()) || scp.remark(false)? {
@@ -120,7 +120,6 @@ impl<'a> Scope for PastScope<'a> {
             }
             self.d[self.mod_i] = old_d;
         }
-        dbg_assert!(self.p.is_set());
         // first bit is strand bit, set according to kmer orientation bit.
         self.p &= !1;
         self.p += 2 + self.d[self.mod_i].update(b2);
@@ -134,7 +133,7 @@ impl<'a> Scope for PastScope<'a> {
         self.mark.reset();
     }
     fn set_mark(&mut self, idx: usize, p: u64, x: usize) {
-        dbg_print!("[{:x}] = {:x} | x({}) <past>", idx, p, x);
+        dbg_print!("{:<30}<P>", format!("[{:x}] = {:x} | x({})", idx, p, x));
         self.mark.set(idx, p, x);
     }
     fn set_period(&mut self, period: u64) {

@@ -98,7 +98,6 @@ impl<'a> Scope for HeadScope<'a> {
             }
             self.d[self.mod_i] = old_d;
         }
-        dbg_assert!(self.p.is_set());
         // first bit is strand bit, set according to kmer orientation bit.
         self.p &= !1;
         self.p += 2 + self.d[self.mod_i].update(b2);
@@ -112,7 +111,7 @@ impl<'a> Scope for HeadScope<'a> {
         self.mark.reset();
     }
     fn set_mark(&mut self, idx: usize, p: u64, x: usize) {
-        dbg_print!("[{:x}] = {:x} | x({}) <head>", idx, p, x);
+        dbg_print!("{:<30}<H>", format!("[{:x}] = {:x} | x({})", idx, p, x));
         self.mark.set(idx, p, x);
     }
 }

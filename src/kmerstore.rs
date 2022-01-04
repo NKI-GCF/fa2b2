@@ -98,7 +98,7 @@ impl<T: PriExtPosOri> KmerStore<T> {
             .map(|x| {
                 let b2 = (x >> (p & 6)) & 3;
                 if let Some(tag) = opt_tag {
-                    dbg_print!("=> b2 {:x}, p: {:#x} <= {}", b2, p, tag);
+                    dbg_print!("{:<30}{}", format!("=> b2 {:x}, p: {:#x}", b2, p), tag);
                 }
                 b2
             })

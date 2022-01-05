@@ -13,3 +13,4 @@ flamegraph.pl
 stackcollapse-perf.pl
 perf.out
 tags
+docs

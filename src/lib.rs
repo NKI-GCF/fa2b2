@@ -24,6 +24,7 @@ pub mod kmer;
 pub mod kmerconst;
 pub mod kmerloc;
 pub mod kmerstore;
+pub mod mapping;
 pub mod marker;
 pub mod past_scope;
 pub mod scope;

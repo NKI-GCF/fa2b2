@@ -16,7 +16,7 @@ use bio::io::fasta::IndexedReader;
 //use std::io::prelude::*;
 //use flate2::bufread::MultiGzDecoder;
 use bincode::serialize_into;
-use clap::{App, Arg};
+use clap::{App, Arg, ArgMatches, SubCommand};
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -30,36 +30,69 @@ fn main() -> Result<()> {
     let matches = App::new("fa2b2")
         .version("1.0")
         .about("Read genome fasta file and write 2bit and region data ")
-        .arg(
-            Arg::with_name("ref")
-                .short("r")
-                .long("ref")
-                .value_name("FASTA")
-                .help("The faidx'ed reference genome file, optionally bgzipped")
-                .index(1)
-                .required(true)
-                .takes_value(true),
+        .subcommand(
+            SubCommand::with_name("index")
+                .arg(
+                    Arg::with_name("ref")
+                        .short("r")
+                        .long("ref")
+                        .value_name("FASTA")
+                        .help("The faidx'ed reference genome file, optionally bgzipped")
+                        .index(1)
+                        .required(true)
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("out")
+                        .short("o")
+                        .long("out")
+                        .value_name("OUTPUT")
+                        .help("The output file")
+                        .index(2)
+                        //.required(true)
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("repetition_max_dist")
+                        .short("X")
+                        .long("repetition-max-dist")
+                        .value_name("repetition_max_dist")
+                        .help("Maximum distance between kmers to be considered for repetition")
+                        .takes_value(true),
+                ),
         )
-        .arg(
-            Arg::with_name("out")
-                .short("o")
-                .long("out")
-                .value_name("OUTPUT")
-                .help("The output file")
-                .index(2)
-                //.required(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("repetition_max_dist")
-                .short("X")
-                .long("repetition-max-dist")
-                .value_name("repetition_max_dist")
-                .help("Maximum distance between kmers to be considered for repetition")
-                .takes_value(true),
+        .subcommand(
+            SubCommand::with_name("aln").arg(
+                Arg::with_name("ref")
+                    .short("r")
+                    .long("ref")
+                    .value_name("FASTA")
+                    .help("The faidx'ed reference genome file, optionally bgzipped")
+                    .index(1)
+                    .required(true)
+                    .takes_value(true),
+            ),
         )
         .get_matches();
+    if let Some(matches) = matches.subcommand_matches("index") {
+        index(matches)
+    } else if let Some(matches) = matches.subcommand_matches("aln") {
+        aln(matches)
+    } else {
+        unreachable!();
+    }
+}
 
+fn aln(matches: &ArgMatches) -> Result<()> {
+    let fa_name = matches.value_of("ref").unwrap();
+
+    let mut idxr = IndexedReader::from_file(&fa_name)
+        .unwrap_or_else(|_| panic!("Error opening reference genome"));
+    let chrs = idxr.index.sequences();
+    Ok(())
+}
+
+fn index(matches: &ArgMatches) -> Result<()> {
     let fa_name = matches.value_of("ref").unwrap();
 
     let mut idxr = IndexedReader::from_file(&fa_name)

@@ -1,6 +1,5 @@
 extern crate arrayvec;
 extern crate bincode;
-extern crate bio;
 extern crate clap;
 extern crate flate2;
 
@@ -36,14 +35,10 @@ fn main() -> Result<()> {
                         .takes_value(true),
                 )
                 .arg(
-                    Arg::with_name("out")
-                        .short("o")
-                        .long("out")
-                        .value_name("OUTPUT")
-                        .help("The output file")
-                        .index(2)
-                        //.required(true)
-                        .takes_value(true),
+                    Arg::with_name("stats_only")
+                        .short("S")
+                        .long("stats_only")
+                        .help("The output file"),
                 )
                 .arg(
                     Arg::with_name("repetition_max_dist")

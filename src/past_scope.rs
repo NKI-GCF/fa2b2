@@ -180,6 +180,7 @@ mod tests {
     use crate::kmerconst::KmerConst;
     use crate::marker::KmerIter;
     use anyhow::Result;
+    use noodles_fasta as fasta;
     const SEQLEN: usize = 250;
 
     #[test]
@@ -190,8 +191,9 @@ mod tests {
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
         kmi.ks.p_max = (seq_vec.len() as u64) << 1;
-        let mut seq = seq_vec.iter();
-        kmi.markcontig::<u64>("test", &mut seq)?;
+        let definition = fasta::record::Definition::new("test", None);
+        let sequence = fasta::record::Sequence::from(seq_vec);
+        kmi.markcontig::<u64>(fasta::Record::new(definition, sequence))?;
         let mut seen = 0;
         for hash in 0..kmi.ks.kmp.len() {
             let p = kmi.ks.kmp[hash];
@@ -232,7 +234,9 @@ mod tests {
             dbg_print!("{:?}", seq_vec);
 
             let vv: Vec<u8> = seq_vec.into_iter().map(|c| c as u8).collect();
-            kmi.markcontig::<u64>("test", &mut vv.iter())?;
+            let definition = fasta::record::Definition::new("test", None);
+            let sequence = fasta::record::Sequence::from(vv);
+            kmi.markcontig::<u64>(fasta::Record::new(definition, sequence))?;
             for hash in 0..kmi.ks.kmp.len() {
                 let p = kmi.ks.kmp[hash];
                 if p.is_set() {

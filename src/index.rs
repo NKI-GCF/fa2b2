@@ -3,53 +3,54 @@ use crate::kmerloc::PriExtPosOri;
 use crate::kmerstore::KmerStore;
 use crate::marker::KmerIter;
 
-use anyhow::Result;
+use anyhow::{anyhow, ensure, Result};
 use bincode::serialize_into;
-use bio::io::fasta::IndexedReader;
 use clap::ArgMatches;
+use noodles_fasta as fasta;
 
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::BufReader;
 use std::io::BufWriter;
+use std::path::Path;
 
 pub fn index(matches: &ArgMatches) -> Result<()> {
     let fa_name = matches.value_of("ref").unwrap();
 
-    let mut idxr = IndexedReader::from_file(&fa_name)
-        .unwrap_or_else(|_| panic!("Error opening reference genome"));
-    let chrs = idxr.index.sequences();
+    let mut fa = File::open(&fa_name)
+        .map(BufReader::new)
+        .map(fasta::Reader::new)
+        .map_err(|e| anyhow!("Error opening reference genome: {}", e))?;
 
-    let mut out_file = matches
-        .value_of("out")
-        .map(|f| BufWriter::new(File::create(f).unwrap()));
+    let opt_out = if matches.occurrences_of("stats_only") == 1 {
+        None
+    } else {
+        let ks_name = format!("{}.ks", fa_name);
+        ensure!(!Path::new(&ks_name).exists(), "{} already exists!", ks_name);
+        Some(BufWriter::new(File::create(ks_name)?))
+    };
 
+    // I believe transposons are generally 100 to 10_000 bases in length
     let repetition_max_dist = matches
         .value_of("repetition_max_dist")
         .map(|v| v.parse())
         .transpose()?
         .unwrap_or(10_000);
 
-    let kc = KmerConst::new(
-        chrs.iter().map(|x| x.len as usize).sum(),
-        repetition_max_dist,
-    );
+    let mut len = 0;
+    for record in fa.records() {
+        len += record?.sequence().len();
+    }
+    let kc = KmerConst::new(len, repetition_max_dist);
     let mut ks = KmerStore::new(kc.bitlen);
     let mut kmi = KmerIter::new(&mut ks, &kc);
-    for chr in &chrs {
-        let mut seq = Vec::with_capacity(chr.len as usize);
-        idxr.fetch_all(&chr.name)
-            .unwrap_or_else(|_| panic!("Error fetching {}.", &chr.name));
-        idxr.read(&mut seq)
-            .unwrap_or_else(|_| panic!("Error reading {}.", &chr.name));
-
-        kmi.markcontig::<u64>(&chr.name, &mut seq.iter())?;
-        //break;
+    for record in fa.records() {
+        kmi.markcontig::<u64>(record?)?;
     }
     dump_stats(&ks, kc.extent.len());
 
-    if let Some(f) = out_file.as_mut() {
-        println!("Writing first occurances per kmer to disk");
-        serialize_into(f, &ks).unwrap();
+    if let Some(out_file) = opt_out {
+        serialize_into(out_file, &ks)?;
     }
     Ok(())
 }

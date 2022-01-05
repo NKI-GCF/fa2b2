@@ -12,7 +12,6 @@ path = "src/lib.rs"
 crate-type = ["rlib", "dylib"]
 
 [dependencies]
-bio = "*"
 flate2 = "^1.0.22"
 csv = "^1.1.6"
 arrayvec = "^0.7.2"
@@ -23,9 +22,13 @@ num-traits = "^0.2.14"
 num = "^0.4.0"
 rand = "^0.8.4"
 lazy_static = "^1.4.0"
-serde = "^1.0.133"
+serde = {version = "^1.0.133", features = ["derive"]}
 anyhow = "^1.0.52"
 ahash = { version = "^0.7.6", "features" = ["serde"] }
+noodles-fasta = "0.5.1"
+noodles-bam = "0.12.0"
+noodles-cram = "0.9.0"
+noodles-fastq = "0.3.0"
 
 [profile.release]
 debug = true

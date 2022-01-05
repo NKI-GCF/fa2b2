@@ -1,18 +1,17 @@
 extern crate arrayvec;
 extern crate bincode;
-extern crate bio;
 extern crate clap;
 extern crate num;
 extern crate num_traits;
 
-use crate::kmerconst::KmerConst;
-use std::{cmp, slice::Iter};
-
 use crate::head_scope::HeadScope;
+use crate::kmerconst::KmerConst;
 use crate::kmerloc::PriExtPosOri;
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use anyhow::Result;
+use noodles_fasta as fasta;
+use std::cmp;
 
 pub struct KmerIter<'a> {
     n_stretch: u64,
@@ -64,13 +63,14 @@ impl<'a> KmerIter<'a> {
         }
     }
 
-    pub fn markcontig<T: PriExtPosOri>(&mut self, chrname: &str, seq: &mut Iter<u8>) -> Result<()> {
+    pub fn markcontig<T: PriExtPosOri>(&mut self, record: fasta::Record) -> Result<()> {
         self.goffs = 0;
         self.ks.push_contig(self.scp.p.pos(), self.goffs);
 
         let mut repetitive = 0_u64;
         let mut n_count = 0_u64;
         let mut coding = 0_u64;
+        let mut seq = record.sequence().as_ref().iter();
 
         while let Some(b2) = seq.next().map(|&c| {
             let b2 = (c >> 1) & 0x7;
@@ -142,12 +142,12 @@ impl<'a> KmerIter<'a> {
         } else {
             coding += self.scp.i as u64;
         }
-        if chrname != "test" {
+        if record.name() != "test" {
             let complex = coding - repetitive;
             let tot = coding + n_count;
             println!(
                 "chromosome {}\tcomplex dna:{} of {}({:.2}%)\trepetitive:{}({:.2}%)\tN-count:{}({:.2}%)\t",
-                chrname,
+                record.name(),
                 complex,
                 tot,
                 100.0 * complex as f64 / tot as f64,
@@ -170,7 +170,9 @@ mod tests {
 
     fn process<'a>(ks: &'a mut KmerStore<u64>, kc: &'a KmerConst, seq: Vec<u8>) -> Result<()> {
         let mut kmi = KmerIter::new(ks, kc);
-        kmi.markcontig::<u64>("test", &mut seq.iter())
+        let definition = fasta::record::Definition::new("test", None);
+        let sequence = fasta::record::Sequence::from(seq);
+        kmi.markcontig::<u64>(fasta::Record::new(definition, sequence))
     }
 
     #[test]

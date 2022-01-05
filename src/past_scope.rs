@@ -10,12 +10,12 @@ use std::fmt;
 pub struct PastScope<'a> {
     kc: &'a KmerConst,
     p: u64,
-    d: Vec<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
-    mark: KmerLoc<u64>,
     i: usize,
     mod_i: usize,
     plim: (u64, u64),
     period: u64,
+    mark: KmerLoc<u64>,
+    d: Vec<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
 }
 
 impl<'a> PastScope<'a> {
@@ -33,12 +33,12 @@ impl<'a> PastScope<'a> {
         let mut scp = PastScope {
             kc,
             p: bound.0 | p.extension(),
-            d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
-            mark: KmerLoc::new(usize::max_value(), p.extension()),
             i: 0,
             mod_i: 0,
             plim,
             period: 0,
+            mark: KmerLoc::new(usize::max_value(), p.extension()),
+            d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
         };
         let x = scp.p.x();
         let bin = kc.get_kmers(x);
@@ -186,8 +186,8 @@ mod tests {
 
     #[test]
     fn test_reconstruct1() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, 1000);
-        let mut ks = KmerStore::<u64>::new(kc.bitlen);
+        let kc = KmerConst::new(SEQLEN);
+        let mut ks = KmerStore::<u64>::new(kc.bitlen, 10_000);
         let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
@@ -216,10 +216,10 @@ mod tests {
     fn test_reconstruct_gs4_all() -> Result<()> {
         // all mappable.
         let seqlen: usize = 8;
-        let kc = KmerConst::new(seqlen, 1000);
+        let kc = KmerConst::new(seqlen);
 
         for gen in 0..=4_usize.pow(seqlen as u32) {
-            let mut ks = KmerStore::<u64>::new(kc.bitlen);
+            let mut ks = KmerStore::<u64>::new(kc.bitlen, 10_000);
             let mut kmi = KmerIter::new(&mut ks, &kc);
             kmi.ks.p_max = (seqlen as u64) << 1;
             let seq_vec: Vec<_> = (0..seqlen)

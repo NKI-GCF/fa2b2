@@ -130,7 +130,7 @@ mod tests {
     #[test]
     fn it_works() {
         //let mut ks = KmerStore::new(32); // allocates 16 gig of data
-        let mut ks = KmerStore::<u64>::new(2);
+        let mut ks = KmerStore::<u64>::new(2, 10_000);
         let mut p = 0;
         let goffs = p & !1;
 

@@ -70,7 +70,7 @@ impl<'a> KmerIter<'a> {
 
         let mut repetitive = 0_u64;
         let mut n_count = 0_u64;
-        let mut tot = 0_u64;
+        let mut coding = 0_u64;
 
         while let Some(b2) = seq.next().map(|&c| {
             let b2 = (c >> 1) & 0x7;
@@ -78,7 +78,6 @@ impl<'a> KmerIter<'a> {
             dbg_print!("{}: {:x}", c as char, b2);
             b2
         }) {
-            tot += 1;
             let p = self.scp.p;
             if b2 < 4 {
                 // new sequence is also stored, to enable lookup later.
@@ -86,6 +85,7 @@ impl<'a> KmerIter<'a> {
                     *qb |= b2 << (p & 6);
                 }
                 if self.n_stretch > 0 {
+                    n_count += self.n_stretch;
                     self.finalize_n_stretch();
                 } else if self.scp.period != 0 && dbg_dump_if!(self.scp.mark.is_set(), false) {
                     // XXX self.scp.mark.is_set() can be false here, it seems.
@@ -125,6 +125,7 @@ impl<'a> KmerIter<'a> {
                 self.scp.complete_and_update_mark::<u64>(b2, self.ks)?;
             } else {
                 if self.scp.i != 0 {
+                    coding += self.scp.i as u64;
                     dbg_print!("started N-stretch at {}.", p);
                     self.goffs += self.scp.i as u64;
                     self.ks.push_contig(p, self.goffs);
@@ -133,20 +134,23 @@ impl<'a> KmerIter<'a> {
                     self.scp.i = 0;
                 }
                 self.n_stretch += 1;
-                n_count += 1;
             }
         }
         if self.n_stretch > 0 {
+            n_count += self.n_stretch;
             dbgx!(self.finalize_n_stretch());
+        } else {
+            coding += self.scp.i as u64;
         }
         if chrname != "test" {
-            let complex = tot - repetitive - n_count;
+            let complex = coding - repetitive;
+            let tot = coding + n_count;
             println!(
                 "chromosome {}\tcomplex dna:{} of {}({:.2}%)\trepetitive:{}({:.2}%)\tN-count:{}({:.2}%)\t",
                 chrname,
                 complex,
                 tot,
-                100.0 * (tot - repetitive - n_count) as f64 / tot as f64,
+                100.0 * complex as f64 / tot as f64,
                 repetitive,
                 100.0 * repetitive as f64 / tot as f64,
                 n_count,

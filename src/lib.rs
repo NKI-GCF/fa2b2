@@ -20,7 +20,9 @@ extern crate lazy_static;
 
 #[macro_use]
 pub mod rdbg;
+pub mod aln;
 pub mod head_scope;
+pub mod index;
 pub mod kmer;
 pub mod kmerconst;
 pub mod kmerloc;

@@ -74,7 +74,7 @@ pub trait Scope {
     where
         T: PriExtPosOri + fmt::LowerHex + Copy,
     {
-        let b2 = ks.b2_for_p(self.get_p(), Some("(extension)"))?;
+        let b2 = ks.b2_for_p(self.get_p(), "(E)")?;
         ensure!(self.is_before_end_of_contig(), "running into end of contig");
         dbg_assert!(self.increment(b2));
         Ok(())
@@ -98,6 +98,7 @@ pub trait Scope {
                 return Ok(());
             } else if stored_p.is_replaceable_by(min_p) {
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
+                    ks.p_max = cmp::max(ks.p_max, self.get_p().pos());
                     let mut new_scp = PastScope::new(ks, self.get_kc(), &stored_p, min_idx)?;
 
                     // unset when kmer is not observed before bound.1:

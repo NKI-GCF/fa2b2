@@ -44,7 +44,7 @@ impl<'a> PastScope<'a> {
         let bin = kc.get_kmers(x);
 
         loop {
-            let b2 = ks.b2_for_p(scp.p, Some("(P)")).unwrap();
+            let b2 = ks.b2_for_p(scp.p, "(P)").unwrap();
             if scp.increment(b2) {
                 // we weten extension op voorhand.
                 if (scp.set_if_optimum(x, bin) && scp.all_kmers()) || scp.remark(false)? {
@@ -189,6 +189,7 @@ mod tests {
         let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
+        kmi.ks.p_max = (seq_vec.len() as u64) << 1;
         let mut seq = seq_vec.iter();
         kmi.markcontig::<u64>("test", &mut seq)?;
         let mut seen = 0;
@@ -217,6 +218,7 @@ mod tests {
         for gen in 0..=4_usize.pow(seqlen as u32) {
             let mut ks = KmerStore::<u64>::new(kc.bitlen);
             let mut kmi = KmerIter::new(&mut ks, &kc);
+            kmi.ks.p_max = (seqlen as u64) << 1;
             let seq_vec: Vec<_> = (0..seqlen)
                 .map(|i| match (gen >> (i << 1)) & 3 {
                     0 => 'A',

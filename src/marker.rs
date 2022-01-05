@@ -85,13 +85,12 @@ impl<'a> KmerIter<'a> {
                 if let Some(qb) = self.ks.b2.get_mut(p.byte_pos()) {
                     *qb |= b2 << (p & 6);
                 }
-                self.ks.p_max = p.pos() + 2;
                 if self.n_stretch > 0 {
                     self.finalize_n_stretch();
                 } else if self.scp.period != 0 && dbg_dump_if!(self.scp.mark.is_set(), false) {
                     // XXX self.scp.mark.is_set() can be false here, it seems.
                     let pd = self.scp.period;
-                    if self.ks.b2_for_p(self.scp.p - pd, Some("(R)"))? == b2 {
+                    if self.ks.b2_for_p(self.scp.p - pd, "(R)")? == b2 {
                         let idx = self.scp.mark.get_idx();
                         let stored = self.ks.kmp[idx];
                         repetitive += 1;

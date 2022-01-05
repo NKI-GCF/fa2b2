@@ -33,7 +33,7 @@ pub trait Scope {
         p.pos() >= mark.p.pos() + (self.get_kc().no_xmers(p.x()) << 1) as u64
     }
 
-    /// sufficient kmers to have mimimum and do we have minimum?
+    /// Manage mark, do we have any minimum?
     fn remark(&mut self, reset_extension_if_leaving: bool) -> Result<bool> {
         if self.all_kmers() {
             if let Some(mark) = self.get_mark() {
@@ -53,14 +53,15 @@ pub trait Scope {
         pos >= plim.0.pos() && pos < plim.1.pos()
     }
 
-    fn get_if_repetitive(&self, stored_pos: u64, mark_pos: u64) -> Option<u64> {
+    fn dist_if_repetitive(&self, stored_pos: u64, mark_pos: u64) -> Option<u64> {
         dbg_assert!(mark_pos > stored_pos);
-        let dist = mark_pos - stored_pos;
-        if self.is_on_contig(stored_pos) && dist < self.get_kc().repetition_max_dist {
-            Some(dist)
-        } else {
-            None
+        if self.is_on_contig(stored_pos) {
+            let dist = mark_pos - stored_pos;
+            if dist < self.get_kc().repetition_max_dist {
+                return Some(dist);
+            }
         }
+        None
     }
     fn can_extend(&self) -> bool {
         self.get_p().x() + 1 < self.get_kc().extent.len()
@@ -75,7 +76,10 @@ pub trait Scope {
         T: PriExtPosOri + fmt::LowerHex + Copy,
     {
         let b2 = ks.b2_for_p(self.get_p(), "(E)")?;
-        ensure!(self.is_before_end_of_contig(), "running into end of contig");
+        ensure!(
+            self.is_before_end_of_contig(),
+            "increment_for_extension() runs into end of contig"
+        );
         dbg_assert!(self.increment(b2));
         Ok(())
     }
@@ -120,14 +124,14 @@ pub trait Scope {
                 // If a kmer occurs multiple times within an extending readlength (repetition),
                 // only the first gets a position. During mapping this should be kept in mind.
                 let mark_pos = mark.p.pos();
-                if let Some(dist) = self.get_if_repetitive(stored_p.pos(), mark_pos) {
+                if let Some(dist) = self.dist_if_repetitive(stored_p.pos(), mark_pos) {
                     self.set_period(dist);
                     ks.kmp[min_idx].set_repetitive();
                     return Ok(());
                 }
                 ks.kmp[min_idx].set_dup();
             } else {
-                dbg_print!("\t\t<!>");
+                dbg_print!("not replacable, extend..");
             }
         }
         while self.can_extend() {
@@ -172,7 +176,6 @@ pub trait Scope {
     }
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
     fn set_if_optimum(&mut self, x: usize, bin: (usize, usize)) -> bool {
-        // XXX function is hot
         if self.is_xmer_complete(x) {
             let kc = self.get_kc();
             let base = self.get_i() - kc.kmerlen;

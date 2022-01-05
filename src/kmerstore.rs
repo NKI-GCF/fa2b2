@@ -20,6 +20,7 @@ pub type Repeat = (u32, u32);
 pub struct KmerStore<T> {
     pub p_max: u64,
     pub opt: u64,
+    pub repetition_max_dist: u64,
     pub b2: Vec<u8>,
     pub kmp: Vec<T>, // position + strand per k-mer.
     pub contig: Vec<Contig>,
@@ -27,11 +28,12 @@ pub struct KmerStore<T> {
 }
 
 impl<T: PriExtPosOri> KmerStore<T> {
-    pub fn new(bitlen: usize) -> Self {
+    pub fn new(bitlen: usize, repetition_max_dist: u64) -> Self {
         let shift = bitlen - 2;
         KmerStore {
             p_max: 0,
             opt: 0,
+            repetition_max_dist: repetition_max_dist * 2,
             b2: vec![0; 1 << shift],                  // sequence (4 per u8).
             kmp: vec![T::no_pos(); 1 << (shift + 1)], // kmer positions
             //kmp,
@@ -53,6 +55,9 @@ impl<T: PriExtPosOri> KmerStore<T> {
     }
     pub fn set_kmp(&mut self, min_idx: usize, min_p: u64) {
         self.kmp[min_idx].set(min_p);
+    }
+    pub fn get_bitlen(&self) -> usize {
+        self.b2.len().trailing_zeros() as usize + 2
     }
 
     /// binary search contig lower boundary

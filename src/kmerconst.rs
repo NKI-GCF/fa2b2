@@ -7,19 +7,11 @@ pub struct KmerConst {
     pub bitlen: usize,
     pub venster: usize,
     max_afstand: usize,
-    pub repetition_max_dist: u64,
     pub extent: Vec<usize>,
 }
 
 impl KmerConst {
-    pub fn new(genomesize: usize, repetition_max_dist: u64) -> Self {
-        // bit width, required to store all (cumulative) genomic positions, is used as len
-
-        let mut bitlen = genomesize.next_power_of_two().trailing_zeros() as usize;
-        if (bitlen & 1) == 1 {
-            // must be even.
-            bitlen += 1
-        }
+    pub fn from_bitlen(bitlen: usize) -> Self {
         let kmerlen = bitlen / 2;
         let max_afstand = kmerlen / 2;
 
@@ -35,16 +27,15 @@ impl KmerConst {
         let extent: Vec<usize> = (0..kmerlen).collect();
 
         dbg_restart!(
-            "Genome size: {}, venster: {}, kmerlen: {}, max_afstand: {}\n--",
-            genomesize,
+            "venster: {}, kmerlen: {}, max_afstand: {}\n--",
             venster,
             kmerlen,
             max_afstand
         );
         if !cfg!(debug_assertions) {
             eprintln!(
-                "Genome size: {}, venster: {}, kmerlen: {}, max_afstand: {}",
-                genomesize, venster, kmerlen, max_afstand
+                "venster: {}, kmerlen: {}, max_afstand: {}",
+                venster, kmerlen, max_afstand
             );
         }
         KmerConst {
@@ -53,10 +44,21 @@ impl KmerConst {
             bitlen,
             venster,
             max_afstand,
-            repetition_max_dist: repetition_max_dist * 2,
             extent,
         }
     }
+
+    pub fn new(genomesize: usize) -> Self {
+        // bit width, required to store all (cumulative) genomic positions, is used as len
+
+        let mut bitlen = genomesize.next_power_of_two().trailing_zeros() as usize;
+        if (bitlen & 1) == 1 {
+            // must be even.
+            bitlen += 1
+        }
+        KmerConst::from_bitlen(bitlen)
+    }
+
     pub fn no_xmers(&self, x: usize) -> usize {
         self.no_kmers - self.afstand(x)
     }

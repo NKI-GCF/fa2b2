@@ -45,7 +45,17 @@ fn main() -> Result<()> {
                         .short("X")
                         .long("repetition-max-dist")
                         .value_name("repetition_max_dist")
+                        .default_value("10000")
                         .help("Maximum distance between kmers to be considered for repetition")
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("sequence_length")
+                        .short("l")
+                        .long("seqlen")
+                        .value_name("sequence_length")
+                        .default_value("3099750718")
+                        .help("total length of genome sequence")
                         .takes_value(true),
                 ),
         )

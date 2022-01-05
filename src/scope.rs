@@ -53,11 +53,11 @@ pub trait Scope {
         pos >= plim.0.pos() && pos < plim.1.pos()
     }
 
-    fn dist_if_repetitive(&self, stored_pos: u64, mark_pos: u64) -> Option<u64> {
+    fn dist_if_repetitive(&self, stored_pos: u64, mark_pos: u64, max_dist: u64) -> Option<u64> {
         dbg_assert!(mark_pos > stored_pos);
         if self.is_on_contig(stored_pos) {
             let dist = mark_pos - stored_pos;
-            if dist < self.get_kc().repetition_max_dist {
+            if dist < max_dist {
                 return Some(dist);
             }
         }
@@ -124,7 +124,9 @@ pub trait Scope {
                 // If a kmer occurs multiple times within an extending readlength (repetition),
                 // only the first gets a position. During mapping this should be kept in mind.
                 let mark_pos = mark.p.pos();
-                if let Some(dist) = self.dist_if_repetitive(stored_p.pos(), mark_pos) {
+                if let Some(dist) =
+                    self.dist_if_repetitive(stored_p.pos(), mark_pos, ks.repetition_max_dist)
+                {
                     self.set_period(dist);
                     ks.kmp[min_idx].set_repetitive();
                     return Ok(());

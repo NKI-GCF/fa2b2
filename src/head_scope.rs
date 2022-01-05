@@ -38,7 +38,6 @@ impl<'a> HeadScope<'a> {
     where
         T: PriExtPosOri + fmt::LowerHex + Copy,
     {
-        // XXX: function is very hot
         if self.increment(b2) {
             for x in 0..=self.p.x() {
                 if self.set_if_optimum(x, self.kc.get_kmers(x)) {

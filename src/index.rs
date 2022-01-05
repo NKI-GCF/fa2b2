@@ -35,14 +35,16 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
         .value_of("repetition_max_dist")
         .map(|v| v.parse())
         .transpose()?
-        .unwrap_or(10_000);
+        .unwrap();
 
-    let mut len = 0;
-    for record in fa.records() {
-        len += record?.sequence().len();
-    }
-    let kc = KmerConst::new(len, repetition_max_dist);
-    let mut ks = KmerStore::new(kc.bitlen);
+    let seqlen = matches
+        .value_of("sequence_length")
+        .map(|v| v.parse())
+        .transpose()?
+        .unwrap();
+
+    let kc = KmerConst::new(seqlen);
+    let mut ks = KmerStore::new(kc.bitlen, repetition_max_dist);
     let mut kmi = KmerIter::new(&mut ks, &kc);
     for record in fa.records() {
         kmi.markcontig::<u64>(record?)?;

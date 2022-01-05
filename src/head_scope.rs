@@ -39,8 +39,9 @@ impl<'a> HeadScope<'a> {
         T: PriExtPosOri + fmt::LowerHex + Copy,
     {
         if self.increment(b2) {
+            let base = self.get_i() - self.kc.kmerlen;
             for x in 0..=self.p.x() {
-                if self.set_if_optimum(x, self.kc.get_kmers(x)) {
+                if self.set_if_optimum(x, base, self.kc.get_kmers(x)) {
                     break;
                 }
             }

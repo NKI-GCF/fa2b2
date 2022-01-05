@@ -164,10 +164,11 @@ pub trait Scope {
         self.mark_reset();
         let x = self.get_p().x();
         let kc = self.get_kc();
+        let base = self.get_i() - kc.kmerlen;
         let bin = kc.get_kmers(x);
         // reverse is logischer omdat we bij gelijke extensie voor een lagere positie kiezen.
         for i in (0..kc.no_xmers(x)).rev() {
-            let _ = self.set_if_optimum(x, (bin.0 + i, bin.1 + i));
+            let _ = self.set_if_optimum(x, base, (bin.0 + i, bin.1 + i));
         }
         Ok(self.get_mark().is_some())
     }
@@ -177,7 +178,7 @@ pub trait Scope {
         self.get_i() >= kc.kmerlen + kc.afstand(x)
     }
     /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
-    fn set_if_optimum(&mut self, x: usize, bin: (usize, usize)) -> bool {
+    fn set_if_optimum(&mut self, x: usize, base: usize, bin: (usize, usize)) -> bool {
         if self.is_xmer_complete(x) {
             let kc = self.get_kc();
             let base = self.get_i() - kc.kmerlen;

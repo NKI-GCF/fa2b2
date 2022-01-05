@@ -42,7 +42,8 @@ impl<'a> Mapping<'a> {
             //let bin = kc.get_kmers(x);
             if scp.increment(b2) {
                 // we weten extension op voorhand.
-                if scp.set_if_optimum(x, bin) && scp.all_kmers() {}
+                let base = scp.i - kc.kmerlen;
+                if scp.set_if_optimum(x, base, bin) && scp.all_kmers() {}
             }
         }
         Ok(scp)

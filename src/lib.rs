@@ -3,9 +3,6 @@ extern crate bincode;
 extern crate flate2;
 extern crate serde;
 
-//kmerconst
-extern crate bit_reverse;
-
 //kmerloc
 #[macro_use]
 extern crate derive_new;

@@ -5,7 +5,7 @@ use std::cmp;
 use std::mem::size_of;
 use std::ops::BitXorAssign;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, PartialOrd, Eq)]
 /// A kmer that dissociates index and strand orientation
 pub struct Kmer<T> {
     pub dna: T,
@@ -42,7 +42,7 @@ implement_revcmp!(u8, u16, u32, u64, u128, usize);
 
 impl<T> Kmer<T>
 where
-    T: Unsigned + FromPrimitive + ToPrimitive + BitXorAssign + cmp::Ord,
+    T: Unsigned + FromPrimitive + ToPrimitive + BitXorAssign + PartialOrd + Ord + Eq,
 {
     /// get a kmer for this length
     pub fn new(kmerlen: u32) -> Self {
@@ -97,6 +97,15 @@ where
         } else {
             (overbit - 1) & !seq
         }
+    }
+}
+
+impl<T> Ord for Kmer<T>
+where
+    T: Unsigned + FromPrimitive + ToPrimitive + BitXorAssign + PartialOrd + Ord + Eq,
+{
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.get_idx(true).cmp(&other.get_idx(true))
     }
 }
 

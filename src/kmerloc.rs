@@ -1,5 +1,6 @@
 use crate::rdbg::STAT_DB;
 use std::clone::Clone;
+use std::cmp;
 
 pub trait PriExtPosOri: Clone {
     fn set(&mut self, p: u64);
@@ -165,15 +166,15 @@ impl PriExtPosOri for u64 {
     }*/
 }
 
-#[derive(new, Clone, PartialEq)]
+#[derive(new, Clone, PartialEq, PartialOrd, Eq)]
 pub struct KmerLoc<T>
 where
-    T: Copy,
+    T: PriExtPosOri + Copy + Ord,
 {
     idx: usize,
     pub p: T,
 }
-impl<T: PriExtPosOri + Copy> KmerLoc<T> {
+impl<T: PriExtPosOri + Copy + Ord> KmerLoc<T> {
     pub fn get(&self) -> (usize, T) {
         (self.idx, self.p)
     }
@@ -197,6 +198,29 @@ impl<T: PriExtPosOri + Copy> KmerLoc<T> {
         self.idx = idx;
         self.p = p;
         self.p.set_extension(x as u64);
+    }
+}
+
+impl<T> Ord for KmerLoc<T>
+where
+    T: PriExtPosOri + Copy + Ord,
+{
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        match self.idx.cmp(&other.idx) {
+            /*FIXME: make extenion count down, etc to simplify to this:
+            cmp::Ordering::Equal => match self.p.cmp(&other.p) {
+                cmp::Ordering::Equal => panic!(),
+                x => x,
+            },*/
+            cmp::Ordering::Equal => match other.p.extension().cmp(&self.p.extension()) {
+                cmp::Ordering::Equal => match self.p.pos().cmp(&other.p.pos()) {
+                    cmp::Ordering::Equal => panic!(),
+                    x => x,
+                },
+                x => x,
+            },
+            x => x,
+        }
     }
 }
 

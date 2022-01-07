@@ -34,7 +34,7 @@ pub trait PriExtPosOri: Clone {
     fn set_extension(&mut self, x: u64);
     fn clear_extension(&mut self);
     fn is_same(&self, other: u64) -> bool;
-    fn with_ext(&self, x: usize) -> u64;
+    fn pos_with_ext(&self, x: usize) -> u64;
     fn set_dup(&mut self);
     fn is_dup(&self) -> bool;
     fn set_repetitive(&mut self);
@@ -137,8 +137,9 @@ impl PriExtPosOri for u64 {
         dbg_assert!(self.is_set());
         *self == other
     }
-    fn with_ext(&self, x: usize) -> u64 {
-        self.pos() | ((x as u64) << EXT_SHIFT)
+    /// Note: unsets dup and rep bits.
+    fn pos_with_ext(&self, x: usize) -> u64 {
+        self.pos() | (x as u64).checked_shl(EXT_SHIFT).expect("x beyond max ext")
     }
     fn set_dup(&mut self) {
         dbg_assert!(self.is_set());

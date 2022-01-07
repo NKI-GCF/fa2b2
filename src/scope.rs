@@ -187,10 +187,10 @@ pub trait Scope {
             let mut hash = kmer1.get_idx(bin.0 <= bin.1);
             let mut p = if let Some(mark) = self.get_mark() {
                 match hash.cmp(&mark.get_idx()) {
-                    cmp::Ordering::Less => self.get_p().with_ext(x) - (bin.0 as u64).as_pos(),
+                    cmp::Ordering::Less => self.get_p().pos_with_ext(x) - (bin.0 as u64).as_pos(),
                     cmp::Ordering::Greater => return false,
                     cmp::Ordering::Equal => {
-                        let p = self.get_p().with_ext(x) - (bin.0 as u64).as_pos();
+                        let p = self.get_p().pos_with_ext(x) - (bin.0 as u64).as_pos();
                         if p >= mark.p {
                             return false;
                         }
@@ -198,7 +198,7 @@ pub trait Scope {
                     }
                 }
             } else {
-                self.get_p().with_ext(x) - (bin.0 as u64).as_pos()
+                self.get_p().pos_with_ext(x) - (bin.0 as u64).as_pos()
             };
             p ^= match bin.0.cmp(&bin.1) {
                 cmp::Ordering::Less => {

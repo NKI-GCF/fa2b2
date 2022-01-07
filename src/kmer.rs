@@ -164,16 +164,6 @@ mod tests {
         dbg_assert_eq!(kmer.get_idx(true), 0x4E);
     }
     #[test]
-    fn test_usize() {
-        let mut kmer: Kmer<usize> = Kmer::new(32);
-        for i in 0..32 {
-            kmer.add(i & 3);
-        }
-        dbg_assert_eq!(kmer.dna, 0xE4E4E4E4E4E4E4E4);
-        dbg_assert_eq!(kmer.rc, 0xB1B1B1B1B1B1B1B1);
-        dbg_assert_eq!(kmer.get_idx(true), 0x4E4E4E4E4E4E4E4E);
-    }
-    #[test]
     fn unique() {
         let mut seen = vec![false; 256];
         let mut kmer: Kmer<u8> = Kmer::new(4);

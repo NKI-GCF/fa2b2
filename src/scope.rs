@@ -30,7 +30,7 @@ pub trait Scope {
     fn is_mark_out_of_scope(&self, mark: &KmerLoc<u64>) -> bool {
         let p = self.get_p();
         dbg_assert!(p.pos() >= mark.p.pos(), "{:#x}, {:#x}", p, mark.p);
-        p.pos() >= mark.p.pos() + (self.get_kc().no_xmers(p.x()) << 1) as u64
+        p.pos() >= mark.p.pos() + (self.get_kc().no_xmers(p.x()) as u64).as_pos()
     }
 
     /// Manage mark, do we have any minimum?
@@ -187,10 +187,10 @@ pub trait Scope {
             let mut hash = kmer1.get_idx(bin.0 <= bin.1);
             let mut p = if let Some(mark) = self.get_mark() {
                 match hash.cmp(&mark.get_idx()) {
-                    cmp::Ordering::Less => self.get_p().with_ext(x) - (bin.0 << 1) as u64,
+                    cmp::Ordering::Less => self.get_p().with_ext(x) - (bin.0 as u64).as_pos(),
                     cmp::Ordering::Greater => return false,
                     cmp::Ordering::Equal => {
-                        let p = self.get_p().with_ext(x) - (bin.0 << 1) as u64;
+                        let p = self.get_p().with_ext(x) - (bin.0 as u64).as_pos();
                         if p >= mark.p {
                             return false;
                         }
@@ -198,7 +198,7 @@ pub trait Scope {
                     }
                 }
             } else {
-                self.get_p().with_ext(x) - (bin.0 << 1) as u64
+                self.get_p().with_ext(x) - (bin.0 as u64).as_pos()
             };
             p ^= match bin.0.cmp(&bin.1) {
                 cmp::Ordering::Less => {

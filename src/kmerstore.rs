@@ -33,7 +33,7 @@ impl<T: PriExtPosOri> KmerStore<T> {
         KmerStore {
             p_max: 0,
             opt: 0,
-            repetition_max_dist: repetition_max_dist * 2,
+            repetition_max_dist: repetition_max_dist.as_pos(),
             b2: vec![0; 1 << shift],                  // sequence (4 per u8).
             kmp: vec![T::no_pos(); 1 << (shift + 1)], // kmer positions
             //kmp,

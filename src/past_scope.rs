@@ -146,11 +146,11 @@ impl<'a> Scope for PastScope<'a> {
 
 impl<'a> fmt::Display for PastScope<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let p = self.p.pos() as usize;
-        let mp = self.mark.p.pos() as usize;
+        let p = self.p.unshift_pos() as usize;
+        let mp = self.mark.p.unshift_pos() as usize;
         let n = self.kc.kmerlen + self.p.x();
-        let o = " ".repeat(((p >> 1) - self.kc.venster) * 5);
-        let r = (p - mp) >> 1;
+        let o = " ".repeat((p - self.kc.venster) * 5);
+        let r = p - mp;
         if r == 0 {
             let x = self.kc.venster - n;
             let s = if x != 0 {
@@ -193,7 +193,7 @@ mod tests {
         let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
-        kmi.ks.p_max = (seq_vec.len() as u64) << 1;
+        kmi.ks.p_max = (seq_vec.len() as u64).as_pos();
         let definition = fasta::record::Definition::new("test", None);
         let sequence = fasta::record::Sequence::from(seq_vec);
         kmi.markcontig::<u64>(fasta::Record::new(definition, sequence))?;
@@ -223,7 +223,7 @@ mod tests {
         for gen in 0..=4_usize.pow(seqlen as u32) {
             let mut ks = KmerStore::<u64>::new(kc.bitlen, 10_000);
             let mut kmi = KmerIter::new(&mut ks, &kc);
-            kmi.ks.p_max = (seqlen as u64) << 1;
+            kmi.ks.p_max = (seqlen as u64).as_pos();
             let seq_vec: Vec<_> = (0..seqlen)
                 .map(|i| match (gen >> (i << 1)) & 3 {
                     0 => 'A',

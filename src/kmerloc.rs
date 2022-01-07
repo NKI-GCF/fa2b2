@@ -2,10 +2,20 @@ use crate::rdbg::STAT_DB;
 use std::clone::Clone;
 use std::cmp;
 
+const POS_SHIFT: u64 = 1;
+const EXT_SHIFT: u64 = 56;
+const ORI_MASK: u64 = 0x0000_0000_0000_0001;
+const POS_MASK: u64 = 0x000F_FFFF_FFFF_FFFE;
+const REP_MASK: u64 = 0x0040_0000_0000_0000;
+const DUP_MASK: u64 = 0x0080_0000_0000_0000;
+const EXT_MASK: u64 = 0xFF00_0000_0000_0000;
+
 pub trait PriExtPosOri: Clone {
     fn set(&mut self, p: u64);
     fn get(&self) -> u64;
     fn pos(&self) -> u64;
+    fn as_pos(&self) -> u64;
+    fn unshift_pos(&self) -> u64;
     fn no_pos() -> Self;
     fn clear(&mut self);
     fn is_set(&self) -> bool;
@@ -44,9 +54,17 @@ impl PriExtPosOri for u64 {
         dbg_assert!(self.is_set());
         *self
     }
+    fn as_pos(&self) -> u64 {
+        //FIXME: change so dup, rep etc. is in first nibble.
+        *self << POS_SHIFT
+    }
+    fn unshift_pos(&self) -> u64 {
+        //FIXME: change so dup, rep etc. is in first nibble.
+        (*self & POS_MASK) >> POS_SHIFT
+    }
     fn pos(&self) -> u64 {
         //assert!(self.is_set());
-        *self & 0xF_FFFF_FFFF_FFFE
+        *self & POS_MASK
     }
     fn no_pos() -> Self {
         0x0
@@ -62,11 +80,11 @@ impl PriExtPosOri for u64 {
     }
     fn set_ori(&mut self, p: u64) {
         dbg_assert!(self.is_set());
-        *self ^= (*self ^ p) & 1
+        *self ^= (*self ^ p) & ORI_MASK
     }
     fn get_ori(&self) -> u64 {
         dbg_assert!(self.is_set());
-        self & 1
+        self & ORI_MASK
     }
     fn incr(&mut self) {
         dbg_assert!(self.is_set());
@@ -78,20 +96,21 @@ impl PriExtPosOri for u64 {
     }
     // not all extensions may apply, it's dependent on genome size.
     fn extension(&self) -> u64 {
+        //FIXME: change so that extension is counted down.
         //assert!(self.is_set());
-        self & 0xFF00_0000_0000_0000
+        self & EXT_MASK
     }
     fn x(&self) -> usize {
-        (self.extension() >> 56) as usize
+        (self.extension() >> EXT_SHIFT) as usize
     }
     fn same_ori(&self, p: u64) -> bool {
         dbg_assert!(self.is_set());
-        self.get_ori() == (p & 1)
+        self.get_ori() == (p & ORI_MASK)
     }
     fn byte_pos(&self) -> usize {
         // bytepos is calculated before kmer is complete, so we can't assert self.is.set()
         // the strand bit and 2b encoded, so 4 twobits per byte.
-        ((*self & 0xF_FFFF_FFFF_FFFE) >> 3) as usize
+        ((*self & POS_MASK) >> 3) as usize
     }
     fn blacklist(&mut self) {
         if self.is_set() {
@@ -101,13 +120,13 @@ impl PriExtPosOri for u64 {
     }
     fn extend(&mut self) {
         dbg_assert!(self.is_set());
-        *self += 1 << 56;
+        *self += 1 << EXT_SHIFT;
     }
     fn set_extension(&mut self, x: u64) {
         dbg_assert!(self.is_set());
         dbg_assert!(x <= 0xFF);
         *self &= 0xF_FFFF_FFFF_FFFF;
-        *self |= x << 56;
+        *self |= x << EXT_SHIFT;
     }
     fn clear_extension(&mut self) {
         dbg_assert!(self.is_set());
@@ -118,23 +137,23 @@ impl PriExtPosOri for u64 {
         *self == other
     }
     fn with_ext(&self, x: usize) -> u64 {
-        self.pos() | ((x as u64) << 56)
+        self.pos() | ((x as u64) << EXT_SHIFT)
     }
     fn set_dup(&mut self) {
         dbg_assert!(self.is_set());
-        *self |= 0x80_0000_0000_0000;
+        *self |= DUP_MASK;
     }
     fn is_dup(&self) -> bool {
         dbg_assert!(self.is_set());
-        *self & 0x80_0000_0000_0000 != 0
+        *self & DUP_MASK != 0
     }
     fn set_repetitive(&mut self) {
         dbg_assert!(self.is_set());
-        *self |= 0x40_0000_0000_0000;
+        *self |= REP_MASK;
     }
     fn is_repetitive(&self) -> bool {
         dbg_assert!(self.is_set());
-        *self & 0x40_0000_0000_0000 != 0
+        *self & REP_MASK != 0
     }
     fn rep_dup_masked(&self) -> u64 {
         dbg_assert!(self.is_set());
@@ -227,9 +246,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use num_traits::PrimInt;
     use rand::{thread_rng, Rng};
 
-    impl<T: PriExtPosOri + Copy> KmerLoc<T> {
+    impl<T: PriExtPosOri + PrimInt> KmerLoc<T> {
         fn next(&mut self, p: u64, is_template: bool) {
             if is_template {
                 self.p.incr()

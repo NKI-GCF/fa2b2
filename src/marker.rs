@@ -74,7 +74,6 @@ impl<'a> KmerIter<'a> {
 
         while let Some(b2) = seq.next().map(|&c| {
             let b2 = (c >> 1) & 0x7;
-            // dbg_print!("[{}, {}]: {:x}", self.scp.p.pos() >> 1, c as char, b2);
             dbg_print!("{}: {:x}", c as char, b2);
             b2
         }) {
@@ -220,7 +219,7 @@ mod tests {
             process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.kmp.len(), 128);
-        let mut first_pos = 1 | (kc.kmerlen as u64) << 1;
+        let mut first_pos = 1 | (kc.kmerlen as u64).as_pos();
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 1..ks.kmp.len() {
@@ -239,7 +238,7 @@ mod tests {
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
         }
-        let mut first_pos = 1 | (kc.kmerlen as u64) << 1;
+        let mut first_pos = 1 | (kc.kmerlen as u64).as_pos();
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 1..ks.kmp.len() {
@@ -259,7 +258,7 @@ mod tests {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         let mut seen = 0;
-        let mut first_pos = 1 | (kc.kmerlen as u64) << 1;
+        let mut first_pos = 1 | (kc.kmerlen as u64).as_pos();
         first_pos.set_repetitive();
         for i in 1..ks.kmp.len() {
             if ks.kmp[i].is_set() {

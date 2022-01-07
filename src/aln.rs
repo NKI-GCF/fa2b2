@@ -31,6 +31,7 @@ pub fn aln(matches: &ArgMatches) -> Result<()> {
         let record = res?;
         n += 1;
     }
+    eprintln!("Read {} reads", n);
 
     Ok(())
 }

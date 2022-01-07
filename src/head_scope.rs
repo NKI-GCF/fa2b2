@@ -120,11 +120,11 @@ impl<'a> Scope for HeadScope<'a> {
 
 impl<'a> fmt::Display for HeadScope<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let p = self.p.pos() as usize;
-        let mp = self.mark.p.pos() as usize;
+        let p = self.p.unshift_pos() as usize;
+        let mp = self.mark.p.unshift_pos() as usize;
         let n = self.kc.kmerlen + self.p.x();
-        let o = " ".repeat(((p >> 1) - self.kc.venster) * 5);
-        let r = (p - mp) >> 1;
+        let o = " ".repeat((p - self.kc.venster) * 5);
+        let r = p - mp;
         if r == 0 {
             let x = self.kc.venster - n;
             let s = if x != 0 {

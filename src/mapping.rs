@@ -15,6 +15,7 @@ pub struct Mapping<'a> {
     mod_i: usize,
     mark: KmerLoc<u64>,
     d: Vec<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
+    z: Vec<usize>,
 }
 
 impl<'a> Mapping<'a> {
@@ -29,7 +30,8 @@ impl<'a> Mapping<'a> {
             i: 0,
             mod_i: 0,
             mark: KmerLoc::new(usize::max_value(), 0),
-            d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
+            d: vec![Kmer::new(kc.kmerlen as u32, 0); kc.no_kmers],
+            z: (0..kc.no_kmers).collect(),
         };
         let mut x = 0;
         let mut bin = kc.get_kmers(x);
@@ -47,6 +49,14 @@ impl<'a> Mapping<'a> {
             }
         }
         Ok(scp)
+    }
+    fn pick_mark(&mut self, x: usize) -> (usize, u64) {
+        let med = self.kc.no_kmers >> 1;
+        let i = self
+            .z
+            .select_nth_unstable_by(med, |&a, &b| self.d[a].cmp(&self.d[b]))
+            .1;
+        self.d[*i].get_hash(x)
     }
 }
 
@@ -83,7 +93,7 @@ impl<'a> Scope for Mapping<'a> {
         &self.d[i]
     }
 
-    /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
+    /// add twobit to k-mers, update k-mer vec, incr. pos and update ori
     /// true if we have at least one kmer.
     fn increment(&mut self, b2: u8) -> bool {
         // XXX: function is hot
@@ -95,7 +105,7 @@ impl<'a> Scope for Mapping<'a> {
             }
             self.d[self.mod_i] = old_d;
         }
-        // first bit is strand bit, set according to kmer orientation bit.
+        // first bit is strand orientation (ori), set according to k-mer.
         self.p &= !1;
         self.p += 2 + self.d[self.mod_i].update(b2);
         self.i += 1;

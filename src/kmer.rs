@@ -11,6 +11,7 @@ pub struct Kmer<T> {
     pub dna: T,
     pub rc: T,
     topb2: T,
+    pub p: u64,
 } //^-^\\
 
 pub trait RevCmp<T: PrimInt + FromPrimitive> {
@@ -52,13 +53,14 @@ where
     T: Unsigned + FromPrimitive + ToPrimitive + BitXorAssign + PartialOrd + Ord + Eq,
 {
     /// get a kmer for this length
-    pub fn new(kmerlen: u32) -> Self {
+    pub fn new(kmerlen: u32, p: u64) -> Self {
         let bitlen = kmerlen * 2;
         let topb2 = bitlen - 2;
         Kmer {
             dna: <T>::zero(),
             rc: <T>::zero(),
             topb2: T::from_u32(topb2).unwrap(),
+            p,
         }
     }
 
@@ -71,6 +73,7 @@ where
         let rc = (T::to_u64(&self.rc).unwrap() & topless) << 2;
         self.dna = T::from_u64(dna | (u64::from(b2) << topb2)).unwrap();
         self.rc = T::from_u64(rc ^ 2 ^ u64::from(b2)).unwrap();
+        self.p += 2;
     }
     /// true if the kmer is from the template. Palindromes are special.
     pub fn is_template(&self) -> bool {
@@ -104,6 +107,24 @@ where
         } else {
             (overbit - 1) & !seq
         }
+    }
+    /// return an index specific per sequence but the same for the other orientation
+    pub fn get_hash(&self, x: usize) -> (usize, u64) {
+        let seq = T::to_usize(if self.dna < self.rc {
+            &self.dna
+        } else {
+            &self.rc
+        })
+        .unwrap();
+
+        // flipped if the top bit is set, to reduce size.
+        let overbit = 1 << (T::to_u64(&self.topb2).unwrap() + 1);
+        let m = overbit - 1;
+        let idx = if (seq & overbit) == 0 { seq } else { m & !seq };
+        (
+            idx ^ idx.wrapping_shl(x as u32) & (m ^ ((1 << x) - 1)),
+            self.p,
+        )
     }
 }
 

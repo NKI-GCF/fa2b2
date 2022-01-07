@@ -10,7 +10,8 @@ use std::fmt;
 pub struct HeadScope<'a> {
     kc: &'a KmerConst,
     pub p: u64,
-    d: Vec<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
+    d: Vec<Kmer<u64>>,
+    z: Vec<usize>,
     pub mark: KmerLoc<u64>,
     pub i: usize,
     pub mod_i: usize,
@@ -23,7 +24,8 @@ impl<'a> HeadScope<'a> {
         HeadScope {
             kc,
             p,
-            d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
+            d: vec![Kmer::new(kc.kmerlen as u32, 0); kc.no_kmers],
+            z: (0..kc.no_kmers).into_iter().collect(),
             mark: KmerLoc::new(usize::max_value(), p.extension()),
             i: 0,
             mod_i: 0,

@@ -16,6 +16,7 @@ pub struct PastScope<'a> {
     period: u64,
     mark: KmerLoc<u64>,
     d: Vec<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
+    z: Vec<usize>,
 }
 
 impl<'a> PastScope<'a> {
@@ -38,7 +39,8 @@ impl<'a> PastScope<'a> {
             plim,
             period: 0,
             mark: KmerLoc::new(usize::max_value(), p.extension()),
-            d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
+            d: vec![Kmer::new(kc.kmerlen as u32, bound.0); kc.no_kmers],
+            z: (0..kc.no_kmers).collect(),
         };
         let x = scp.p.x();
         let bin = kc.get_kmers(x);

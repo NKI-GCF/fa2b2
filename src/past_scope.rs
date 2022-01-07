@@ -14,7 +14,7 @@ pub struct PastScope<'a> {
     mod_i: usize,
     plim: (u64, u64),
     period: u64,
-    mark: KmerLoc<u64>,
+    mark: KmerLoc,
     d: Vec<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
     z: Vec<usize>,
 }
@@ -82,7 +82,7 @@ impl<'a> PastScope<'a> {
 }
 
 impl<'a> Scope for PastScope<'a> {
-    fn get_mark(&self) -> Option<&KmerLoc<u64>> {
+    fn get_mark(&self) -> Option<&KmerLoc> {
         if self.mark.is_set() {
             Some(&self.mark)
         } else {

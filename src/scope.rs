@@ -8,7 +8,7 @@ use anyhow::{ensure, Result};
 use std::{cmp, fmt};
 
 pub trait Scope {
-    fn get_mark(&self) -> Option<&KmerLoc<u64>>;
+    fn get_mark(&self) -> Option<&KmerLoc>;
     fn get_kc(&self) -> &KmerConst;
     fn get_p(&self) -> u64;
     fn get_i(&self) -> usize;
@@ -27,7 +27,7 @@ pub trait Scope {
         self.get_i() >= self.get_kc().venster
     }
 
-    fn is_mark_out_of_scope(&self, mark: &KmerLoc<u64>) -> bool {
+    fn is_mark_out_of_scope(&self, mark: &KmerLoc) -> bool {
         let p = self.get_p();
         dbg_assert!(p.pos() >= mark.p.pos(), "{:#x}, {:#x}", p, mark.p);
         p.pos() >= mark.p.pos() + (self.get_kc().no_xmers(p.x()) as u64).as_pos()

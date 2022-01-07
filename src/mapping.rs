@@ -4,7 +4,7 @@ use crate::kmerloc::{KmerLoc, PriExtPosOri};
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
-use anyhow::{ensure, Result};
+use anyhow::Result;
 use noodles_fastq as fastq;
 use std::fmt;
 
@@ -13,7 +13,7 @@ pub struct Mapping<'a> {
     p: u64,
     i: usize,
     mod_i: usize,
-    mark: KmerLoc<u64>,
+    mark: KmerLoc,
     d: Vec<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
     z: Vec<usize>,
 }
@@ -70,7 +70,7 @@ impl<'a> Scope for Mapping<'a> {
     fn set_period(&mut self, _period: u64) {
         panic!();
     }
-    fn get_mark(&self) -> Option<&KmerLoc<u64>> {
+    fn get_mark(&self) -> Option<&KmerLoc> {
         if self.mark.is_set() {
             Some(&self.mark)
         } else {

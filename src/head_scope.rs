@@ -12,7 +12,7 @@ pub struct HeadScope<'a> {
     pub p: u64,
     d: Vec<Kmer<u64>>,
     z: Vec<usize>,
-    pub mark: KmerLoc<u64>,
+    pub mark: KmerLoc,
     pub i: usize,
     pub mod_i: usize,
     pub plim: (u64, u64),
@@ -56,7 +56,7 @@ impl<'a> HeadScope<'a> {
 }
 
 impl<'a> Scope for HeadScope<'a> {
-    fn get_mark(&self) -> Option<&KmerLoc<u64>> {
+    fn get_mark(&self) -> Option<&KmerLoc> {
         if self.mark.is_set() {
             Some(&self.mark)
         } else {

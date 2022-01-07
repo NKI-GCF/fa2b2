@@ -3,7 +3,6 @@ use num::{FromPrimitive, ToPrimitive, Unsigned};
 use num_traits::PrimInt;
 use std::cmp;
 use std::mem::size_of;
-use std::ops::BitXorAssign;
 
 #[derive(Copy, Clone, PartialEq, PartialOrd, Eq)]
 /// A kmer that dissociates index and strand orientation

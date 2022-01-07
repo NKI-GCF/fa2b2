@@ -125,9 +125,9 @@ impl PriExtPosOri for u64 {
     }
     fn set_extension(&mut self, x: u64) {
         dbg_assert!(self.is_set());
-        dbg_assert!(x <= 0xFF);
-        *self &= 0xF_FFFF_FFFF_FFFF;
-        *self |= x << EXT_SHIFT;
+        //XXX does not work with !EXT_MASK; (?)
+        *self &= POS_MASK | ORI_MASK;
+        *self |= x.checked_shl(EXT_SHIFT).expect("x beyond max extension");
     }
     fn clear_extension(&mut self) {
         dbg_assert!(self.is_set());
@@ -188,15 +188,12 @@ impl PriExtPosOri for u64 {
 }
 
 #[derive(new, Clone, PartialEq, PartialOrd, Eq)]
-pub struct KmerLoc<T>
-where
-    T: PriExtPosOri + Copy + Ord,
-{
+pub struct KmerLoc {
     idx: usize,
-    pub p: T,
+    pub p: u64,
 }
-impl<T: PriExtPosOri + Copy + Ord> KmerLoc<T> {
-    pub fn get(&self) -> (usize, T) {
+impl KmerLoc {
+    pub fn get(&self) -> (usize, u64) {
         (self.idx, self.p)
     }
     pub fn get_idx(&self) -> usize {
@@ -211,21 +208,18 @@ impl<T: PriExtPosOri + Copy + Ord> KmerLoc<T> {
         self.idx != usize::max_value()
     }
 
-    pub fn set(&mut self, idx: usize, p: T, x: usize) {
+    pub fn set(&mut self, idx: usize, p: u64, x: usize) {
         // during rebuilding the strange case occurs that mark is not set, but p is (extension)
         let self_p_extension = self.p.extension();
         let p_extension = p.extension();
         dbg_assert!(self.is_set() || self.p.is_no_pos() || self_p_extension == p_extension);
         self.idx = idx;
-        self.p = p;
+        self.p = p.rep_dup_masked();
         self.p.set_extension(x as u64);
     }
 }
 
-impl<T> Ord for KmerLoc<T>
-where
-    T: PriExtPosOri + Copy + Ord,
-{
+impl Ord for KmerLoc {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         match self.idx.cmp(&other.idx) {
             /*FIXME: make extenion count down, etc to simplify to this:
@@ -251,7 +245,7 @@ mod tests {
     use num_traits::PrimInt;
     use rand::{thread_rng, Rng};
 
-    impl<T: PriExtPosOri + PrimInt> KmerLoc<T> {
+    impl KmerLoc {
         fn next(&mut self, p: u64, is_template: bool) {
             if is_template {
                 self.p.incr()

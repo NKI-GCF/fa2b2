@@ -50,7 +50,7 @@ implement_revcmp!(u8, u16, u32, u64, u128, usize);
 
 impl<T> Kmer<T>
 where
-    T: Unsigned + FromPrimitive + ToPrimitive + BitXorAssign + PartialOrd + Ord + Eq,
+    T: Unsigned + PrimInt + FromPrimitive,
 {
     /// get a kmer for this length
     pub fn new(kmerlen: u32, p: u64) -> Self {
@@ -130,7 +130,7 @@ where
 
 impl<T> Ord for Kmer<T>
 where
-    T: Unsigned + FromPrimitive + ToPrimitive + BitXorAssign + PartialOrd + Ord + Eq,
+    T: Unsigned + PrimInt + FromPrimitive,
 {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         self.get_idx(true).cmp(&other.get_idx(true))
@@ -159,11 +159,12 @@ mod tests {
             dna: T::from_u64(dna).unwrap(),
             rc: T::from_u64(rc).unwrap(),
             topb2: T::from_u32(topb2).unwrap(),
+            p: 0,
         }
     }
     #[test]
     fn test_u64() {
-        let mut kmer: Kmer<u64> = Kmer::new(32);
+        let mut kmer: Kmer<u64> = Kmer::new(32, 0);
         for i in 0..32 {
             kmer.add(i & 3);
         }
@@ -173,7 +174,7 @@ mod tests {
     }
     #[test]
     fn test_u32() {
-        let mut kmer: Kmer<u32> = Kmer::new(16);
+        let mut kmer: Kmer<u32> = Kmer::new(16, 0);
         for i in 0..16 {
             kmer.add(i & 3);
         }
@@ -183,7 +184,7 @@ mod tests {
     }
     #[test]
     fn test_u8() {
-        let mut kmer: Kmer<u8> = Kmer::new(4);
+        let mut kmer: Kmer<u8> = Kmer::new(4, 0);
         for i in 0..4 {
             kmer.add(i & 3);
         }
@@ -194,7 +195,7 @@ mod tests {
     #[test]
     fn unique() {
         let mut seen = vec![false; 256];
-        let mut kmer: Kmer<u8> = Kmer::new(4);
+        let mut kmer: Kmer<u8> = Kmer::new(4, 0);
         for i in 0..=255 {
             for j in 0..4 {
                 kmer.add((i >> (j << 1)) & 3);
@@ -209,7 +210,7 @@ mod tests {
     fn test_revcmp() {
         let mut rng = thread_rng();
         let kmerlen = rng.gen_range(2..32);
-        let mut kmer: Kmer<u64> = Kmer::new(kmerlen);
+        let mut kmer: Kmer<u64> = Kmer::new(kmerlen, 0);
         for _ in 0..32 {
             kmer.add(rng.gen_range(0..4));
         }
@@ -226,7 +227,7 @@ mod tests {
         let last = rng.gen_range((kmerlen + 1)..102);
         let pick = rng.gen_range(kmerlen..cmp::max(last - 1, kmerlen + 1));
 
-        let mut kmer: Kmer<u64> = Kmer::new(kmerlen);
+        let mut kmer: Kmer<u64> = Kmer::new(kmerlen, 0);
         for i in 0..last {
             kmer.add(rng.gen_range(0..4));
             if i == pick {
@@ -249,7 +250,7 @@ mod tests {
     }
     #[test]
     fn extra() {
-        let mut kmer: Kmer<u64> = Kmer::new(4);
+        let mut kmer: Kmer<u64> = Kmer::new(4, 0);
         for _ in 0..16 {
             kmer.add(1);
         }

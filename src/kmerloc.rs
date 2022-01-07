@@ -2,8 +2,9 @@ use crate::rdbg::STAT_DB;
 use std::clone::Clone;
 use std::cmp;
 
-const POS_SHIFT: u64 = 1;
-const EXT_SHIFT: u64 = 56;
+const POS_SHIFT: u32 = 1;
+const EXT_SHIFT: u32 = 56;
+const BYTE_SHIFT: u32 = 2;
 const ORI_MASK: u64 = 0x0000_0000_0000_0001;
 const POS_MASK: u64 = 0x000F_FFFF_FFFF_FFFE;
 const REP_MASK: u64 = 0x0040_0000_0000_0000;
@@ -88,11 +89,11 @@ impl PriExtPosOri for u64 {
     }
     fn incr(&mut self) {
         dbg_assert!(self.is_set());
-        *self += 0x2;
+        *self += 1 << POS_SHIFT;
     }
     fn decr(&mut self) {
         dbg_assert!(self.is_set());
-        *self -= 0x2;
+        *self -= 1 << POS_SHIFT;
     }
     // not all extensions may apply, it's dependent on genome size.
     fn extension(&self) -> u64 {
@@ -110,11 +111,11 @@ impl PriExtPosOri for u64 {
     fn byte_pos(&self) -> usize {
         // bytepos is calculated before kmer is complete, so we can't assert self.is.set()
         // the strand bit and 2b encoded, so 4 twobits per byte.
-        ((*self & POS_MASK) >> 3) as usize
+        (self.pos() >> BYTE_SHIFT) as usize
     }
     fn blacklist(&mut self) {
         if self.is_set() {
-            *self &= !0xF_FFFF_FFFF_FFFF;
+            *self &= EXT_MASK;
             self.extend();
         }
     }
@@ -130,7 +131,7 @@ impl PriExtPosOri for u64 {
     }
     fn clear_extension(&mut self) {
         dbg_assert!(self.is_set());
-        *self &= 0xF_FFFF_FFFF_FFFF;
+        *self &= !EXT_MASK;
     }
     fn is_same(&self, other: u64) -> bool {
         dbg_assert!(self.is_set());
@@ -157,7 +158,7 @@ impl PriExtPosOri for u64 {
     }
     fn rep_dup_masked(&self) -> u64 {
         dbg_assert!(self.is_set());
-        *self & !0xc0_0000_0000_0000
+        *self & !(DUP_MASK | REP_MASK)
     }
     fn is_replaceable_by(&self, new_entry: u64) -> bool {
         // only extension bits means blacklisting, except for extension 0. pos is always > kmerlen
@@ -169,7 +170,7 @@ impl PriExtPosOri for u64 {
     }
     fn same_pos_and_ext(&self, new_entry: u64) -> bool {
         dbg_assert!(self.is_set());
-        (*self ^ new_entry) & 0xFF0F_FFFF_FFFF_FFFE == 0
+        (*self ^ new_entry) & (EXT_MASK | POS_MASK) == 0
     }
     fn has_samepos(&self, other: u64) -> bool {
         self.pos() == other.pos() && {

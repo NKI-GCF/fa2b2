@@ -25,17 +25,24 @@ fn dvm<T: PrimInt + FromPrimitive>(numerator: u32, divisor: u32) -> T {
 }
 
 macro_rules! implement_revcmp { ($($ty:ty),*) => ($(
-	/// give twobit reverse complent for given kmerlen
-	impl RevCmp<$ty> for $ty {
-		#[inline]
-		fn revcmp(self, kmerlen: usize) -> $ty {
-			let mut seq = self.swap_bytes() ^ dvm::<$ty>(2, 3);
-			seq = ((seq & dvm::<$ty>(0xf0, 0xff)) >> 4) | ((seq & dvm::<$ty>(0xf, 0xff)) << 4);
-			seq = ((seq & dvm::<$ty>(0xc, 0xf)) >> 2) | ((seq & dvm::<$ty>(0x3, 0xf)) << 2);
-			seq >> (size_of::<$ty>() * 8 - kmerlen * 2)
-		}
-	}
-	)*)
+    /// give twobit reverse complent for given kmerlen
+    impl RevCmp<$ty> for $ty {
+        #[inline]
+        fn revcmp(self, kmerlen: usize) -> $ty {
+            let mut seq = self.swap_bytes() ^ dvm::<$ty>(2, 3);
+
+            let left_nibbles = (seq & dvm::<$ty>(0xf, 0xff)) << 4;
+            let right_nibbles = (seq & dvm::<$ty>(0xf0, 0xff)) >> 4;
+            seq = left_nibbles | right_nibbles;
+
+            let all_left_two_bits = (seq & dvm::<$ty>(0x3, 0xf)) << 2;
+            let all_right_two_bits = (seq & dvm::<$ty>(0xc, 0xf)) >> 2;
+            seq = all_left_two_bits | all_right_two_bits;
+
+            seq >> (size_of::<$ty>() * 8 - kmerlen * 2)
+        }
+    }
+    )*)
 }
 
 implement_revcmp!(u8, u16, u32, u64, u128, usize);

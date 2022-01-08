@@ -69,7 +69,7 @@ impl From<&u8> for ThreeBit {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, PartialOrd, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 /// A kmer that dissociates index and strand orientation
 pub struct Kmer<T> {
     pub dna: T,
@@ -187,6 +187,15 @@ where
             idx ^ idx.wrapping_shl(x as u32) & (m ^ ((1 << x) - 1)),
             self.p,
         )
+    }
+}
+
+impl<T> PartialOrd for Kmer<T>
+where
+    T: Unsigned + PrimInt + FromPrimitive,
+{
+    fn partial_cmp(&self, other: &Kmer<T>) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 

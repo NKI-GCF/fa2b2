@@ -8,7 +8,7 @@ const ORI_MASK: u64 = 0x0000_0000_0000_0001;
 const REP_MASK: u64 = 0x0000_0000_0000_0002;
 const DUP_MASK: u64 = 0x0000_0000_0000_0004;
 // TODO: indicate this position has annotation
-//const INFO_MASK: u64 = 0x0000_0000_0000_0008;
+const _INFO_MASK: u64 = 0x0000_0000_0000_0008;
 const POS_MASK: u64 = 0x00FF_FFFF_FFFF_FFF0;
 const EXT_MASK: u64 = 0xFF00_0000_0000_0000;
 
@@ -196,7 +196,7 @@ impl PriExtPosOri for u64 {
     }*/
 }
 
-#[derive(new, Clone, PartialEq, PartialOrd, Eq)]
+#[derive(new, Clone, PartialEq, Eq)]
 pub struct KmerLoc {
     idx: usize,
     pub p: u64,
@@ -225,6 +225,12 @@ impl KmerLoc {
         self.idx = idx;
         self.p = p.rep_dup_masked();
         self.p.set_extension(x as u64);
+    }
+}
+
+impl PartialOrd for KmerLoc {
+    fn partial_cmp(&self, other: &KmerLoc) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 

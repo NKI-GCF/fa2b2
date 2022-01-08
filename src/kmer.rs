@@ -74,7 +74,7 @@ impl From<&u8> for ThreeBit {
 pub struct Kmer<T> {
     pub dna: T,
     pub rc: T,
-    topb2: u32,
+    topb2_shift: u32,
     pub p: u64,
 } //^-^\\
 
@@ -119,21 +119,21 @@ where
     /// get a kmer for this length
     pub fn new(kmerlen: u32, p: u64) -> Self {
         let bitlen = kmerlen * 2;
-        let topb2 = bitlen - 2;
+        let topb2_shift = bitlen - 2;
         Kmer {
             dna: <T>::zero(),
             rc: <T>::zero(),
-            topb2,
+            topb2_shift,
             p,
         }
     }
 
     /// adds twobit to kmer sequences, to dna in the top two bits.
     fn add(&mut self, b2: TwoBit) {
-        let kmer_mask = (1 << self.topb2) - 1;
+        let kmer_mask = (1 << self.topb2_shift) - 1;
         let dna = T::to_u64(&self.dna).unwrap() >> 2;
         let rc = (T::to_u64(&self.rc).unwrap() & kmer_mask) << 2;
-        self.dna = T::from_u64(dna | b2.as_kmer_top(self.topb2)).unwrap();
+        self.dna = T::from_u64(dna | b2.as_kmer_top(self.topb2_shift)).unwrap();
         self.rc = T::from_u64(rc | b2.as_kmer_bottom_rc()).unwrap();
         self.p.incr_pos();
     }
@@ -163,7 +163,9 @@ where
         .unwrap();
 
         // flipped if the top bit is set, to reduce size.
-        let overbit = 1_usize.checked_shl(self.topb2 + 1).expect("get_idx shft");
+        let overbit = 1_usize
+            .checked_shl(self.topb2_shift + 1)
+            .expect("get_idx shft");
         if (seq & overbit) == 0 {
             seq
         } else {
@@ -180,7 +182,9 @@ where
         .unwrap();
 
         // flipped if the top bit is set, to reduce size.
-        let overbit = 1_usize.checked_shl(self.topb2 + 1).expect("get_hash shft");
+        let overbit = 1_usize
+            .checked_shl(self.topb2_shift + 1)
+            .expect("get_hash shft");
         let m = overbit - 1;
         let idx = if (seq & overbit) == 0 { seq } else { m & !seq };
         (
@@ -216,11 +220,11 @@ mod tests {
     /// return a new kmer for given index, length and orientation.
     fn kmer_from_idx<T: FromPrimitive>(index: usize, kmerlen: u32, ori: bool) -> Kmer<T> {
         let bitlen = kmerlen * 2;
-        let topb2 = bitlen - 2;
+        let topb2_shift = bitlen - 2;
         let mut dna = index as u64;
         let mut rc = dna.revcmp(kmerlen as usize);
         if dna > rc || (dna == rc && (dna & 1) == 0) {
-            let overbit = 1 << (topb2 + 1);
+            let overbit = 1 << (topb2_shift + 1);
             let overmask = overbit | (overbit - 1);
             dna ^= overmask;
             rc ^= overmask;
@@ -229,7 +233,7 @@ mod tests {
         Kmer {
             dna: T::from_u64(dna).unwrap(),
             rc: T::from_u64(rc).unwrap(),
-            topb2,
+            topb2_shift,
             p: 0,
         }
     }

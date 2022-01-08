@@ -1,4 +1,4 @@
-use crate::kmer::Kmer;
+use crate::kmer::{Kmer, TwoBit};
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::{KmerLoc, PriExtPosOri};
 use crate::kmerstore::KmerStore;
@@ -36,7 +36,7 @@ impl<'a> HeadScope<'a> {
 
     // hier krijgen we nieuwe sequence, zijn geen past scope aan het behandelen, of zo.
     // .i & .p increments en kmer .d[] updates vinden plaats.
-    pub fn complete_and_update_mark<T>(&mut self, b2: u8, ks: &mut KmerStore<T>) -> Result<()>
+    pub fn complete_and_update_mark<T>(&mut self, b2: TwoBit, ks: &mut KmerStore<T>) -> Result<()>
     where
         T: PriExtPosOri + fmt::LowerHex + Copy,
     {
@@ -90,7 +90,7 @@ impl<'a> Scope for HeadScope<'a> {
 
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
     /// true if we have at least one kmer.
-    fn increment(&mut self, b2: u8) -> bool {
+    fn increment(&mut self, b2: TwoBit) -> bool {
         // XXX: function is hot
         if self.i >= self.kc.kmerlen {
             let old_d = self.d[self.mod_i];
@@ -101,8 +101,8 @@ impl<'a> Scope for HeadScope<'a> {
             self.d[self.mod_i] = old_d;
         }
         // first bit is strand bit, set according to kmer orientation bit.
-        self.p &= !1;
-        self.p += 2 + self.d[self.mod_i].update(b2);
+        self.p.set_ori(self.d[self.mod_i].update(b2));
+        self.p.incr_pos();
         self.i += 1;
         self.i >= self.kc.kmerlen
     }

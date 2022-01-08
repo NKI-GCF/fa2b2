@@ -1,11 +1,10 @@
-use ahash::AHashMap;
-use serde::{Deserialize, Serialize};
-use std::cmp::Ordering::{Equal, Greater, Less};
-
+use crate::kmer::{TwoBit, TwoBitx4};
 use crate::kmerloc::PriExtPosOri;
 use crate::rdbg::STAT_DB;
-
+use ahash::AHashMap;
 use anyhow::{anyhow, ensure, Result};
+use serde::{Deserialize, Serialize};
+use std::cmp::Ordering::{Equal, Greater, Less};
 
 #[derive(Serialize, Deserialize)]
 pub struct Contig {
@@ -40,6 +39,9 @@ impl<T: PriExtPosOri> KmerStore<T> {
             contig: Vec::new(), // contig info
             repeat: AHashMap::new(),
         }
+    }
+    pub fn store_twobit(&mut self, p: u64, b2: TwoBit) {
+        self.b2[p.byte_pos()] |= b2.pos_shift(p).as_u8();
     }
     pub fn push_contig(&mut self, p: u64, goffs: u64) {
         self.contig.push(Contig {
@@ -95,19 +97,12 @@ impl<T: PriExtPosOri> KmerStore<T> {
         ensure!(i != 0, "get_twobit_before(): Start of contig");
         Ok(self.contig[i - 1].twobit)
     }
-    pub fn b2_for_p(&self, p: u64, tag: &str) -> Result<u8> {
+    pub fn b2_for_p(&self, p: u64, is_repeat: bool) -> Result<TwoBit> {
         let pos = p.pos();
-        ensure!(
-            pos < self.p_max || tag == "(R)",
-            "running into sequence head"
-        );
+        ensure!(pos < self.p_max || is_repeat, "running into sequence head");
         self.b2
             .get(p.byte_pos())
-            .map(|x| {
-                let b2 = (x >> (p & 6)) & 3;
-                dbg_print!("{:<30}{}", format!("=> b2 {:x}, p: {:#x}", b2, p), tag);
-                b2
-            })
+            .map(|b2x4| TwoBitx4::from(b2x4).to_b2(p, is_repeat))
             .ok_or_else(|| anyhow!("stored pos past contig? {:#}", p))
     }
     pub fn extend_repetitive(&mut self, min_pos: u64, dist: u32) {
@@ -132,18 +127,19 @@ mod tests {
         //let mut ks = KmerStore::new(32); // allocates 16 gig of data
         let mut ks = KmerStore::<u64>::new(2, 10_000);
         let mut p = 0;
-        let goffs = p & !1;
+        let goffs = p.pos();
 
         ks.push_contig(p, goffs);
-        ks.offset_contig(10000); // simulate N-stretch of 10000
-        p += 64; // 64 Nt's == one readlength
+        ks.offset_contig(10_000); // simulate N-stretch of 10000
+        p += 64.as_pos(); // one readlength
         ks.push_contig(p, goffs);
         ks.offset_contig(64);
 
         ks.push_contig(p, goffs);
-        ks.offset_contig(10000); // another N-stretch of 10000
+        ks.offset_contig(10_000); // another N-stretch of 10000
         ks.push_contig(p, goffs);
-        let i = ks.get_contig(11016);
-        dbg_assert_eq!(ks.contig[i].twobit, 64);
+
+        let i = ks.get_contig(5_508.as_pos());
+        dbg_assert_eq!(ks.contig[i].twobit, 64.as_pos());
     }
 }

@@ -1,15 +1,80 @@
+use crate::kmerloc::PriExtPosOri;
 use crate::rdbg::STAT_DB;
-use num::{FromPrimitive, ToPrimitive, Unsigned};
+use num::{FromPrimitive, Unsigned};
 use num_traits::PrimInt;
 use std::cmp;
 use std::mem::size_of;
+
+pub struct ThreeBit(u8);
+
+#[derive(PartialEq)]
+pub struct TwoBit(u8);
+
+pub struct TwoBitx4(u8);
+
+/// Twobits may be unexpected: N: 0x7, A: 0x0, C: 0x1, T: 0x2, G: 0x3
+impl ThreeBit {
+    pub fn as_twobit_if_not_n(&self) -> Option<TwoBit> {
+        if self.0 < 4 {
+            Some(TwoBit(self.0))
+        } else {
+            None
+        }
+    }
+}
+
+/// No N, 2 bits for code, same as above.
+impl TwoBit {
+    pub fn pos_shift(&self, p: u64) -> TwoBitx4 {
+        let ob2 = self.0.checked_shl(p.b2_shift());
+        TwoBitx4(ob2.expect("bug shifting from b2"))
+    }
+    pub fn as_kmer_top(&self, shift: u32) -> u64 {
+        (self.0 as u64)
+            .checked_shl(shift)
+            .expect("bug shifting to u64 top")
+    }
+    pub fn as_kmer_bottom_rc(&self) -> u64 {
+        2 ^ self.0 as u64
+    }
+}
+
+/// 4 packed twobits per u8.
+impl TwoBitx4 {
+    pub fn to_b2(&self, p: u64, for_repeat: bool) -> TwoBit {
+        // the third bit (for N) is actually never set, because we don't store those in TwoBitx4
+        let ob2 = self.0.checked_shr(p.b2_shift());
+        let b2 = ob2.expect("bug shifting to b2") & 3;
+        if !for_repeat {
+            dbg_print!("=> b2 {:x}, p: {:#x}", b2, p);
+        }
+        TwoBit(b2)
+    }
+    pub fn as_u8(&self) -> u8 {
+        self.0
+    }
+}
+
+impl From<&u8> for TwoBitx4 {
+    fn from(val: &u8) -> TwoBitx4 {
+        TwoBitx4(*val)
+    }
+}
+
+impl From<&u8> for ThreeBit {
+    fn from(val: &u8) -> ThreeBit {
+        let b2 = (*val >> 1) & 0x7;
+        dbg_print!("{}: {:x}", *val as char, b2);
+        ThreeBit(b2)
+    }
+}
 
 #[derive(Copy, Clone, PartialEq, PartialOrd, Eq)]
 /// A kmer that dissociates index and strand orientation
 pub struct Kmer<T> {
     pub dna: T,
     pub rc: T,
-    topb2: T,
+    topb2: u32,
     pub p: u64,
 } //^-^\\
 
@@ -58,21 +123,19 @@ where
         Kmer {
             dna: <T>::zero(),
             rc: <T>::zero(),
-            topb2: T::from_u32(topb2).unwrap(),
+            topb2,
             p,
         }
     }
 
     /// adds twobit to kmer sequences, to dna in the top two bits.
-    fn add(&mut self, b2: u8) {
-        dbg_assert!(b2 <= 3);
-        let topb2 = T::to_u64(&self.topb2).unwrap();
-        let topless = (1 << topb2) - 1;
+    fn add(&mut self, b2: TwoBit) {
+        let kmer_mask = (1 << self.topb2) - 1;
         let dna = T::to_u64(&self.dna).unwrap() >> 2;
-        let rc = (T::to_u64(&self.rc).unwrap() & topless) << 2;
-        self.dna = T::from_u64(dna | (u64::from(b2) << topb2)).unwrap();
-        self.rc = T::from_u64(rc ^ 2 ^ u64::from(b2)).unwrap();
-        self.p += 2;
+        let rc = (T::to_u64(&self.rc).unwrap() & kmer_mask) << 2;
+        self.dna = T::from_u64(dna | b2.as_kmer_top(self.topb2)).unwrap();
+        self.rc = T::from_u64(rc | b2.as_kmer_bottom_rc()).unwrap();
+        self.p.incr_pos();
     }
     /// true if the kmer is from the template. Palindromes are special.
     pub fn is_template(&self) -> bool {
@@ -80,7 +143,7 @@ where
     }
 
     /// Add twobit to k-mers and return orientation bit as first bit for stored
-    pub fn update(&mut self, b2: u8) -> u64 {
+    pub fn update(&mut self, b2: TwoBit) -> u64 {
         // XXX function is hot
         self.add(b2);
         match self.dna.cmp(&self.rc) {
@@ -100,7 +163,7 @@ where
         .unwrap();
 
         // flipped if the top bit is set, to reduce size.
-        let overbit = 1 << (T::to_u64(&self.topb2).unwrap() + 1);
+        let overbit = 1_usize.checked_shl(self.topb2 + 1).expect("get_idx shft");
         if (seq & overbit) == 0 {
             seq
         } else {
@@ -117,7 +180,7 @@ where
         .unwrap();
 
         // flipped if the top bit is set, to reduce size.
-        let overbit = 1 << (T::to_u64(&self.topb2).unwrap() + 1);
+        let overbit = 1_usize.checked_shl(self.topb2 + 1).expect("get_hash shft");
         let m = overbit - 1;
         let idx = if (seq & overbit) == 0 { seq } else { m & !seq };
         (
@@ -145,7 +208,7 @@ mod tests {
     fn kmer_from_idx<T: FromPrimitive>(index: usize, kmerlen: u32, ori: bool) -> Kmer<T> {
         let bitlen = kmerlen * 2;
         let topb2 = bitlen - 2;
-        let mut dna = usize::to_u64(&index).unwrap();
+        let mut dna = index as u64;
         let mut rc = dna.revcmp(kmerlen as usize);
         if dna > rc || (dna == rc && (dna & 1) == 0) {
             let overbit = 1 << (topb2 + 1);
@@ -157,7 +220,7 @@ mod tests {
         Kmer {
             dna: T::from_u64(dna).unwrap(),
             rc: T::from_u64(rc).unwrap(),
-            topb2: T::from_u32(topb2).unwrap(),
+            topb2,
             p: 0,
         }
     }
@@ -165,7 +228,7 @@ mod tests {
     fn test_u64() {
         let mut kmer: Kmer<u64> = Kmer::new(32, 0);
         for i in 0..32 {
-            kmer.add(i & 3);
+            kmer.add(TwoBit(i & 3));
         }
         dbg_assert_eq!(kmer.dna, 0xE4E4E4E4E4E4E4E4); // GTCAGTCAGTCAGTCA => 3210321032103210 (in 2bits)
         dbg_assert_eq!(kmer.rc, 0xB1B1B1B1B1B1B1B1); // xor 0xaaaaaaaa and reverse per 2bit
@@ -175,7 +238,7 @@ mod tests {
     fn test_u32() {
         let mut kmer: Kmer<u32> = Kmer::new(16, 0);
         for i in 0..16 {
-            kmer.add(i & 3);
+            kmer.add(TwoBit(i & 3));
         }
         dbg_assert_eq!(kmer.dna, 0xE4E4E4E4);
         dbg_assert_eq!(kmer.rc, 0xB1B1B1B1);
@@ -185,7 +248,7 @@ mod tests {
     fn test_u8() {
         let mut kmer: Kmer<u8> = Kmer::new(4, 0);
         for i in 0..4 {
-            kmer.add(i & 3);
+            kmer.add(TwoBit(i & 3));
         }
         dbg_assert_eq!(kmer.dna, 0xE4);
         dbg_assert_eq!(kmer.rc, 0xB1);
@@ -197,7 +260,7 @@ mod tests {
         let mut kmer: Kmer<u8> = Kmer::new(4, 0);
         for i in 0..=255 {
             for j in 0..4 {
-                kmer.add((i >> (j << 1)) & 3);
+                kmer.add(TwoBit((i >> (j << 1)) & 3));
             }
             let x = (if kmer.is_template() { 1 } else { 0 }) | kmer.get_idx(true) << 1;
             dbg_assert!(!seen[x], "0x{:x} already seen!", x);
@@ -211,7 +274,7 @@ mod tests {
         let kmerlen = rng.gen_range(2..32);
         let mut kmer: Kmer<u64> = Kmer::new(kmerlen, 0);
         for _ in 0..32 {
-            kmer.add(rng.gen_range(0..4));
+            kmer.add(TwoBit(rng.gen_range(0..4)));
         }
         dbg_assert_eq!(kmer.dna.revcmp(kmerlen as usize), kmer.rc);
     }
@@ -228,7 +291,7 @@ mod tests {
 
         let mut kmer: Kmer<u64> = Kmer::new(kmerlen, 0);
         for i in 0..last {
-            kmer.add(rng.gen_range(0..4));
+            kmer.add(TwoBit(rng.gen_range(0..4)));
             if i == pick {
                 test_dna = kmer.dna;
                 test_rc = kmer.rc;
@@ -251,7 +314,7 @@ mod tests {
     fn extra() {
         let mut kmer: Kmer<u64> = Kmer::new(4, 0);
         for _ in 0..16 {
-            kmer.add(1);
+            kmer.add(TwoBit(1));
         }
         dbg_assert_eq!(kmer.dna, 0x55);
         dbg_assert_eq!(kmer.rc, 0xff);

@@ -1,4 +1,5 @@
 use crate::kmer::Kmer;
+use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::{KmerLoc, PriExtPosOri};
 use crate::kmerstore::KmerStore;
@@ -30,6 +31,7 @@ impl<'a> PastScope<'a> {
         ensure!(pos != PriExtPosOri::no_pos());
         let plim = ks.get_contig_start_end_for_p(pos);
         let bound = kc.get_kmer_boundaries(pos, plim);
+        dbg_print!("{:x}, {:x}", bound.0, bound.1);
 
         let mut scp = PastScope {
             kc,
@@ -46,8 +48,7 @@ impl<'a> PastScope<'a> {
         let bin = kc.get_kmers(x);
 
         loop {
-            let b2 = ks.b2_for_p(scp.p, "(P)").unwrap();
-            if scp.increment(b2) {
+            if scp.increment(ks.b2_for_p(scp.p, false).unwrap()) {
                 // we weten extension op voorhand.
                 let base = scp.get_i() - kc.kmerlen;
                 if (scp.set_if_optimum(x, base, bin) && scp.all_kmers()) || scp.remark(false)? {
@@ -113,7 +114,7 @@ impl<'a> Scope for PastScope<'a> {
 
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
     /// true if we have at least one kmer.
-    fn increment(&mut self, b2: u8) -> bool {
+    fn increment(&mut self, b2: TwoBit) -> bool {
         // XXX: function is hot
         if self.i >= self.kc.kmerlen {
             let old_d = self.d[self.mod_i];
@@ -124,8 +125,8 @@ impl<'a> Scope for PastScope<'a> {
             self.d[self.mod_i] = old_d;
         }
         // first bit is strand bit, set according to kmer orientation bit.
-        self.p &= !1;
-        self.p += 2 + self.d[self.mod_i].update(b2);
+        self.p.set_ori(self.d[self.mod_i].update(b2));
+        self.p.incr_pos();
         self.i += 1;
         self.i >= self.kc.kmerlen
     }
@@ -201,7 +202,7 @@ mod tests {
         for hash in 0..kmi.ks.kmp.len() {
             let p = kmi.ks.kmp[hash];
             if p.is_set() {
-                dbg_print!("---[ {:#x} ]---", hash);
+                dbg_print!("---[ {:#x} p:{:x} ]---", hash, p);
                 let scp = PastScope::new(&kmi.ks, &kc, &p, hash)?;
                 dbg_assert_eq!(scp.mark.p, p.rep_dup_masked(), "[{}]: {:x}", seen, hash);
                 seen += 1;

@@ -1,4 +1,4 @@
-use crate::kmer::Kmer;
+use crate::kmer::{Kmer, ThreeBit, TwoBit};
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::{KmerLoc, PriExtPosOri};
 use crate::kmerstore::KmerStore;
@@ -35,17 +35,15 @@ impl<'a> Mapping<'a> {
         };
         let mut x = 0;
         let mut bin = kc.get_kmers(x);
-        for b2 in record.sequence().iter().map(|&c| {
-            let b2 = (c >> 1) & 0x7;
-            dbg_print!("{}: {:x}", c as char, b2);
-            b2
-        }) {
+        for b3 in record.sequence().iter().map(ThreeBit::from) {
             //let x = scp.p.x();
             //let bin = kc.get_kmers(x);
-            if scp.increment(b2) {
-                // we weten extension op voorhand.
-                let base = scp.i - kc.kmerlen;
-                if scp.set_if_optimum(x, base, bin) && scp.all_kmers() {}
+            if let Some(b2) = b3.as_twobit_if_not_n() {
+                if scp.increment(b2) {
+                    // we weten extension op voorhand.
+                    let base = scp.i - kc.kmerlen;
+                    if scp.set_if_optimum(x, base, bin) && scp.all_kmers() {}
+                }
             }
         }
         Ok(scp)
@@ -95,7 +93,7 @@ impl<'a> Scope for Mapping<'a> {
 
     /// add twobit to k-mers, update k-mer vec, incr. pos and update ori
     /// true if we have at least one kmer.
-    fn increment(&mut self, b2: u8) -> bool {
+    fn increment(&mut self, b2: TwoBit) -> bool {
         // XXX: function is hot
         if self.i >= self.kc.kmerlen {
             let old_d = self.d[self.mod_i];
@@ -106,8 +104,8 @@ impl<'a> Scope for Mapping<'a> {
             self.d[self.mod_i] = old_d;
         }
         // first bit is strand orientation (ori), set according to k-mer.
-        self.p &= !1;
-        self.p += 2 + self.d[self.mod_i].update(b2);
+        self.p.set_ori(self.d[self.mod_i].update(b2));
+        self.p.incr_pos();
         self.i += 1;
         self.i >= self.kc.kmerlen
     }

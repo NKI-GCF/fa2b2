@@ -5,6 +5,7 @@ extern crate num;
 extern crate num_traits;
 
 use crate::head_scope::HeadScope;
+use crate::kmer::ThreeBit;
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::PriExtPosOri;
 use crate::kmerstore::KmerStore;
@@ -72,23 +73,20 @@ impl<'a> KmerIter<'a> {
         let mut coding = 0_u64;
         let mut seq = record.sequence().as_ref().iter();
 
-        while let Some(b2) = seq.next().map(|&c| {
-            let b2 = (c >> 1) & 0x7;
-            dbg_print!("{}: {:x}", c as char, b2);
-            b2
-        }) {
+        while let Some(b3) = seq.next().map(ThreeBit::from) {
             let p = self.scp.p;
-            if b2 < 4 {
+            if let Some(b2) = b3.as_twobit_if_not_n() {
+                // no third bit for A, C, T or G.
                 // new sequence is also stored, to enable lookup later.
                 if let Some(qb) = self.ks.b2.get_mut(p.byte_pos()) {
-                    *qb |= b2 << (p & 6);
+                    *qb |= b2.pos_shift(p).as_u8();
                 }
                 if self.n_stretch > 0 {
                     n_count += self.n_stretch;
                     self.finalize_n_stretch();
                 } else if self.scp.period != 0 && dbg_dump_if!(self.scp.mark.is_set(), false) {
                     let pd = self.scp.period;
-                    if self.ks.b2_for_p(self.scp.p - pd, "(R)")? == b2 {
+                    if self.ks.b2_for_p(self.scp.p - pd, true)? == b2 {
                         let idx = self.scp.mark.get_idx();
                         let stored = self.ks.kmp[idx];
                         repetitive += 1;
@@ -205,9 +203,9 @@ mod tests {
             process(&mut ks, &kc, b"NCN"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.contig.len(), 2);
-        dbg_assert_eq!(ks.contig[0].twobit, 0);
+        dbg_assert_eq!(ks.contig[0].twobit, 0.as_pos());
         dbg_assert_eq!(ks.contig[0].genomic, 1);
-        dbg_assert_eq!(ks.contig[1].twobit, 2);
+        dbg_assert_eq!(ks.contig[1].twobit, 1.as_pos());
         dbg_assert_eq!(ks.contig[1].genomic, 3);
         Ok(())
     }

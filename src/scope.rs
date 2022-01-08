@@ -1,4 +1,5 @@
 use crate::kmer::Kmer;
+use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::{KmerLoc, PriExtPosOri};
 use crate::kmerstore::KmerStore;
@@ -16,7 +17,7 @@ pub trait Scope {
     fn is_repetitive(&self) -> bool;
     fn get_plim(&self) -> (u64, u64);
     fn clear_p_extension(&mut self);
-    fn increment(&mut self, b2: u8) -> bool;
+    fn increment(&mut self, b2: TwoBit) -> bool;
     fn extend_p(&mut self);
     fn mark_reset(&mut self);
     fn set_mark(&mut self, idx: usize, p: u64, x: usize);
@@ -75,7 +76,7 @@ pub trait Scope {
     where
         T: PriExtPosOri + fmt::LowerHex + Copy,
     {
-        let b2 = ks.b2_for_p(self.get_p(), "(E)")?;
+        let b2 = ks.b2_for_p(self.get_p(), false)?;
         ensure!(
             self.is_before_end_of_contig(),
             "increment_for_extension() runs into end of contig"

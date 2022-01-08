@@ -1,3 +1,4 @@
+use crate::kmerloc::PriExtPosOri;
 use crate::rdbg::STAT_DB;
 use std::cmp;
 
@@ -63,6 +64,7 @@ impl KmerConst {
         self.no_kmers - self.afstand(x)
     }
     pub fn get_kmers(&self, x: usize) -> (usize, usize) {
+        dbg_assert!(x < self.extent.len());
         let first = self.extent[x] >> self.max_afstand;
         let second = self.extent[x] & (self.max_afstand - 1);
         (first, second)
@@ -75,8 +77,8 @@ impl KmerConst {
     pub fn get_kmer_boundaries(&self, p: u64, contig: (u64, u64)) -> (u64, u64) {
         //let afs = self.afstand(p.x()); // => zou van venster / no_kmers afgetrokken kunnen
         (
-            cmp::max(p.saturating_sub(self.venster as u64 * 2), contig.0),
-            cmp::min(p + (self.no_kmers as u64 - 1) * 2, contig.1),
+            cmp::max(p.saturating_sub((self.venster as u64).as_pos()), contig.0),
+            cmp::min(p + (self.no_kmers as u64 - 1).as_pos(), contig.1),
         )
     }
 }

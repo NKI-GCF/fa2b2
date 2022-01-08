@@ -1,6 +1,6 @@
 use crate::kmer::{Kmer, TwoBit};
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{KmerLoc, PriExtPosOri};
+use crate::kmerloc::{KmerLoc, ExtPosEtc};
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
@@ -38,7 +38,7 @@ impl<'a> HeadScope<'a> {
     // .i & .p increments en kmer .d[] updates vinden plaats.
     pub fn complete_and_update_mark<T>(&mut self, b2: TwoBit, ks: &mut KmerStore<T>) -> Result<()>
     where
-        T: PriExtPosOri + fmt::LowerHex + Copy,
+        T: ExtPosEtc + fmt::LowerHex + Copy,
     {
         if self.increment(b2) {
             let base = self.get_i() - self.kc.kmerlen;

@@ -1,7 +1,7 @@
 use crate::kmer::Kmer;
 use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{KmerLoc, PriExtPosOri};
+use crate::kmerloc::{KmerLoc, ExtPosEtc};
 use crate::kmerstore::KmerStore;
 use crate::past_scope::PastScope;
 use crate::rdbg::STAT_DB;
@@ -74,7 +74,7 @@ pub trait Scope {
 
     fn increment_for_extension<T>(&mut self, ks: &KmerStore<T>) -> Result<()>
     where
-        T: PriExtPosOri + fmt::LowerHex + Copy,
+        T: ExtPosEtc + fmt::LowerHex + Copy,
     {
         let b2 = ks.b2_for_p(self.get_p(), false)?;
         ensure!(
@@ -87,7 +87,7 @@ pub trait Scope {
 
     fn handle_mark<T>(&mut self, ks: &mut KmerStore<T>) -> Result<()>
     where
-        T: PriExtPosOri + fmt::LowerHex + Copy,
+        T: ExtPosEtc + fmt::LowerHex + Copy,
     {
         if let Some(mark) = self.get_mark() {
             let (min_idx, min_p) = mark.get();

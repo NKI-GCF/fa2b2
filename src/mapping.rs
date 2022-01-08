@@ -1,6 +1,6 @@
 use crate::kmer::{Kmer, ThreeBit, TwoBit};
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{KmerLoc, PriExtPosOri};
+use crate::kmerloc::{KmerLoc, ExtPosEtc};
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
@@ -19,7 +19,7 @@ pub struct Mapping<'a> {
 }
 
 impl<'a> Mapping<'a> {
-    pub fn new<T: PriExtPosOri + fmt::LowerHex>(
+    pub fn new<T: ExtPosEtc + fmt::LowerHex>(
         ks: &KmerStore<T>,
         kc: &'a KmerConst,
         record: fastq::Record,

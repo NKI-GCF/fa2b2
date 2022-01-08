@@ -1,7 +1,7 @@
 use crate::kmer::Kmer;
 use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{KmerLoc, PriExtPosOri};
+use crate::kmerloc::{KmerLoc, ExtPosEtc};
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
@@ -21,14 +21,14 @@ pub struct PastScope<'a> {
 }
 
 impl<'a> PastScope<'a> {
-    pub fn new<T: PriExtPosOri + fmt::LowerHex>(
+    pub fn new<T: ExtPosEtc + fmt::LowerHex>(
         ks: &KmerStore<T>,
         kc: &'a KmerConst,
         p: &T,
         idx: usize,
     ) -> Result<Self> {
         let pos = p.pos();
-        ensure!(pos != PriExtPosOri::no_pos());
+        ensure!(pos != ExtPosEtc::no_pos());
         let plim = ks.get_contig_start_end_for_p(pos);
         let bound = kc.get_kmer_boundaries(pos, plim);
         dbg_print!("{:x}, {:x}", bound.0, bound.1);

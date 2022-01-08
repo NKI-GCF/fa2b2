@@ -15,7 +15,7 @@ const EXT_MASK: u64 = 0xFF00_0000_0000_0000;
 // 4 twobits per byte, so unshifted pos is shifted another 2.
 const BYTE_SHIFT: u32 = POS_SHIFT + 2;
 
-pub trait PriExtPosOri: Clone {
+pub trait ExtPosEtc: Clone {
     fn set(&mut self, p: u64);
     fn get(&self) -> u64;
     fn pos(&self) -> u64;
@@ -52,7 +52,7 @@ pub trait PriExtPosOri: Clone {
     //fn ext_max() -> Self;
 }
 
-impl PriExtPosOri for u64 {
+impl ExtPosEtc for u64 {
     fn set(&mut self, p: u64) {
         *self = p;
     }
@@ -82,13 +82,13 @@ impl PriExtPosOri for u64 {
         0x0
     }
     fn clear(&mut self) {
-        *self = PriExtPosOri::no_pos();
+        *self = ExtPosEtc::no_pos();
     }
     fn is_set(&self) -> bool {
-        self.pos() != PriExtPosOri::no_pos()
+        self.pos() != ExtPosEtc::no_pos()
     }
     fn is_no_pos(&self) -> bool {
-        self.pos() == PriExtPosOri::no_pos()
+        self.pos() == ExtPosEtc::no_pos()
     }
     fn set_ori(&mut self, p: u64) {
         *self ^= (*self ^ p) & ORI_MASK

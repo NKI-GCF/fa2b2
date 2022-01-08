@@ -7,7 +7,7 @@ extern crate num_traits;
 use crate::head_scope::HeadScope;
 use crate::kmer::ThreeBit;
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::PriExtPosOri;
+use crate::kmerloc::ExtPosEtc;
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use anyhow::Result;
@@ -64,7 +64,7 @@ impl<'a> KmerIter<'a> {
         }
     }
 
-    pub fn markcontig<T: PriExtPosOri>(&mut self, record: fasta::Record) -> Result<()> {
+    pub fn markcontig<T: ExtPosEtc>(&mut self, record: fasta::Record) -> Result<()> {
         self.goffs = 0;
         self.ks.push_contig(self.scp.p.pos(), self.goffs);
 

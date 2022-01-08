@@ -1,5 +1,5 @@
 use crate::kmer::{TwoBit, TwoBitx4};
-use crate::kmerloc::PriExtPosOri;
+use crate::kmerloc::ExtPosEtc;
 use crate::rdbg::STAT_DB;
 use ahash::AHashMap;
 use anyhow::{anyhow, ensure, Result};
@@ -26,7 +26,7 @@ pub struct KmerStore<T> {
     pub repeat: AHashMap<u64, Repeat>,
 }
 
-impl<T: PriExtPosOri> KmerStore<T> {
+impl<T: ExtPosEtc> KmerStore<T> {
     pub fn new(bitlen: usize, repetition_max_dist: u64) -> Self {
         let shift = bitlen - 2;
         KmerStore {

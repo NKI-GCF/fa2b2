@@ -1,4 +1,4 @@
-use crate::kmerloc::PriExtPosOri;
+use crate::kmerloc::ExtPosEtc;
 use crate::rdbg::STAT_DB;
 use num::{FromPrimitive, Unsigned};
 use num_traits::PrimInt;

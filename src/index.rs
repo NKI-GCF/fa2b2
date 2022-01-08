@@ -1,5 +1,5 @@
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::PriExtPosOri;
+use crate::kmerloc::ExtPosEtc;
 use crate::kmerstore::KmerStore;
 use crate::marker::KmerIter;
 

@@ -88,6 +88,15 @@ impl<'a> Scope for Mapping<'a> {
         &self.d[i]
     }
 
+    fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()> {
+        let b2 = ks.b2_for_p(self.get_p(), false)?;
+        dbg_assert!(self.increment(b2));
+        Ok(())
+    }
+    fn dist_if_repetitive(&self, stored_p: u64, mark_p: u64, max_dist: u64) -> Option<u64> {
+        None
+    }
+
     /// add twobit to k-mers, update k-mer vec, incr. pos and update ori
     /// true if we have at least one kmer.
     fn increment(&mut self, b2: TwoBit) -> bool {

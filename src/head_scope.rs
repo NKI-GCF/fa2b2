@@ -74,10 +74,27 @@ impl<'a> Scope for HeadScope<'a> {
         self.period != 0
     }
     fn set_period(&mut self, period: u64) {
+        dbg_assert!(self.p.is_no_pos() || period < self.p);
         self.period = period;
     }
     fn clear_p_extension(&mut self) {
         self.p.clear_extension();
+    }
+    fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()> {
+        let b2 = ks.b2_for_p(self.get_p(), false)?;
+        dbg_assert!(self.increment(b2));
+        Ok(())
+    }
+
+    fn dist_if_repetitive(&self, stored_p: u64, mark_p: u64, max_dist: u64) -> Option<u64> {
+        let stored_pos = stored_p.pos();
+        let mark_pos = mark_p.pos();
+        dbg_assert!(mark_pos > stored_pos);
+        let dist = mark_pos - stored_pos;
+        if dist < max_dist {
+            return Some(dist);
+        }
+        None
     }
 
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation

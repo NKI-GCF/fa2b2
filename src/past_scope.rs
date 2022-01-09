@@ -115,6 +115,29 @@ impl<'a> Scope for PastScope<'a> {
         self.p.clear_extension();
     }
 
+    fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()> {
+        let b2 = ks.b2_for_p(self.get_p(), false)?;
+        ensure!(
+            self.is_before_end_of_contig(),
+            "increment_for_extension() runs into end of contig"
+        );
+        dbg_assert!(self.increment(b2));
+        Ok(())
+    }
+
+    fn dist_if_repetitive(&self, stored_p: u64, mark_p: u64, max_dist: u64) -> Option<u64> {
+        let stored_pos = stored_p.pos();
+        let mark_pos = mark_p.pos();
+        dbg_assert!(mark_pos > stored_pos);
+        if self.is_on_contig(stored_pos) {
+            let dist = mark_pos - stored_pos;
+            if dist < max_dist {
+                return Some(dist);
+            }
+        }
+        None
+    }
+
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
     /// true if we have at least one kmer.
     fn increment(&mut self, b2: TwoBit) -> bool {
@@ -144,6 +167,7 @@ impl<'a> Scope for PastScope<'a> {
         self.mark.set(idx, p, x);
     }
     fn set_period(&mut self, period: u64) {
+        dbg_assert!(period < self.p);
         self.period = period;
     }
 }

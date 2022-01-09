@@ -21,6 +21,8 @@ pub trait Scope {
     fn mark_reset(&mut self);
     fn set_mark(&mut self, idx: usize, p: u64, x: usize);
     fn set_period(&mut self, period: u64);
+    fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()>;
+    fn dist_if_repetitive(&self, stored_p: u64, mark_p: u64, max_dist: u64) -> Option<u64>;
 
     /// is occ complete? call na complete_kmer() - self.i increment.
     fn all_kmers(&self) -> bool {
@@ -49,32 +51,10 @@ pub trait Scope {
         Ok(false)
     }
 
-    fn dist_if_repetitive(&self, stored_pos: u64, mark_pos: u64, max_dist: u64) -> Option<u64> {
-        dbg_assert!(mark_pos > stored_pos);
-        if self.is_on_contig(stored_pos) {
-            let dist = mark_pos - stored_pos;
-            if dist < max_dist {
-                return Some(dist);
-            }
-        }
-        None
-    }
     fn can_extend(&self) -> bool {
         self.get_p().x() + 1 < self.get_kc().extent.len()
     }
 
-    fn increment_for_extension<T>(&mut self, ks: &KmerStore<T>) -> Result<()>
-    where
-        T: ExtPosEtc + fmt::LowerHex + Copy,
-    {
-        let b2 = ks.b2_for_p(self.get_p(), false)?;
-        ensure!(
-            self.is_before_end_of_contig(),
-            "increment_for_extension() runs into end of contig"
-        );
-        dbg_assert!(self.increment(b2));
-        Ok(())
-    }
     fn handle_mark(&mut self, ks: &mut KmerStore) -> Result<()> {
         if let Some(mark) = self.get_mark() {
             let (min_idx, min_p) = mark.get();
@@ -110,9 +90,8 @@ pub trait Scope {
             if stored_p.extension() == min_p.extension() {
                 // If a kmer occurs multiple times within an extending readlength (repetition),
                 // only the first gets a position. During mapping this should be kept in mind.
-                let mark_pos = mark.p.pos();
                 if let Some(dist) =
-                    self.dist_if_repetitive(stored_p.pos(), mark_pos, ks.repetition_max_dist)
+                    self.dist_if_repetitive(stored_p, mark.p, ks.repetition_max_dist)
                 {
                     self.set_period(dist);
                     ks.kmp[min_idx].set_repetitive();

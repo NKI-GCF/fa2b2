@@ -10,6 +10,7 @@ use crate::kmerconst::KmerConst;
 use crate::kmerloc::ExtPosEtc;
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
+use crate::scope::Scope;
 use anyhow::Result;
 use noodles_fasta as fasta;
 use std::cmp;
@@ -44,25 +45,53 @@ impl<'a> KmerIter<'a> {
             self.scp.p.clear_extension();
         }
         self.scp.mark.reset();
-        self.scp.plim.0 = self.scp.p.pos();
         self.scp.mod_i = 0;
         // If a repetition ends in an N-stretch, thereafter offset to period
         // may differ or the repetition could be different or entirely gone.
         // TODO: allow repetition to include N-stretch - if both sides of N-stretch show the same repetition.
-        self.scp.period = 0;
+        self.scp.set_period(0);
     }
 
-    fn extend_repetive_on_cycle(&mut self, mark_pos: u64, dist: u64, pd: u64) {
+    fn extend_repetive_on_cycle(&mut self, stored_pos: u64, mark_pos: u64, pd: u64) {
+        let dist = mark_pos - stored_pos;
         if dist % pd == 0 {
-            self.ks.extend_repetitive(mark_pos, dist as u32);
+            let dist_u32 = u32::try_from(dist).unwrap();
+            self.ks.extend_repetitive(mark_pos, dist_u32);
         }
     }
 
-    fn replace_repetive_on_cycle(&mut self, old_pos: u64, new_pos: u64, dist: u64, pd: u64) {
+    fn replace_repetive_on_cycle(&mut self, stored_pos: u64, mark_pos: u64, pd: u64) {
+        let dist = stored_pos - mark_pos;
         if dist % pd == 0 {
-            self.ks.replace_repetitive(old_pos, new_pos, dist as u32);
+            let dist_u32 = u32::try_from(dist).unwrap();
+            self.ks.replace_repetitive(stored_pos, mark_pos, dist_u32);
         }
     }
+
+    /*fn update_repetitive(&mut self) {
+        if stored.is_set() {
+            let mark_pos = self.scp.mark.p.pos();
+            let stored_pos = stored.pos();
+            match mark_pos.cmp(&stored_pos) {
+                cmp::Ordering::Greater => {
+                    self.extend_repetive_on_cycle(stored_pos, mark_pos, pd);
+                }
+                cmp::Ordering::Less => {
+                    dbg_print!("repetitive occurs before already stored [{:x}] p {:#x} <=> stored {:#x}", idx, self.scp.mark.p, stored);
+                    let _x = self.scp.p.x();
+                    dbg_assert!(_x > 0);
+                    self.replace_repetive_on_cycle(stored_pos, mark_pos, pd);
+                    // FIXME: moet positie nu niet gezet worden, bij less?
+                }
+                cmp::Ordering::Equal => {
+                    dbg_print!("minimum remained [{:x}] {:#x}", idx, stored)
+                }
+            }
+        } else {
+            // XXX this occurs, is it an edge case or a bug?
+            dbg_print!("repeat with unset mark.idx (b2 corresponds) ??");
+        }
+    }*/
 
     pub fn markcontig<T: ExtPosEtc>(&mut self, record: fasta::Record) -> Result<()> {
         self.goffs = 0;
@@ -86,6 +115,7 @@ impl<'a> KmerIter<'a> {
                     self.finalize_n_stretch();
                 } else if self.scp.period != 0 && dbg_dump_if!(self.scp.mark.is_set(), false) {
                     let pd = self.scp.period;
+                    dbg_assert!(pd <= self.scp.p, "{:#x} {:#x}", pd, self.scp.p);
                     if self.ks.b2_for_p(self.scp.p - pd, true)? == b2 {
                         let idx = self.scp.mark.get_idx();
                         let stored = self.ks.kmp[idx];
@@ -95,15 +125,13 @@ impl<'a> KmerIter<'a> {
                             let stored_pos = stored.pos();
                             match mark_pos.cmp(&stored_pos) {
                                 cmp::Ordering::Greater => {
-                                    let dist = mark_pos - stored_pos;
-                                    self.extend_repetive_on_cycle(mark_pos, dist, pd);
+                                    self.extend_repetive_on_cycle(stored_pos, mark_pos, pd);
                                 }
                                 cmp::Ordering::Less => {
                                     dbg_print!("repetitive occurs before already stored [{:x}] p {:#x} <=> stored {:#x}", idx, self.scp.mark.p, stored);
                                     let _x = self.scp.p.x();
                                     dbg_assert!(_x > 0);
-                                    let dist = stored_pos - mark_pos;
-                                    self.replace_repetive_on_cycle(stored_pos, mark_pos, dist, pd);
+                                    self.replace_repetive_on_cycle(stored_pos, mark_pos, pd);
                                     // FIXME: moet positie nu niet gezet worden, bij less?
                                 }
                                 cmp::Ordering::Equal => {
@@ -115,7 +143,7 @@ impl<'a> KmerIter<'a> {
                             dbg_print!("repeat with unset mark.idx (b2 corresponds) ??");
                         }
                     } else {
-                        self.scp.period = 0;
+                        self.scp.set_period(0);
                     }
                 }
                 self.scp.complete_and_update_mark(b2, self.ks)?;

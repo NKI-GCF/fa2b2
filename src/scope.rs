@@ -20,13 +20,13 @@ pub trait Scope {
     fn increment(&mut self, b2: TwoBit) -> bool;
     fn extend_p(&mut self);
     fn mark_reset(&mut self);
-    fn set_mark(&mut self, idx: usize, p: u64, x: usize);
+    fn set_mark(&mut self, idx: usize, p: ExtPosEtc, x: usize);
     fn set_period(&mut self, period: Position);
     fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()>;
     fn dist_if_repetitive(
         &self,
-        stored_p: u64,
-        mark_p: u64,
+        stored_p: ExtPosEtc,
+        mark_p: ExtPosEtc,
         max_dist: Position,
     ) -> Option<Position>;
     fn unset_period(&mut self);

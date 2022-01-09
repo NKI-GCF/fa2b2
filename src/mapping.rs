@@ -11,7 +11,7 @@ use std::fmt;
 
 pub struct Mapping<'a> {
     kc: &'a KmerConst,
-    p: u64,
+    p: ExtPosEtc,
     i: usize,
     mod_i: usize,
     mark: KmerLoc,
@@ -20,11 +20,7 @@ pub struct Mapping<'a> {
 }
 
 impl<'a> Mapping<'a> {
-    pub fn new<T: ExtPosEtc + fmt::LowerHex>(
-        ks: &KmerStore,
-        kc: &'a KmerConst,
-        record: fastq::Record,
-    ) -> Result<Self> {
+    pub fn new(ks: &KmerStore, kc: &'a KmerConst, record: fastq::Record) -> Result<Self> {
         let mut scp = Mapping {
             kc,
             p: 0,
@@ -99,8 +95,8 @@ impl<'a> Scope for Mapping<'a> {
     }
     fn dist_if_repetitive(
         &self,
-        stored_p: u64,
-        mark_p: u64,
+        stored_p: ExtPosEtc,
+        mark_p: ExtPosEtc,
         max_dist: Position,
     ) -> Option<Position> {
         None
@@ -130,7 +126,7 @@ impl<'a> Scope for Mapping<'a> {
     fn mark_reset(&mut self) {
         self.mark.reset();
     }
-    fn set_mark(&mut self, idx: usize, p: u64, x: usize) {
+    fn set_mark(&mut self, idx: usize, p: ExtPosEtc, x: usize) {
         dbg_print!("{:<30}<P>", format!("[{:x}] = {:x} | x({})", idx, p, x));
         self.mark.set(idx, p, x);
     }

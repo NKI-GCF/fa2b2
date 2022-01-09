@@ -42,7 +42,7 @@ impl TwoBit {
 
 /// 4 packed twobits per u8.
 impl TwoBitx4 {
-    pub fn to_b2(&self, p: u64, for_repeat: bool) -> TwoBit {
+    pub fn to_b2(&self, p: ExtPosEtc, for_repeat: bool) -> TwoBit {
         // the third bit (for N) is actually never set, because we don't store those in TwoBitx4
         let ob2 = self.0.checked_shr(p.pos().b2_shift());
         let b2 = ob2.expect("bug shifting to b2") & 3;

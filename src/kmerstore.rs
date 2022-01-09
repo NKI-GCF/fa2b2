@@ -56,7 +56,7 @@ impl KmerStore {
             ctg.genomic += offset;
         }
     }
-    pub fn set_kmp(&mut self, min_idx: usize, min_p: u64) {
+    pub fn set_kmp(&mut self, min_idx: usize, min_p: ExtPosEtc) {
         self.kmp[min_idx].set(min_p);
     }
     pub fn get_bitlen(&self) -> usize {
@@ -98,7 +98,7 @@ impl KmerStore {
         ensure!(i != 0, "get_twobit_before(): Start of contig");
         Ok(self.contig[i - 1].twobit)
     }
-    pub fn b2_for_p(&self, p: u64, is_repeat: bool) -> Result<TwoBit> {
+    pub fn b2_for_p(&self, p: ExtPosEtc, is_repeat: bool) -> Result<TwoBit> {
         let pos = p.pos();
         ensure!(
             pos < self.pos_max || is_repeat,

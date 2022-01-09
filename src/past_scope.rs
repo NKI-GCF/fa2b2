@@ -11,7 +11,7 @@ use std::fmt;
 
 pub struct PastScope<'a> {
     kc: &'a KmerConst,
-    p: u64,
+    p: ExtPosEtc,
     i: usize,
     mod_i: usize,
     plim: (Position, Position),
@@ -22,12 +22,7 @@ pub struct PastScope<'a> {
 }
 
 impl<'a> PastScope<'a> {
-    pub fn new<T: ExtPosEtc + fmt::LowerHex>(
-        ks: &KmerStore,
-        kc: &'a KmerConst,
-        p: &T,
-        idx: usize,
-    ) -> Result<Self> {
+    pub fn new(ks: &KmerStore, kc: &'a KmerConst, p: &ExtPosEtc, idx: usize) -> Result<Self> {
         let pos = p.pos();
         ensure!(pos != Position::zero());
         let plim = ks.get_contig_start_end_for_p(pos);
@@ -129,8 +124,8 @@ impl<'a> Scope for PastScope<'a> {
 
     fn dist_if_repetitive(
         &self,
-        stored_p: u64,
-        mark_p: u64,
+        stored_p: ExtPosEtc,
+        mark_p: ExtPosEtc,
         max_dist: Position,
     ) -> Option<Position> {
         let stored_pos = stored_p.pos();
@@ -169,7 +164,7 @@ impl<'a> Scope for PastScope<'a> {
     fn mark_reset(&mut self) {
         self.mark.reset();
     }
-    fn set_mark(&mut self, idx: usize, p: u64, x: usize) {
+    fn set_mark(&mut self, idx: usize, p: ExtPosEtc, x: usize) {
         dbg_print!("{:<30}<P>", format!("[{:x}] = {:x} | x({})", idx, p, x));
         self.mark.set(idx, p, x);
     }

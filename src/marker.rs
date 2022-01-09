@@ -81,7 +81,7 @@ impl<'a> KmerIter<'a> {
         }
     }
 
-    pub fn markcontig<T: ExtPosEtc>(&mut self, record: fasta::Record) -> Result<()> {
+    pub fn markcontig(&mut self, record: fasta::Record) -> Result<()> {
         self.goffs = 0;
         self.ks.push_contig(self.scp.p.pos(), self.goffs);
 

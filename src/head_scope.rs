@@ -10,7 +10,7 @@ use std::fmt;
 
 pub struct HeadScope<'a> {
     kc: &'a KmerConst,
-    pub p: u64,
+    pub p: ExtPosEtc,
     d: Vec<Kmer<u64>>,
     z: Vec<usize>,
     pub mark: KmerLoc,
@@ -20,7 +20,7 @@ pub struct HeadScope<'a> {
 }
 
 impl<'a> HeadScope<'a> {
-    pub fn new(kc: &'a KmerConst, p: u64) -> Self {
+    pub fn new(kc: &'a KmerConst, p: ExtPosEtc) -> Self {
         HeadScope {
             kc,
             p,
@@ -92,8 +92,8 @@ impl<'a> Scope for HeadScope<'a> {
 
     fn dist_if_repetitive(
         &self,
-        stored_p: u64,
-        mark_p: u64,
+        stored_p: ExtPosEtc,
+        mark_p: ExtPosEtc,
         max_dist: Position,
     ) -> Option<Position> {
         let stored_pos = stored_p.pos();
@@ -130,7 +130,7 @@ impl<'a> Scope for HeadScope<'a> {
     fn mark_reset(&mut self) {
         self.mark.reset();
     }
-    fn set_mark(&mut self, idx: usize, p: u64, x: usize) {
+    fn set_mark(&mut self, idx: usize, p: ExtPosEtc, x: usize) {
         dbg_print!("{:<30}<H>", format!("[{:x}] = {:x} | x({})", idx, p, x));
         self.mark.set(idx, p, x);
     }

@@ -71,11 +71,11 @@ impl From<BasePos> for Position {
     }
 }
 
-/*impl From<ExtPosEtc> for Position {
+impl From<ExtPosEtc> for Position {
     fn from(p: ExtPosEtc) -> Position {
         Position(p.as_u64() & POS_MASK)
     }
-}*/
+}
 
 impl fmt::Debug for Position {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

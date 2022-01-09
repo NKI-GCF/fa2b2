@@ -21,6 +21,7 @@ impl Position {
     pub fn as_u64(&self) -> u64 {
         self.0
     }
+    // used both for position0 and 'unset'. The context should make the distinction.
     pub fn zero() -> Self {
         Position(0x0)
     }
@@ -29,7 +30,7 @@ impl Position {
         // the strand bit and 2b encoded, so 4 twobits per byte.
         (self.0 >> BYTE_SHIFT) as usize
     }
-    //twobit shifts are 0, 2, 4 and 6 in a byte.
+    //twobit shifts are bit positions 0, 2, 4 and 6 in a byte.
     pub fn b2_shift(&self) -> u32 {
         self.0
             .checked_shr(POS_SHIFT - 1)
@@ -37,6 +38,8 @@ impl Position {
             .unwrap()
             & 6
     }
+
+    // for a repetitive mark, return if on period for the distance between current pos (self) and stored
     pub fn get_if_mark_on_period(&self, stored_pos: Position, pd: u64) -> Option<u64> {
         let dist = self
             .0
@@ -48,6 +51,7 @@ impl Position {
             None
         }
     }
+    // increment the position one
     pub fn incr(&mut self) {
         self.0 += 1_u64.checked_shl(POS_SHIFT).expect("pos.incr shft");
     }

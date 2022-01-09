@@ -216,6 +216,7 @@ mod tests {
     use super::*;
     use crate::kmerconst::KmerConst;
     use crate::marker::KmerIter;
+    use crate::new_types::position::BasePos;
     use anyhow::Result;
     use noodles_fasta as fasta;
     const SEQLEN: usize = 250;
@@ -227,16 +228,16 @@ mod tests {
         let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
-        kmi.ks.pos_max = (seq_vec.len() as u64).basepos_to_pos();
+        kmi.ks.pos_max = Position::from(BasePos::from(seq_vec.len()));
         let definition = fasta::record::Definition::new("test", None);
         let sequence = fasta::record::Sequence::from(seq_vec);
-        kmi.markcontig::<u64>(fasta::Record::new(definition, sequence))?;
+        kmi.markcontig(fasta::Record::new(definition, sequence))?;
         let mut seen = 0;
         for hash in 0..kmi.ks.kmp.len() {
             let p = kmi.ks.kmp[hash];
             if p.is_set() {
-                dbg_print!("---[ {:#x} p:{:x} ]---", hash, p);
-                let scp = PastScope::new(&kmi.ks, &kc, &p, hash)?;
+                dbg_print!("---[ {:#x} p:{:?} ]---", hash, p);
+                let scp = PastScope::new(&kmi.ks, &kc, p, hash)?;
                 dbg_assert_eq!(scp.mark.p, p.rep_dup_masked(), "[{}]: {:x}", seen, hash);
                 seen += 1;
             }
@@ -257,7 +258,7 @@ mod tests {
         for gen in 0..=4_usize.pow(seqlen as u32) {
             let mut ks = KmerStore::new(kc.bitlen, 10_000);
             let mut kmi = KmerIter::new(&mut ks, &kc);
-            kmi.ks.pos_max = (seqlen as u64).basepos_to_pos();
+            kmi.ks.pos_max = Position::from(BasePos::from(seqlen));
             let seq_vec: Vec<_> = (0..seqlen)
                 .map(|i| match (gen >> (i << 1)) & 3 {
                     0 => 'A',
@@ -273,12 +274,12 @@ mod tests {
             let vv: Vec<u8> = seq_vec.into_iter().map(|c| c as u8).collect();
             let definition = fasta::record::Definition::new("test", None);
             let sequence = fasta::record::Sequence::from(vv);
-            kmi.markcontig::<u64>(fasta::Record::new(definition, sequence))?;
+            kmi.markcontig(fasta::Record::new(definition, sequence))?;
             for hash in 0..kmi.ks.kmp.len() {
                 let p = kmi.ks.kmp[hash];
                 if p.is_set() {
-                    dbg_print!("hash: [{:#x}]: p: {:#x}", hash, p);
-                    let scp = PastScope::new(&kmi.ks, &kc, &p, hash)?;
+                    dbg_print!("hash: [{:#x}]: p: {:?}", hash, p);
+                    let scp = PastScope::new(&kmi.ks, &kc, p, hash)?;
                     dbg_assert_eq!(
                         scp.mark.p,
                         p.rep_dup_masked(),

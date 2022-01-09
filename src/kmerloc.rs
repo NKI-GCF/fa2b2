@@ -36,7 +36,6 @@ impl ExtPosEtc {
         *self = p;
     }
     pub fn as_u64(&self) -> u64 {
-        dbg_assert!(self.is_set());
         self.0
     }
     pub fn basepos_to_pos(&self) -> Position {
@@ -65,13 +64,12 @@ impl ExtPosEtc {
         self.pos() != Position::zero()
     }
     pub fn is_zero(&self) -> bool {
-        self.pos() == Position::zero()
+        self.0 == 0
     }
     pub fn set_ori(&mut self, ori: bool) {
         self.0 ^= (self.0 ^ if ori { 1 } else { 0 }) & ORI_MASK
     }
     pub fn get_ori(&self) -> bool {
-        dbg_assert!(self.is_set());
         self.0 & ORI_MASK != 0
     }
     pub fn incr_pos(&mut self) {
@@ -88,7 +86,6 @@ impl ExtPosEtc {
         usize::from(self.extension())
     }
     pub fn same_ori(&self, p: ExtPosEtc) -> bool {
-        dbg_assert!(self.is_set());
         self.get_ori() == p.get_ori()
     }
     pub fn blacklist(&mut self) {
@@ -108,11 +105,9 @@ impl ExtPosEtc {
         self.0 |= Extension::from(x).as_u64();
     }
     pub fn clear_extension(&mut self) {
-        dbg_assert!(self.is_set());
         self.0 &= !EXT_MASK;
     }
     pub fn is_same(&self, other: ExtPosEtc) -> bool {
-        dbg_assert!(self.is_set());
         *self == other
     }
     /// Note: does not include ori, dup and rep bits.
@@ -124,7 +119,6 @@ impl ExtPosEtc {
         self.0 |= DUP_MASK;
     }
     pub fn is_dup(&self) -> bool {
-        dbg_assert!(self.is_set());
         self.0 & DUP_MASK != 0
     }
     pub fn set_repetitive(&mut self) {
@@ -132,11 +126,9 @@ impl ExtPosEtc {
         self.0 |= REP_MASK;
     }
     pub fn is_repetitive(&self) -> bool {
-        dbg_assert!(self.is_set());
         self.0 & REP_MASK != 0
     }
     pub fn rep_dup_masked(&self) -> ExtPosEtc {
-        dbg_assert!(self.is_set());
         ExtPosEtc(self.0 & !(DUP_MASK | REP_MASK))
     }
     pub fn is_replaceable_by(&self, new_entry: ExtPosEtc) -> bool {
@@ -148,7 +140,6 @@ impl ExtPosEtc {
         self.is_set() && !self.is_same(other)
     }
     pub fn same_pos_and_ext(&self, new_entry: ExtPosEtc) -> bool {
-        dbg_assert!(self.is_set());
         (self.0 ^ new_entry.0) & (EXT_MASK | POS_MASK) == 0
     }
     pub fn has_samepos(&self, other: ExtPosEtc) -> bool {
@@ -259,37 +250,43 @@ mod tests {
     use rand::{thread_rng, Rng};
 
     impl KmerLoc {
-        fn next(&mut self, p: ExtPosEtc, is_template: bool) {
+        fn next(&mut self, ori: u64, is_template: bool) {
             if is_template {
                 self.p.incr_pos()
             } else {
                 self.p.decr_pos()
             }
-            self.p.set_ori(p);
+            self.p.set_ori(ori & 1 != 0);
         }
     }
     #[test]
     fn forward() {
         let mut rng = thread_rng();
-        let mut kl = KmerLoc::new(10, 50.basepos_to_pos().as_u64());
+        let mut kl = KmerLoc::new(10, ExtPosEtc::from(BasePos::from(50_u64)));
         let pick = rng.gen_range(20..50);
         for _ in 0..pick {
             let ori = rng.gen_range(0..2);
             kl.next(ori, true);
-            dbg_assert_eq!(ori, kl.p & 1);
+            dbg_assert_eq!(ori, if kl.p.get_ori() { 1 } else { 0 });
         }
-        dbg_assert_eq!(kl.p & !1, (50 + pick).basepos_to_pos().as_u64());
+        dbg_assert_eq!(
+            kl.p.as_u64() & !1,
+            ExtPosEtc::from(BasePos::from(50_u64 + pick)).as_u64()
+        );
     }
     #[test]
     fn reverse() {
         let mut rng = thread_rng();
-        let mut kl = KmerLoc::new(10, 50.basepos_to_pos().as_u64());
+        let mut kl = KmerLoc::new(10, ExtPosEtc::from(BasePos::from(50_u64)));
         let pick = rng.gen_range(20..50);
         for _ in 0..pick {
             let ori = rng.gen_range(0..2);
             kl.next(ori, false);
-            dbg_assert_eq!(ori, kl.p & 1);
+            dbg_assert_eq!(ori, if kl.p.get_ori() { 1 } else { 0 });
         }
-        dbg_assert_eq!(kl.p & !1, (50 - pick).basepos_to_pos().as_u64());
+        dbg_assert_eq!(
+            kl.p.as_u64() & !1,
+            ExtPosEtc::from(BasePos::from(50_u64 - pick)).as_u64()
+        );
     }
 }

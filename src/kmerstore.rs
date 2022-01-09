@@ -131,12 +131,12 @@ mod tests {
     fn it_works() {
         //let mut ks = KmerStore::new(32); // allocates 16 gig of data
         let mut ks = KmerStore::new(2, 10_000);
-        let mut p = 0;
+        let mut p = ExtPosEtc::zero();
         let goffs = 0;
 
         ks.push_contig(p.pos(), goffs);
         ks.offset_contig(10_000); // simulate N-stretch of 10000
-        p += 64.basepos_to_pos().as_u64(); // one readlength
+        let p = ExtPosEtc::from(p.pos() + Position::from(BasePos::from(64_u64))); // one readlength
         ks.push_contig(p.pos(), goffs);
         ks.offset_contig(64);
 
@@ -144,7 +144,7 @@ mod tests {
         ks.offset_contig(10_000); // another N-stretch of 10000
         ks.push_contig(p.pos(), goffs);
 
-        let i = ks.get_contig(5_508.basepos_to_pos());
-        dbg_assert_eq!(ks.contig[i].twobit, 64.basepos_to_pos());
+        let i = ks.get_contig(Position::from(BasePos::from(5_508_u64)));
+        dbg_assert_eq!(ks.contig[i].twobit, Position::from(BasePos::from(64_u64)));
     }
 }

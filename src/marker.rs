@@ -155,6 +155,8 @@ impl<'a> KmerIter<'a> {
 mod tests {
     use super::*;
     use crate::kmerconst::KmerConst;
+    use crate::kmerloc::ExtPosEtc;
+    use crate::new_types::position::BasePos;
     use anyhow::Result;
     const SEQLEN: usize = 250;
 
@@ -162,7 +164,7 @@ mod tests {
         let mut kmi = KmerIter::new(ks, kc);
         let definition = fasta::record::Definition::new("test", None);
         let sequence = fasta::record::Sequence::from(seq);
-        kmi.markcontig::<u64>(fasta::Record::new(definition, sequence))
+        kmi.markcontig(fasta::Record::new(definition, sequence))
     }
 
     #[test]
@@ -173,7 +175,7 @@ mod tests {
             process(&mut ks, &kc, b"NNNNNNNNNNNNNNNN"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.contig.len(), 1);
-        dbg_assert_eq!(ks.contig[0].twobit, 0.basepos_to_pos());
+        dbg_assert_eq!(ks.contig[0].twobit, Position::zero());
         dbg_assert_eq!(ks.contig[0].genomic, 16);
         Ok(())
     }
@@ -185,7 +187,7 @@ mod tests {
             process(&mut ks, &kc, b"N"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.contig.len(), 1);
-        dbg_assert_eq!(ks.contig[0].twobit, 0.basepos_to_pos());
+        dbg_assert_eq!(ks.contig[0].twobit, Position::zero());
         dbg_assert_eq!(ks.contig[0].genomic, 1);
         Ok(())
     }
@@ -197,9 +199,9 @@ mod tests {
             process(&mut ks, &kc, b"NCN"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.contig.len(), 2);
-        dbg_assert_eq!(ks.contig[0].twobit, 0.basepos_to_pos());
+        dbg_assert_eq!(ks.contig[0].twobit, Position::zero());
         dbg_assert_eq!(ks.contig[0].genomic, 1);
-        dbg_assert_eq!(ks.contig[1].twobit, 1.basepos_to_pos());
+        dbg_assert_eq!(ks.contig[1].twobit, Position::from(BasePos::from(1_u64)));
         dbg_assert_eq!(ks.contig[1].genomic, 3);
         Ok(())
     }
@@ -211,12 +213,13 @@ mod tests {
             process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.kmp.len(), 128);
-        let mut first_pos = 1 | (kc.kmerlen as u64).basepos_to_pos().as_u64();
+        let mut first_pos = ExtPosEtc::from(BasePos::from(kc.kmerlen));
+        first_pos.set_ori(true);
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 1..ks.kmp.len() {
             if ks.kmp[i].is_set() {
-                dbg_assert!(ks.kmp[i] == first_pos, "[{:x}], {:x}", i, ks.kmp[i]);
+                dbg_assert_eq!(ks.kmp[i], first_pos, "i: {}", i);
                 seen += 1;
             }
         }
@@ -230,12 +233,13 @@ mod tests {
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
         }
-        let mut first_pos = 1 | (kc.kmerlen as u64).basepos_to_pos().as_u64();
+        let mut first_pos = ExtPosEtc::from(BasePos::from(kc.kmerlen));
+        first_pos.set_ori(true);
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 1..ks.kmp.len() {
             if ks.kmp[i].is_set() {
-                dbg_assert!(ks.kmp[i] == first_pos, "[{:x}], {:x}", i, ks.kmp[i]);
+                dbg_assert_eq!(ks.kmp[i], first_pos, "i: {}", i);
                 seen += 1;
             }
         }
@@ -250,11 +254,12 @@ mod tests {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         let mut seen = 0;
-        let mut first_pos = 1 | (kc.kmerlen as u64).basepos_to_pos().as_u64();
+        let mut first_pos = ExtPosEtc::from(BasePos::from(kc.kmerlen));
+        first_pos.set_ori(true);
         first_pos.set_repetitive();
         for i in 1..ks.kmp.len() {
             if ks.kmp[i].is_set() {
-                dbg_assert!(ks.kmp[i] == first_pos, "[{:x}], {:x}", i, ks.kmp[i]);
+                dbg_assert_eq!(ks.kmp[i], first_pos, "i: {}", i);
                 seen += 1;
             }
         }
@@ -271,7 +276,7 @@ mod tests {
         for i in 0..ks.kmp.len() {
             dbg_assert!(
                 ks.kmp[i].is_zero() || !ks.kmp[i].is_dup(),
-                "[{}], {:x}",
+                "[{}], {:?}",
                 i,
                 ks.kmp[i]
             );

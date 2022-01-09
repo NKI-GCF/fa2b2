@@ -6,9 +6,9 @@ use crate::rdbg::STAT_DB;
 use derive_more::{Add, Rem, Sub};
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
-use std::cmp;
 use std::convert::TryFrom;
 use std::ops::Add;
+use std::{cmp, fmt};
 
 const POS_SHIFT: u32 = 4;
 const EXT_SHIFT: u32 = 56;
@@ -23,7 +23,7 @@ const EXT_MASK: u64 = 0xFF00_0000_0000_0000;
 // FIXME u64 moet hier ExtPosEtc worden !!
 impl Add<Position> for u64 {
     type Output = u64;
-    pub fn add(self, other: Position) -> u64 {
+    fn add(self, other: Position) -> u64 {
         self + other.as_u64()
     }
 }
@@ -33,11 +33,11 @@ pub struct ExtPosEtc(u64);
 
 impl ExtPosEtc {
     pub fn set(&mut self, p: ExtPosEtc) {
-        self.0 = p;
+        *self = p;
     }
-    pub fn get(&self) -> u64 {
+    pub fn as_u64(&self) -> u64 {
         dbg_assert!(self.is_set());
-        *self
+        self.0
     }
     pub fn basepos_to_pos(&self) -> Position {
         //FIXME: deprecate. as_pos() and pos() are confusing.
@@ -45,7 +45,6 @@ impl ExtPosEtc {
     }
     pub fn unshift_pos(&self) -> u64 {
         //TODO: BasePos
-        //FIXME: change so dup, rep etc. is in first nibble.
         BasePos::from(self.pos()).as_u64()
     }
     pub fn pos(&self) -> Position {
@@ -54,10 +53,10 @@ impl ExtPosEtc {
     }
     pub fn as_basepos(&self) -> BasePos {
         //TODO: replace with BasePos::from()
-        BasePos::from(self.checked_shr(POS_SHIFT).expect("shr pos shft"))
+        BasePos::from(*self)
     }
     pub fn zero() -> Self {
-        0x0
+        ExtPosEtc(0x0)
     }
     pub fn clear(&mut self) {
         *self = ExtPosEtc::zero();
@@ -69,97 +68,93 @@ impl ExtPosEtc {
         self.pos() == Position::zero()
     }
     pub fn set_ori(&mut self, p: ExtPosEtc) {
-        *self ^= (*self ^ p) & ORI_MASK
+        self.0 ^= (self.0 ^ p.0) & ORI_MASK
     }
     pub fn get_ori(&self) -> u64 {
         dbg_assert!(self.is_set());
-        self & ORI_MASK
+        self.0 & ORI_MASK
     }
     pub fn incr_pos(&mut self) {
-        *self += 1_u64.checked_shl(POS_SHIFT).expect("incr_pos shft");
+        self.0 += 1_u64.checked_shl(POS_SHIFT).expect("incr_pos shft");
     }
     pub fn decr_pos(&mut self) {
         dbg_assert!(self.is_set());
-        *self -= 1_u64.checked_shl(POS_SHIFT).expect("decr_pos shft");
+        self.0 -= 1_u64.checked_shl(POS_SHIFT).expect("decr_pos shft");
     }
-    // not all extensions may apply, it's dependent on genome size.
     pub fn extension(&self) -> Extension {
-        // TODO: rewrite when ExtPosEtc is a new type
-        //FIXME: change so that extension is counted down.
-
-        Extension::from(((*self & EXT_MASK) >> EXT_SHIFT) as usize)
+        Extension::from(*self)
     }
     pub fn x(&self) -> usize {
         usize::from(self.extension())
     }
     pub fn same_ori(&self, p: ExtPosEtc) -> bool {
         dbg_assert!(self.is_set());
-        self.get_ori() == (p & ORI_MASK)
+        self.get_ori() == p.get_ori()
     }
     pub fn blacklist(&mut self) {
         if self.is_set() {
-            *self &= EXT_MASK;
+            self.0 &= EXT_MASK;
             self.extend();
         }
     }
     pub fn extend(&mut self) {
         dbg_assert!(self.is_set());
-        *self += 1_u64.checked_shl(EXT_SHIFT).expect("extend shft");
+        self.0 += 1_u64.checked_shl(EXT_SHIFT).expect("extend shft");
     }
     // preserves orientation, but not replication and duplication bits
     pub fn set_extension(&mut self, x: usize) {
         dbg_assert!(self.is_set());
-        *self &= POS_MASK | ORI_MASK;
-        *self |= Extension::from(x).as_u64();
+        self.0 &= POS_MASK | ORI_MASK;
+        self.0 |= Extension::from(x).as_u64();
     }
     pub fn clear_extension(&mut self) {
         dbg_assert!(self.is_set());
-        *self &= !EXT_MASK;
+        self.0 &= !EXT_MASK;
     }
-    pub fn is_same(&self, other: u64) -> bool {
+    pub fn is_same(&self, other: ExtPosEtc) -> bool {
         dbg_assert!(self.is_set());
         *self == other
     }
-    /// Note: unsets dup and rep bits.
-    pub fn pos_with_ext(&self, x: usize) -> u64 {
-        self.pos().as_u64() | Extension::from(x).as_u64()
+    /// Note: does not include ori, dup and rep bits.
+    pub fn pos_with_ext(&self, x: usize) -> ExtPosEtc {
+        ExtPosEtc(Extension::from(x).as_u64() | self.pos().as_u64())
     }
     pub fn set_dup(&mut self) {
         dbg_assert!(self.is_set());
-        *self |= DUP_MASK;
+        self.0 |= DUP_MASK;
     }
     pub fn is_dup(&self) -> bool {
         dbg_assert!(self.is_set());
-        *self & DUP_MASK != 0
+        self.0 & DUP_MASK != 0
     }
     pub fn set_repetitive(&mut self) {
         dbg_assert!(self.is_set());
-        *self |= REP_MASK;
+        self.0 |= REP_MASK;
     }
     pub fn is_repetitive(&self) -> bool {
         dbg_assert!(self.is_set());
-        *self & REP_MASK != 0
+        self.0 & REP_MASK != 0
     }
-    pub fn rep_dup_masked(&self) -> u64 {
+    pub fn rep_dup_masked(&self) -> ExtPosEtc {
         dbg_assert!(self.is_set());
-        *self & !(DUP_MASK | REP_MASK)
+        ExtPosEtc(self.0 & !(DUP_MASK | REP_MASK))
     }
-    pub fn is_replaceable_by(&self, new_entry: u64) -> bool {
+    pub fn is_replaceable_by(&self, new_entry: ExtPosEtc) -> bool {
         // only extension bits means blacklisting, except for extension 0. pos is always > kmerlen
-        new_entry.extension().as_u64() > self.rep_dup_masked() // TODO: count down extension?
+        new_entry.extension().as_u64() > self.rep_dup_masked().as_u64() // TODO: count down extension?
             || (new_entry.extension() == self.extension() && new_entry.pos() <= self.pos())
     }
-    pub fn is_set_and_not(&self, other: u64) -> bool {
+    pub fn is_set_and_not(&self, other: ExtPosEtc) -> bool {
         self.is_set() && !self.is_same(other)
     }
-    pub fn same_pos_and_ext(&self, new_entry: u64) -> bool {
+    pub fn same_pos_and_ext(&self, new_entry: ExtPosEtc) -> bool {
         dbg_assert!(self.is_set());
-        (*self ^ new_entry) & (EXT_MASK | POS_MASK) == 0
+        (self.0 ^ new_entry.0) & (EXT_MASK | POS_MASK) == 0
     }
-    pub fn has_samepos(&self, other: u64) -> bool {
+    pub fn has_samepos(&self, other: ExtPosEtc) -> bool {
         self.pos() == other.pos() && {
             // XXX: may want to remove this later if orientation doesn't matter
-            dbg_assert!(self.same_ori(other), "{:#x}, {:#x}", self, other);
+            dbg_assert!(self.same_ori(other), "{:?}, {:?}", self, other);
             true
         }
     }
@@ -170,13 +165,19 @@ impl ExtPosEtc {
     }*/
 }
 
+impl fmt::Debug for ExtPosEtc {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#x}", self.0)
+    }
+}
+
 #[derive(new, Clone, PartialEq, Eq)]
 pub struct KmerLoc {
     idx: usize,
     pub p: ExtPosEtc,
 }
 impl KmerLoc {
-    pub fn get(&self) -> (usize, u64) {
+    pub fn get(&self) -> (usize, ExtPosEtc) {
         (self.idx, self.p)
     }
     pub fn get_idx(&self) -> usize {

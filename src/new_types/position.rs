@@ -101,6 +101,13 @@ impl From<Position> for BasePos {
     }
 }
 
+// converts into base pos.
+impl From<ExtPosEtc> for BasePos {
+    fn from(val: ExtPosEtc) -> BasePos {
+        BasePos::from(Position::from(val))
+    }
+}
+
 impl From<u64> for BasePos {
     fn from(base_pos: u64) -> BasePos {
         BasePos(base_pos & (POS_MASK >> POS_SHIFT))

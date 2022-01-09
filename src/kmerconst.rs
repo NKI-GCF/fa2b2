@@ -1,4 +1,5 @@
-use crate::kmerloc::{BasePos, ExtPosEtc, Position};
+use crate::kmerloc::{BasePos, ExtPosEtc};
+use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use std::cmp;
 
@@ -88,7 +89,7 @@ impl KmerConst {
         };
         (
             cmp::max(lower, contig.0),
-            cmp::min(pos + (self.no_kmers as u64 - 1).as_pos(), contig.1),
+            cmp::min(pos + (self.no_kmers as u64 - 1).basepos_to_pos(), contig.1),
         )
     }
 }

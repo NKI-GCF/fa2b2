@@ -23,7 +23,7 @@ pub struct KmerIter<'a> {
 
 impl<'a> KmerIter<'a> {
     pub fn new(ks: &'a mut KmerStore, kc: &'a KmerConst) -> Self {
-        let scp = HeadScope::new((0, u64::max_value()), kc, 0);
+        let scp = HeadScope::new(kc, 0);
         KmerIter {
             n_stretch: 0,
             goffs: 0,
@@ -172,7 +172,7 @@ mod tests {
             process(&mut ks, &kc, b"NNNNNNNNNNNNNNNN"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.contig.len(), 1);
-        dbg_assert_eq!(ks.contig[0].twobit, 0.as_pos());
+        dbg_assert_eq!(ks.contig[0].twobit, 0.basepos_to_pos());
         dbg_assert_eq!(ks.contig[0].genomic, 16);
         Ok(())
     }
@@ -184,7 +184,7 @@ mod tests {
             process(&mut ks, &kc, b"N"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.contig.len(), 1);
-        dbg_assert_eq!(ks.contig[0].twobit, 0.as_pos());
+        dbg_assert_eq!(ks.contig[0].twobit, 0.basepos_to_pos());
         dbg_assert_eq!(ks.contig[0].genomic, 1);
         Ok(())
     }
@@ -196,9 +196,9 @@ mod tests {
             process(&mut ks, &kc, b"NCN"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.contig.len(), 2);
-        dbg_assert_eq!(ks.contig[0].twobit, 0.as_pos());
+        dbg_assert_eq!(ks.contig[0].twobit, 0.basepos_to_pos());
         dbg_assert_eq!(ks.contig[0].genomic, 1);
-        dbg_assert_eq!(ks.contig[1].twobit, 1.as_pos());
+        dbg_assert_eq!(ks.contig[1].twobit, 1.basepos_to_pos());
         dbg_assert_eq!(ks.contig[1].genomic, 3);
         Ok(())
     }
@@ -210,7 +210,7 @@ mod tests {
             process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.kmp.len(), 128);
-        let mut first_pos = 1 | (kc.kmerlen as u64).as_pos().as_u64();
+        let mut first_pos = 1 | (kc.kmerlen as u64).basepos_to_pos().as_u64();
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 1..ks.kmp.len() {
@@ -229,7 +229,7 @@ mod tests {
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
         }
-        let mut first_pos = 1 | (kc.kmerlen as u64).as_pos().as_u64();
+        let mut first_pos = 1 | (kc.kmerlen as u64).basepos_to_pos().as_u64();
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 1..ks.kmp.len() {
@@ -249,7 +249,7 @@ mod tests {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         let mut seen = 0;
-        let mut first_pos = 1 | (kc.kmerlen as u64).as_pos().as_u64();
+        let mut first_pos = 1 | (kc.kmerlen as u64).basepos_to_pos().as_u64();
         first_pos.set_repetitive();
         for i in 1..ks.kmp.len() {
             if ks.kmp[i].is_set() {

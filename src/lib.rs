@@ -28,5 +28,6 @@ pub mod kmerloc;
 pub mod kmerstore;
 pub mod mapping;
 pub mod marker;
+pub mod new_types;
 pub mod past_scope;
 pub mod scope;

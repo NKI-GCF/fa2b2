@@ -1,10 +1,11 @@
+use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
-use derive_more::{Add, Rem, Sub};
+use derive_more::{Add, Sub};
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
+use std::cmp;
 use std::convert::TryFrom;
 use std::ops::Add;
-use std::{cmp, fmt};
 
 const POS_SHIFT: u32 = 4;
 const EXT_SHIFT: u32 = 56;
@@ -23,12 +24,6 @@ const BYTE_SHIFT: u32 = POS_SHIFT + 2;
 #[derive(Add, Sub, Serialize, Deserialize)]
 pub struct BasePos(u64);
 
-// only bits set for postion, shifted with POS_SHIFT
-#[derive(
-    Add, Sub, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash, Rem,
-)]
-pub struct Position(u64);
-
 impl BasePos {
     pub fn as_u64(&self) -> u64 {
         self.0
@@ -41,7 +36,7 @@ impl BasePos {
 // converts into base pos.
 impl From<Position> for BasePos {
     fn from(pos: Position) -> BasePos {
-        BasePos(pos.0.checked_shr(POS_SHIFT).unwrap())
+        BasePos(pos.as_u64().checked_shr(POS_SHIFT).unwrap())
     }
 }
 
@@ -63,59 +58,11 @@ impl From<usize> for BasePos {
     }
 }
 
-impl Position {
-    pub fn as_u64(&self) -> u64 {
-        self.0
-    }
-    pub fn zero() -> Self {
-        Position(0x0)
-    }
-    pub fn byte_pos(&self) -> usize {
-        // bytepos is calculated before kmer is complete, so we can't assert self.is.set()
-        // the strand bit and 2b encoded, so 4 twobits per byte.
-        (self.0 >> BYTE_SHIFT) as usize
-    }
-    //twobit shifts are 0, 2, 4 and 6 in a byte.
-    pub fn b2_shift(&self) -> u32 {
-        self.0
-            .checked_shr(POS_SHIFT - 1)
-            .map(|p| u32::try_from(p).expect("u32??"))
-            .unwrap()
-            & 6
-    }
-    pub fn get_if_mark_on_period(&self, stored_pos: Position, pd: u64) -> Option<u64> {
-        let dist = self
-            .0
-            .checked_sub(stored_pos.0)
-            .expect("stored_pos is greater??");
-        if dist % pd == 0 {
-            Some(dist)
-        } else {
-            None
-        }
-    }
-    pub fn incr(&mut self) {
-        self.0 += 1_u64.checked_shl(POS_SHIFT).expect("pos.incr shft");
-    }
-}
-
-impl From<BasePos> for Position {
-    fn from(base_pos: BasePos) -> Position {
-        Position(base_pos.0.checked_shl(POS_SHIFT).unwrap() & POS_MASK)
-    }
-}
-
 // FIXME u64 moet hier ExtPosEtc worden !!
 impl Add<Position> for u64 {
     type Output = u64;
     fn add(self, other: Position) -> u64 {
-        self + other.0
-    }
-}
-
-impl fmt::Debug for Position {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:x}", self.0)
+        self + other.as_u64()
     }
 }
 
@@ -124,7 +71,8 @@ pub trait ExtPosEtc: Clone {
     fn set(&mut self, p: u64);
     fn get(&self) -> u64;
     fn pos(&self) -> Position;
-    fn as_pos(&self) -> Position;
+    fn as_basepos(&self) -> BasePos;
+    fn basepos_to_pos(&self) -> Position;
     fn unshift_pos(&self) -> u64;
     fn zero() -> Self;
     fn clear(&mut self);
@@ -163,9 +111,9 @@ impl ExtPosEtc for u64 {
         dbg_assert!(self.is_set());
         *self
     }
-    fn as_pos(&self) -> Position {
-        //FIXME: change so dup, rep etc. is in first nibble.
-        Position(self.checked_shl(POS_SHIFT).expect("unshift_pos shft"))
+    fn basepos_to_pos(&self) -> Position {
+        //FIXME: deprecate. as_pos() and pos() are confusing.
+        Position::from(BasePos(*self))
     }
     fn unshift_pos(&self) -> u64 {
         //TODO: BasePos
@@ -173,8 +121,11 @@ impl ExtPosEtc for u64 {
         BasePos::from(self.pos()).as_u64()
     }
     fn pos(&self) -> Position {
-        //assert!(self.is_set());
-        Position(*self & POS_MASK)
+        // until we have from::ExtPosEtc for
+        Position::from(self.as_basepos())
+    }
+    fn as_basepos(&self) -> BasePos {
+        BasePos(self.checked_shr(POS_SHIFT).expect("shr pos shft"))
     }
     fn zero() -> Self {
         0x0
@@ -241,7 +192,7 @@ impl ExtPosEtc for u64 {
     }
     /// Note: unsets dup and rep bits.
     fn pos_with_ext(&self, x: usize) -> u64 {
-        self.pos().0 | (x as u64).checked_shl(EXT_SHIFT).expect("x beyond max ext")
+        self.pos().as_u64() | (x as u64).checked_shl(EXT_SHIFT).expect("x beyond max ext")
     }
     fn set_dup(&mut self) {
         dbg_assert!(self.is_set());
@@ -366,25 +317,25 @@ mod tests {
     #[test]
     fn forward() {
         let mut rng = thread_rng();
-        let mut kl = KmerLoc::new(10, 50.as_pos().as_u64());
+        let mut kl = KmerLoc::new(10, 50.basepos_to_pos().as_u64());
         let pick = rng.gen_range(20..50);
         for _ in 0..pick {
             let ori = rng.gen_range(0..2);
             kl.next(ori, true);
             dbg_assert_eq!(ori, kl.p & 1);
         }
-        dbg_assert_eq!(kl.p & !1, (50 + pick).as_pos().as_u64());
+        dbg_assert_eq!(kl.p & !1, (50 + pick).basepos_to_pos().as_u64());
     }
     #[test]
     fn reverse() {
         let mut rng = thread_rng();
-        let mut kl = KmerLoc::new(10, 50.as_pos().as_u64());
+        let mut kl = KmerLoc::new(10, 50.basepos_to_pos().as_u64());
         let pick = rng.gen_range(20..50);
         for _ in 0..pick {
             let ori = rng.gen_range(0..2);
             kl.next(ori, false);
             dbg_assert_eq!(ori, kl.p & 1);
         }
-        dbg_assert_eq!(kl.p & !1, (50 - pick).as_pos().as_u64());
+        dbg_assert_eq!(kl.p & !1, (50 - pick).basepos_to_pos().as_u64());
     }
 }

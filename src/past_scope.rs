@@ -1,8 +1,9 @@
 use crate::kmer::Kmer;
 use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{ExtPosEtc, KmerLoc, Position};
+use crate::kmerloc::{ExtPosEtc, KmerLoc};
 use crate::kmerstore::KmerStore;
+use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
 use anyhow::{ensure, Result};
@@ -81,7 +82,7 @@ impl<'a> PastScope<'a> {
         Ok(scp)
     }
     fn is_before_end_of_contig(&self) -> bool {
-        self.p.as_pos() < self.plim.1
+        self.p.basepos_to_pos() < self.plim.1
     }
     fn is_on_contig(&self, pos: Position) -> bool {
         pos >= self.plim.0 && pos < self.plim.1
@@ -229,7 +230,7 @@ mod tests {
         let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
-        kmi.ks.pos_max = (seq_vec.len() as u64).as_pos();
+        kmi.ks.pos_max = (seq_vec.len() as u64).basepos_to_pos();
         let definition = fasta::record::Definition::new("test", None);
         let sequence = fasta::record::Sequence::from(seq_vec);
         kmi.markcontig::<u64>(fasta::Record::new(definition, sequence))?;
@@ -259,7 +260,7 @@ mod tests {
         for gen in 0..=4_usize.pow(seqlen as u32) {
             let mut ks = KmerStore::new(kc.bitlen, 10_000);
             let mut kmi = KmerIter::new(&mut ks, &kc);
-            kmi.ks.pos_max = (seqlen as u64).as_pos();
+            kmi.ks.pos_max = (seqlen as u64).basepos_to_pos();
             let seq_vec: Vec<_> = (0..seqlen)
                 .map(|i| match (gen >> (i << 1)) & 3 {
                     0 => 'A',

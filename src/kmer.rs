@@ -1,4 +1,5 @@
-use crate::kmerloc::{ExtPosEtc, Position};
+use crate::kmerloc::ExtPosEtc;
+use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use num::{FromPrimitive, Unsigned};
 use num_traits::PrimInt;

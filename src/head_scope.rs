@@ -1,7 +1,8 @@
 use crate::kmer::{Kmer, TwoBit};
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{ExtPosEtc, KmerLoc, Position};
+use crate::kmerloc::{ExtPosEtc, KmerLoc};
 use crate::kmerstore::KmerStore;
+use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
 use anyhow::Result;
@@ -19,7 +20,7 @@ pub struct HeadScope<'a> {
 }
 
 impl<'a> HeadScope<'a> {
-    pub fn new(plim: (u64, u64), kc: &'a KmerConst, p: u64) -> Self {
+    pub fn new(kc: &'a KmerConst, p: u64) -> Self {
         HeadScope {
             kc,
             p,

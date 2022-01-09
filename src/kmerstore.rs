@@ -1,5 +1,6 @@
 use crate::kmer::{TwoBit, TwoBitx4};
-use crate::kmerloc::{ExtPosEtc, Position};
+use crate::kmerloc::ExtPosEtc;
+use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use ahash::AHashMap;
 use anyhow::{anyhow, ensure, Result};
@@ -32,7 +33,7 @@ impl KmerStore {
         KmerStore {
             pos_max: Position::zero(),
             opt: 0,
-            rep_max_dist: rep_max_dist.as_pos(),
+            rep_max_dist: rep_max_dist.basepos_to_pos(),
             b2: vec![0; 1 << shift],                  // sequence (4 per u8).
             kmp: vec![u64::zero(); 1 << (shift + 1)], // kmer positions
             //kmp,
@@ -136,7 +137,7 @@ mod tests {
 
         ks.push_contig(p.pos(), goffs);
         ks.offset_contig(10_000); // simulate N-stretch of 10000
-        p += 64.as_pos().as_u64(); // one readlength
+        p += 64.basepos_to_pos().as_u64(); // one readlength
         ks.push_contig(p.pos(), goffs);
         ks.offset_contig(64);
 
@@ -144,7 +145,7 @@ mod tests {
         ks.offset_contig(10_000); // another N-stretch of 10000
         ks.push_contig(p.pos(), goffs);
 
-        let i = ks.get_contig(5_508.as_pos());
-        dbg_assert_eq!(ks.contig[i].twobit, 64.as_pos());
+        let i = ks.get_contig(5_508.basepos_to_pos());
+        dbg_assert_eq!(ks.contig[i].twobit, 64.basepos_to_pos());
     }
 }

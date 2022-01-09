@@ -57,7 +57,7 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn dump_stats(ks: &KmerStore<u64>, extent_len: usize) {
+fn dump_stats(ks: &KmerStore, extent_len: usize) {
     let mut stat = [[0; 0x100]; 2];
     for k in ks.kmp.iter() {
         stat[if k.is_set() { 1 } else { 0 }][k.x()] += 1;

@@ -6,6 +6,8 @@ extern crate serde;
 //kmerloc
 #[macro_use]
 extern crate derive_new;
+extern crate derive_more;
+
 //kmer
 extern crate num;
 extern crate num_traits;

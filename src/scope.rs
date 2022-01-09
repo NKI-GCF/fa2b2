@@ -1,11 +1,11 @@
 use crate::kmer::Kmer;
 use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{KmerLoc, ExtPosEtc};
+use crate::kmerloc::{ExtPosEtc, KmerLoc};
 use crate::kmerstore::KmerStore;
 use crate::past_scope::PastScope;
 use crate::rdbg::STAT_DB;
-use anyhow::{ensure, Result};
+use anyhow::Result;
 use std::{cmp, fmt};
 
 pub trait Scope {
@@ -15,7 +15,6 @@ pub trait Scope {
     fn get_i(&self) -> usize;
     fn get_d(&self, i: usize) -> &Kmer<u64>;
     fn is_repetitive(&self) -> bool;
-    fn get_plim(&self) -> (u64, u64);
     fn clear_p_extension(&mut self);
     fn increment(&mut self, b2: TwoBit) -> bool;
     fn extend_p(&mut self);
@@ -49,10 +48,6 @@ pub trait Scope {
         }
         Ok(false)
     }
-    fn is_on_contig(&self, pos: u64) -> bool {
-        let plim = self.get_plim();
-        pos >= plim.0.pos() && pos < plim.1.pos()
-    }
 
     fn dist_if_repetitive(&self, stored_pos: u64, mark_pos: u64, max_dist: u64) -> Option<u64> {
         dbg_assert!(mark_pos > stored_pos);
@@ -68,10 +63,6 @@ pub trait Scope {
         self.get_p().x() + 1 < self.get_kc().extent.len()
     }
 
-    fn is_before_end_of_contig(&self) -> bool {
-        self.get_p().pos() < self.get_plim().1
-    }
-
     fn increment_for_extension<T>(&mut self, ks: &KmerStore<T>) -> Result<()>
     where
         T: ExtPosEtc + fmt::LowerHex + Copy,
@@ -84,15 +75,10 @@ pub trait Scope {
         dbg_assert!(self.increment(b2));
         Ok(())
     }
-
-    fn handle_mark<T>(&mut self, ks: &mut KmerStore<T>) -> Result<()>
-    where
-        T: ExtPosEtc + fmt::LowerHex + Copy,
-    {
+    fn handle_mark(&mut self, ks: &mut KmerStore) -> Result<()> {
         if let Some(mark) = self.get_mark() {
             let (min_idx, min_p) = mark.get();
             if self.is_repetitive() && ks.kmp[min_idx].is_set() {
-                dbg_assert!(self.is_on_contig(min_p.pos()));
                 ks.kmp[min_idx].set_repetitive();
                 return Ok(());
             }

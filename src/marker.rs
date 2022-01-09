@@ -18,11 +18,11 @@ pub struct KmerIter<'a> {
     n_stretch: u64,
     goffs: u64,
     pub(super) scp: HeadScope<'a>,
-    pub(super) ks: &'a mut KmerStore<u64>,
+    pub(super) ks: &'a mut KmerStore,
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
-    pub fn new(ks: &'a mut KmerStore<u64>, kc: &'a KmerConst) -> Self {
+    pub fn new(ks: &'a mut KmerStore, kc: &'a KmerConst) -> Self {
         let scp = HeadScope::new((0, u64::max_value()), kc, 0);
         KmerIter {
             n_stretch: 0,
@@ -118,7 +118,7 @@ impl<'a> KmerIter<'a> {
                         self.scp.period = 0;
                     }
                 }
-                self.scp.complete_and_update_mark::<u64>(b2, self.ks)?;
+                self.scp.complete_and_update_mark(b2, self.ks)?;
             } else {
                 if self.scp.i != 0 {
                     coding += self.scp.i as u64;
@@ -164,7 +164,7 @@ mod tests {
     use anyhow::Result;
     const SEQLEN: usize = 250;
 
-    fn process<'a>(ks: &'a mut KmerStore<u64>, kc: &'a KmerConst, seq: Vec<u8>) -> Result<()> {
+    fn process<'a>(ks: &'a mut KmerStore, kc: &'a KmerConst, seq: Vec<u8>) -> Result<()> {
         let mut kmi = KmerIter::new(ks, kc);
         let definition = fasta::record::Definition::new("test", None);
         let sequence = fasta::record::Sequence::from(seq);
@@ -174,7 +174,7 @@ mod tests {
     #[test]
     fn test_16n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN);
-        let mut ks = KmerStore::<u64>::new(kc.bitlen, 10_000);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000);
         {
             process(&mut ks, &kc, b"NNNNNNNNNNNNNNNN"[..].to_owned())?;
         }
@@ -186,7 +186,7 @@ mod tests {
     #[test]
     fn test_1n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN);
-        let mut ks = KmerStore::<u64>::new(kc.bitlen, 10_000);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000);
         {
             process(&mut ks, &kc, b"N"[..].to_owned())?;
         }
@@ -198,7 +198,7 @@ mod tests {
     #[test]
     fn test_1n1c1n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN);
-        let mut ks = KmerStore::<u64>::new(kc.bitlen, 10_000);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000);
         {
             process(&mut ks, &kc, b"NCN"[..].to_owned())?;
         }
@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn test_17c() -> Result<()> {
         let kc = KmerConst::new(SEQLEN);
-        let mut ks = KmerStore::<u64>::new(kc.bitlen, 10_000);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000);
         {
             process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn test_1n18c1n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN);
-        let mut ks = KmerStore::<u64>::new(kc.bitlen, 10_000);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000);
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
         }
@@ -251,7 +251,7 @@ mod tests {
     #[test]
     fn test_1n16c() -> Result<()> {
         let kc = KmerConst::new(SEQLEN);
-        let mut ks = KmerStore::<u64>::new(kc.bitlen, 10_000);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000);
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
@@ -270,7 +270,7 @@ mod tests {
     #[test]
     fn test_18at() -> Result<()> {
         let kc = KmerConst::new(SEQLEN);
-        let mut ks = KmerStore::<u64>::new(kc.bitlen, 10_000);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000);
         {
             process(&mut ks, &kc, b"ATATATATATATATATAT"[..].to_owned())?;
         }

@@ -29,6 +29,7 @@ noodles-fasta = "0.5.1"
 noodles-bam = "0.12.0"
 noodles-cram = "0.9.0"
 noodles-fastq = "0.3.0"
+derive_more = "0.99.17"
 
 [profile.release]
 debug = true

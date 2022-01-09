@@ -1,6 +1,6 @@
 use crate::kmer::{Kmer, TwoBit};
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{KmerLoc, ExtPosEtc};
+use crate::kmerloc::{ExtPosEtc, KmerLoc};
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
@@ -15,7 +15,6 @@ pub struct HeadScope<'a> {
     pub mark: KmerLoc,
     pub i: usize,
     pub mod_i: usize,
-    pub plim: (u64, u64),
     pub period: u64,
 }
 
@@ -29,17 +28,13 @@ impl<'a> HeadScope<'a> {
             mark: KmerLoc::new(usize::max_value(), p.extension()),
             i: 0,
             mod_i: 0,
-            plim,
             period: 0,
         }
     }
 
     // hier krijgen we nieuwe sequence, zijn geen past scope aan het behandelen, of zo.
     // .i & .p increments en kmer .d[] updates vinden plaats.
-    pub fn complete_and_update_mark<T>(&mut self, b2: TwoBit, ks: &mut KmerStore<T>) -> Result<()>
-    where
-        T: ExtPosEtc + fmt::LowerHex + Copy,
-    {
+    pub fn complete_and_update_mark(&mut self, b2: TwoBit, ks: &mut KmerStore) -> Result<()> {
         if self.increment(b2) {
             let base = self.get_i() - self.kc.kmerlen;
             for x in 0..=self.p.x() {
@@ -68,9 +63,6 @@ impl<'a> Scope for HeadScope<'a> {
     }
     fn get_p(&self) -> u64 {
         self.p
-    }
-    fn get_plim(&self) -> (u64, u64) {
-        self.plim
     }
     fn get_i(&self) -> usize {
         self.i

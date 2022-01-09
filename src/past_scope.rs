@@ -1,7 +1,7 @@
 use crate::kmer::Kmer;
 use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{KmerLoc, ExtPosEtc};
+use crate::kmerloc::{ExtPosEtc, KmerLoc};
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
@@ -22,7 +22,7 @@ pub struct PastScope<'a> {
 
 impl<'a> PastScope<'a> {
     pub fn new<T: ExtPosEtc + fmt::LowerHex>(
-        ks: &KmerStore<T>,
+        ks: &KmerStore,
         kc: &'a KmerConst,
         p: &T,
         idx: usize,
@@ -80,6 +80,12 @@ impl<'a> PastScope<'a> {
         }
         Ok(scp)
     }
+    fn is_before_end_of_contig(&self) -> bool {
+        self.p.as_pos() < self.plim.1
+    }
+    fn is_on_contig(&self, pos: u64) -> bool {
+        pos >= self.plim.0 && pos < self.plim.1
+    }
 }
 
 impl<'a> Scope for PastScope<'a> {
@@ -95,9 +101,6 @@ impl<'a> Scope for PastScope<'a> {
     }
     fn get_p(&self) -> u64 {
         self.p
-    }
-    fn get_plim(&self) -> (u64, u64) {
-        self.plim
     }
     fn get_i(&self) -> usize {
         self.i
@@ -190,7 +193,7 @@ mod tests {
     #[test]
     fn test_reconstruct1() -> Result<()> {
         let kc = KmerConst::new(SEQLEN);
-        let mut ks = KmerStore::<u64>::new(kc.bitlen, 10_000);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000);
         let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
@@ -222,7 +225,7 @@ mod tests {
         let kc = KmerConst::new(seqlen);
 
         for gen in 0..=4_usize.pow(seqlen as u32) {
-            let mut ks = KmerStore::<u64>::new(kc.bitlen, 10_000);
+            let mut ks = KmerStore::new(kc.bitlen, 10_000);
             let mut kmi = KmerIter::new(&mut ks, &kc);
             kmi.ks.p_max = (seqlen as u64).as_pos();
             let seq_vec: Vec<_> = (0..seqlen)

@@ -16,25 +16,25 @@ type ContigRng = (u64, u64);
 pub type Repeat = (u32, u32);
 
 #[derive(Serialize, Deserialize)]
-pub struct KmerStore<T> {
+pub struct KmerStore {
     pub p_max: u64,
     pub opt: u64,
     pub repetition_max_dist: u64,
     pub b2: Vec<u8>,
-    pub kmp: Vec<T>, // position + strand per k-mer.
+    pub kmp: Vec<u64>, // position + strand per k-mer.
     pub contig: Vec<Contig>,
     pub repeat: AHashMap<u64, Repeat>,
 }
 
-impl<T: ExtPosEtc> KmerStore<T> {
+impl KmerStore {
     pub fn new(bitlen: usize, repetition_max_dist: u64) -> Self {
         let shift = bitlen - 2;
         KmerStore {
             p_max: 0,
             opt: 0,
             repetition_max_dist: repetition_max_dist.as_pos(),
-            b2: vec![0; 1 << shift],                  // sequence (4 per u8).
-            kmp: vec![T::no_pos(); 1 << (shift + 1)], // kmer positions
+            b2: vec![0; 1 << shift], // sequence (4 per u8).
+            kmp: vec![u64::no_pos(); 1 << (shift + 1)], // kmer positions
             //kmp,
             contig: Vec::new(), // contig info
             repeat: AHashMap::new(),
@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn it_works() {
         //let mut ks = KmerStore::new(32); // allocates 16 gig of data
-        let mut ks = KmerStore::<u64>::new(2, 10_000);
+        let mut ks = KmerStore::new(2, 10_000);
         let mut p = 0;
         let goffs = p.pos();
 

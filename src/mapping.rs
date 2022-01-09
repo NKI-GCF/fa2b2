@@ -1,6 +1,6 @@
 use crate::kmer::{Kmer, ThreeBit, TwoBit};
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{KmerLoc, ExtPosEtc};
+use crate::kmerloc::{ExtPosEtc, KmerLoc};
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
@@ -20,7 +20,7 @@ pub struct Mapping<'a> {
 
 impl<'a> Mapping<'a> {
     pub fn new<T: ExtPosEtc + fmt::LowerHex>(
-        ks: &KmerStore<T>,
+        ks: &KmerStore,
         kc: &'a KmerConst,
         record: fastq::Record,
     ) -> Result<Self> {
@@ -59,9 +59,6 @@ impl<'a> Mapping<'a> {
 }
 
 impl<'a> Scope for Mapping<'a> {
-    fn get_plim(&self) -> (u64, u64) {
-        panic!();
-    }
     fn is_repetitive(&self) -> bool {
         panic!();
     }

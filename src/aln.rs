@@ -20,7 +20,7 @@ pub fn aln(matches: &ArgMatches) -> Result<()> {
         ks_name
     );
     let ks_file = io::BufReader::new(fs::File::create(ks_name)?);
-    let ks: KmerStore<u64> = deserialize_from(ks_file)?;
+    let ks: KmerStore = deserialize_from(ks_file)?;
     let bitlen: usize = ks.get_bitlen();
 
     let kc = KmerConst::from_bitlen(bitlen);

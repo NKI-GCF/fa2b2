@@ -14,3 +14,7 @@ stackcollapse-perf.pl
 perf.out
 tags
 docs
+test_output_alt
+*.gpg
+*.zip
+*default_output*

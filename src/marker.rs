@@ -13,7 +13,6 @@ use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
 use anyhow::Result;
 use noodles_fasta as fasta;
-use std::cmp;
 
 pub struct KmerIter<'a> {
     n_stretch: u64,
@@ -49,49 +48,38 @@ impl<'a> KmerIter<'a> {
         // If a repetition ends in an N-stretch, thereafter offset to period
         // may differ or the repetition could be different or entirely gone.
         // TODO: allow repetition to include N-stretch - if both sides of N-stretch show the same repetition.
-        self.scp.set_period(0);
+        self.scp.unset_period();
     }
 
-    fn extend_repetive_on_cycle(&mut self, stored_pos: u64, mark_pos: u64, pd: u64) {
-        let dist = mark_pos - stored_pos;
-        if dist % pd == 0 {
-            let dist_u32 = u32::try_from(dist).unwrap();
-            self.ks.extend_repetitive(mark_pos, dist_u32);
-        }
-    }
-
-    fn replace_repetive_on_cycle(&mut self, stored_pos: u64, mark_pos: u64, pd: u64) {
-        let dist = stored_pos - mark_pos;
-        if dist % pd == 0 {
-            let dist_u32 = u32::try_from(dist).unwrap();
-            self.ks.replace_repetitive(stored_pos, mark_pos, dist_u32);
-        }
-    }
-
-    /*fn update_repetitive(&mut self) {
+    fn update_repetitive(&mut self, pd: u64) {
+        let idx = self.scp.mark.get_idx();
+        let stored = self.ks.kmp[idx];
         if stored.is_set() {
             let mark_pos = self.scp.mark.p.pos();
             let stored_pos = stored.pos();
-            match mark_pos.cmp(&stored_pos) {
-                cmp::Ordering::Greater => {
-                    self.extend_repetive_on_cycle(stored_pos, mark_pos, pd);
-                }
-                cmp::Ordering::Less => {
-                    dbg_print!("repetitive occurs before already stored [{:x}] p {:#x} <=> stored {:#x}", idx, self.scp.mark.p, stored);
-                    let _x = self.scp.p.x();
-                    dbg_assert!(_x > 0);
-                    self.replace_repetive_on_cycle(stored_pos, mark_pos, pd);
-                    // FIXME: moet positie nu niet gezet worden, bij less?
-                }
-                cmp::Ordering::Equal => {
-                    dbg_print!("minimum remained [{:x}] {:#x}", idx, stored)
+            if mark_pos != stored_pos {
+                if let Some(dist) = mark_pos.get_if_mark_on_period(stored_pos, pd) {
+                    if mark_pos > stored_pos {
+                        self.ks.extend_repetitive(mark_pos, dist);
+                    } else {
+                        dbg_print!(
+                            "repetitive occurs before already stored [{:x}] p {:#x} <=> stored {:#x}",
+                            idx,
+                            self.scp.mark.p,
+                            stored
+                        );
+                        let _x = self.scp.p.x();
+                        dbg_assert!(_x > 0);
+                        self.ks.replace_repetitive(stored_pos, mark_pos, dist);
+                        // FIXME: moet positie nu niet gezet worden, bij less?
+                    }
                 }
             }
         } else {
             // XXX this occurs, is it an edge case or a bug?
             dbg_print!("repeat with unset mark.idx (b2 corresponds) ??");
         }
-    }*/
+    }
 
     pub fn markcontig<T: ExtPosEtc>(&mut self, record: fasta::Record) -> Result<()> {
         self.goffs = 0;
@@ -103,12 +91,12 @@ impl<'a> KmerIter<'a> {
         let mut seq = record.sequence().as_ref().iter();
 
         while let Some(b3) = seq.next().map(ThreeBit::from) {
-            let p = self.scp.p;
+            let pos = self.scp.p.pos();
             if let Some(b2) = b3.as_twobit_if_not_n() {
                 // no third bit for A, C, T or G.
                 // new sequence is also stored, to enable lookup later.
-                if let Some(qb) = self.ks.b2.get_mut(p.byte_pos()) {
-                    *qb |= b2.pos_shift(p).as_u8();
+                if let Some(qb) = self.ks.b2.get_mut(pos.byte_pos()) {
+                    *qb |= b2.pos_shift(pos).as_u8();
                 }
                 if self.n_stretch > 0 {
                     n_count += self.n_stretch;
@@ -117,42 +105,19 @@ impl<'a> KmerIter<'a> {
                     let pd = self.scp.period;
                     dbg_assert!(pd <= self.scp.p, "{:#x} {:#x}", pd, self.scp.p);
                     if self.ks.b2_for_p(self.scp.p - pd, true)? == b2 {
-                        let idx = self.scp.mark.get_idx();
-                        let stored = self.ks.kmp[idx];
                         repetitive += 1;
-                        if stored.is_set() {
-                            let mark_pos = self.scp.mark.p.pos();
-                            let stored_pos = stored.pos();
-                            match mark_pos.cmp(&stored_pos) {
-                                cmp::Ordering::Greater => {
-                                    self.extend_repetive_on_cycle(stored_pos, mark_pos, pd);
-                                }
-                                cmp::Ordering::Less => {
-                                    dbg_print!("repetitive occurs before already stored [{:x}] p {:#x} <=> stored {:#x}", idx, self.scp.mark.p, stored);
-                                    let _x = self.scp.p.x();
-                                    dbg_assert!(_x > 0);
-                                    self.replace_repetive_on_cycle(stored_pos, mark_pos, pd);
-                                    // FIXME: moet positie nu niet gezet worden, bij less?
-                                }
-                                cmp::Ordering::Equal => {
-                                    dbg_print!("minimum remained [{:x}] {:#x}", idx, stored)
-                                }
-                            }
-                        } else {
-                            // XXX this occurs, is it an edge case or a bug?
-                            dbg_print!("repeat with unset mark.idx (b2 corresponds) ??");
-                        }
+                        self.update_repetitive(pd);
                     } else {
-                        self.scp.set_period(0);
+                        self.scp.unset_period();
                     }
                 }
                 self.scp.complete_and_update_mark(b2, self.ks)?;
             } else {
                 if self.scp.i != 0 {
                     coding += self.scp.i as u64;
-                    dbg_print!("started N-stretch at {}.", p);
+                    dbg_print!("started N-stretch at {:?}.", pos);
                     self.goffs += self.scp.i as u64;
-                    self.ks.push_contig(p, self.goffs);
+                    self.ks.push_contig(pos, self.goffs);
 
                     self.n_stretch = 0;
                     self.scp.i = 0;
@@ -207,7 +172,7 @@ mod tests {
             process(&mut ks, &kc, b"NNNNNNNNNNNNNNNN"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.contig.len(), 1);
-        dbg_assert_eq!(ks.contig[0].twobit, 0);
+        dbg_assert_eq!(ks.contig[0].twobit, 0.as_pos());
         dbg_assert_eq!(ks.contig[0].genomic, 16);
         Ok(())
     }
@@ -219,7 +184,7 @@ mod tests {
             process(&mut ks, &kc, b"N"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.contig.len(), 1);
-        dbg_assert_eq!(ks.contig[0].twobit, 0);
+        dbg_assert_eq!(ks.contig[0].twobit, 0.as_pos());
         dbg_assert_eq!(ks.contig[0].genomic, 1);
         Ok(())
     }
@@ -245,7 +210,7 @@ mod tests {
             process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         dbg_assert_eq!(ks.kmp.len(), 128);
-        let mut first_pos = 1 | (kc.kmerlen as u64).as_pos();
+        let mut first_pos = 1 | (kc.kmerlen as u64).as_pos().as_u64();
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 1..ks.kmp.len() {
@@ -264,7 +229,7 @@ mod tests {
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
         }
-        let mut first_pos = 1 | (kc.kmerlen as u64).as_pos();
+        let mut first_pos = 1 | (kc.kmerlen as u64).as_pos().as_u64();
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 1..ks.kmp.len() {
@@ -284,7 +249,7 @@ mod tests {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         let mut seen = 0;
-        let mut first_pos = 1 | (kc.kmerlen as u64).as_pos();
+        let mut first_pos = 1 | (kc.kmerlen as u64).as_pos().as_u64();
         first_pos.set_repetitive();
         for i in 1..ks.kmp.len() {
             if ks.kmp[i].is_set() {
@@ -304,7 +269,7 @@ mod tests {
         }
         for i in 0..ks.kmp.len() {
             dbg_assert!(
-                ks.kmp[i].is_no_pos() || !ks.kmp[i].is_dup(),
+                ks.kmp[i].is_zero() || !ks.kmp[i].is_dup(),
                 "[{}], {:x}",
                 i,
                 ks.kmp[i]

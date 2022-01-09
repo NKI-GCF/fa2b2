@@ -1,7 +1,7 @@
 use crate::kmer::Kmer;
 use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{ExtPosEtc, KmerLoc};
+use crate::kmerloc::{ExtPosEtc, KmerLoc, Position};
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
@@ -13,7 +13,7 @@ pub struct PastScope<'a> {
     p: u64,
     i: usize,
     mod_i: usize,
-    plim: (u64, u64),
+    plim: (Position, Position),
     period: u64,
     mark: KmerLoc,
     d: Vec<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
@@ -28,20 +28,20 @@ impl<'a> PastScope<'a> {
         idx: usize,
     ) -> Result<Self> {
         let pos = p.pos();
-        ensure!(pos != ExtPosEtc::no_pos());
+        ensure!(pos != Position::zero());
         let plim = ks.get_contig_start_end_for_p(pos);
         let bound = kc.get_kmer_boundaries(pos, plim);
-        dbg_print!("{:x}, {:x}", bound.0, bound.1);
+        dbg_print!("{:?}", bound);
 
         let mut scp = PastScope {
             kc,
-            p: bound.0 | p.extension(),
+            p: bound.0.as_u64() | p.extension(),
             i: 0,
             mod_i: 0,
             plim,
             period: 0,
             mark: KmerLoc::new(usize::max_value(), p.extension()),
-            d: vec![Kmer::new(kc.kmerlen as u32, bound.0); kc.no_kmers],
+            d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         };
         let x = scp.p.x();
@@ -83,7 +83,7 @@ impl<'a> PastScope<'a> {
     fn is_before_end_of_contig(&self) -> bool {
         self.p.as_pos() < self.plim.1
     }
-    fn is_on_contig(&self, pos: u64) -> bool {
+    fn is_on_contig(&self, pos: Position) -> bool {
         pos >= self.plim.0 && pos < self.plim.1
     }
 }
@@ -125,7 +125,12 @@ impl<'a> Scope for PastScope<'a> {
         Ok(())
     }
 
-    fn dist_if_repetitive(&self, stored_p: u64, mark_p: u64, max_dist: u64) -> Option<u64> {
+    fn dist_if_repetitive(
+        &self,
+        stored_p: u64,
+        mark_p: u64,
+        max_dist: Position,
+    ) -> Option<Position> {
         let stored_pos = stored_p.pos();
         let mark_pos = mark_p.pos();
         dbg_assert!(mark_pos > stored_pos);
@@ -166,9 +171,12 @@ impl<'a> Scope for PastScope<'a> {
         dbg_print!("{:<30}<P>", format!("[{:x}] = {:x} | x({})", idx, p, x));
         self.mark.set(idx, p, x);
     }
-    fn set_period(&mut self, period: u64) {
-        dbg_assert!(period < self.p);
-        self.period = period;
+    fn set_period(&mut self, period: Position) {
+        dbg_assert!(period < self.p.pos());
+        self.period = period.as_u64();
+    }
+    fn unset_period(&mut self) {
+        self.set_period(Position::zero());
     }
 }
 
@@ -221,7 +229,7 @@ mod tests {
         let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
-        kmi.ks.p_max = (seq_vec.len() as u64).as_pos();
+        kmi.ks.pos_max = (seq_vec.len() as u64).as_pos();
         let definition = fasta::record::Definition::new("test", None);
         let sequence = fasta::record::Sequence::from(seq_vec);
         kmi.markcontig::<u64>(fasta::Record::new(definition, sequence))?;
@@ -251,7 +259,7 @@ mod tests {
         for gen in 0..=4_usize.pow(seqlen as u32) {
             let mut ks = KmerStore::new(kc.bitlen, 10_000);
             let mut kmi = KmerIter::new(&mut ks, &kc);
-            kmi.ks.p_max = (seqlen as u64).as_pos();
+            kmi.ks.pos_max = (seqlen as u64).as_pos();
             let seq_vec: Vec<_> = (0..seqlen)
                 .map(|i| match (gen >> (i << 1)) & 3 {
                     0 => 'A',

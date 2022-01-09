@@ -1,4 +1,4 @@
-use crate::kmerloc::ExtPosEtc;
+use crate::kmerloc::{ExtPosEtc, Position};
 use crate::rdbg::STAT_DB;
 use num::{FromPrimitive, Unsigned};
 use num_traits::PrimInt;
@@ -25,8 +25,8 @@ impl ThreeBit {
 
 /// No N, 2 bits for code, same as above.
 impl TwoBit {
-    pub fn pos_shift(&self, p: u64) -> TwoBitx4 {
-        let ob2 = self.0.checked_shl(p.b2_shift());
+    pub fn pos_shift(&self, pos: Position) -> TwoBitx4 {
+        let ob2 = self.0.checked_shl(pos.b2_shift());
         TwoBitx4(ob2.expect("bug shifting from b2"))
     }
     pub fn as_kmer_top(&self, shift: u32) -> u64 {
@@ -43,7 +43,7 @@ impl TwoBit {
 impl TwoBitx4 {
     pub fn to_b2(&self, p: u64, for_repeat: bool) -> TwoBit {
         // the third bit (for N) is actually never set, because we don't store those in TwoBitx4
-        let ob2 = self.0.checked_shr(p.b2_shift());
+        let ob2 = self.0.checked_shr(p.pos().b2_shift());
         let b2 = ob2.expect("bug shifting to b2") & 3;
         if !for_repeat {
             dbg_print!("=> b2 {:x}, p: {:#x}", b2, p);
@@ -75,7 +75,7 @@ pub struct Kmer<T> {
     pub dna: T,
     pub rc: T,
     topb2_shift: u32,
-    pub p: u64,
+    pub pos: Position,
 } //^-^\\
 
 pub trait RevCmp<T: PrimInt + FromPrimitive> {
@@ -117,14 +117,14 @@ where
     T: Unsigned + PrimInt + FromPrimitive,
 {
     /// get a kmer for this length
-    pub fn new(kmerlen: u32, p: u64) -> Self {
+    pub fn new(kmerlen: u32) -> Self {
         let bitlen = kmerlen * 2;
         let topb2_shift = bitlen - 2;
         Kmer {
             dna: <T>::zero(),
             rc: <T>::zero(),
             topb2_shift,
-            p,
+            pos: Position::zero(),
         }
     }
 
@@ -135,7 +135,7 @@ where
         let rc = (T::to_u64(&self.rc).unwrap() & kmer_mask) << 2;
         self.dna = T::from_u64(dna | b2.as_kmer_top(self.topb2_shift)).unwrap();
         self.rc = T::from_u64(rc | b2.as_kmer_bottom_rc()).unwrap();
-        self.p.incr_pos();
+        self.pos.incr();
     }
     /// true if the kmer is from the template. Palindromes are special.
     pub fn is_template(&self) -> bool {
@@ -173,7 +173,7 @@ where
         }
     }
     /// return an index specific per sequence but the same for the other orientation
-    pub fn get_hash(&self, x: usize) -> (usize, u64) {
+    pub fn get_hash(&self, x: usize) -> (usize, Position) {
         let seq = T::to_usize(if self.dna < self.rc {
             &self.dna
         } else {
@@ -189,7 +189,7 @@ where
         let idx = if (seq & overbit) == 0 { seq } else { m & !seq };
         (
             idx ^ idx.wrapping_shl(x as u32) & (m ^ ((1 << x) - 1)),
-            self.p,
+            self.pos,
         )
     }
 }
@@ -218,28 +218,27 @@ mod tests {
     use rand::{thread_rng, Rng};
 
     /// return a new kmer for given index, length and orientation.
-    fn kmer_from_idx<T: FromPrimitive>(index: usize, kmerlen: u32, ori: bool) -> Kmer<T> {
-        let bitlen = kmerlen * 2;
-        let topb2_shift = bitlen - 2;
+    fn kmer_from_idx<T>(index: usize, kmerlen: u32, ori: bool) -> Kmer<T>
+    where
+        T: Unsigned + PrimInt + FromPrimitive,
+    {
         let mut dna = index as u64;
         let mut rc = dna.revcmp(kmerlen as usize);
         if dna > rc || (dna == rc && (dna & 1) == 0) {
-            let overbit = 1 << (topb2_shift + 1);
+            let overbit = 1 << (((kmerlen << 1) - 2) + 1);
             let overmask = overbit | (overbit - 1);
             dna ^= overmask;
             rc ^= overmask;
         }
         let (dna, rc) = if ori { (dna, rc) } else { (rc, dna) };
-        Kmer {
-            dna: T::from_u64(dna).unwrap(),
-            rc: T::from_u64(rc).unwrap(),
-            topb2_shift,
-            p: 0,
-        }
+        let mut kmer = Kmer::new(kmerlen);
+        kmer.dna = T::from_u64(dna).unwrap();
+        kmer.rc = T::from_u64(rc).unwrap();
+        kmer
     }
     #[test]
     fn test_u64() {
-        let mut kmer: Kmer<u64> = Kmer::new(32, 0);
+        let mut kmer: Kmer<u64> = Kmer::new(32);
         for i in 0..32 {
             kmer.add(TwoBit(i & 3));
         }
@@ -249,7 +248,7 @@ mod tests {
     }
     #[test]
     fn test_u32() {
-        let mut kmer: Kmer<u32> = Kmer::new(16, 0);
+        let mut kmer: Kmer<u32> = Kmer::new(16);
         for i in 0..16 {
             kmer.add(TwoBit(i & 3));
         }
@@ -259,7 +258,7 @@ mod tests {
     }
     #[test]
     fn test_u8() {
-        let mut kmer: Kmer<u8> = Kmer::new(4, 0);
+        let mut kmer: Kmer<u8> = Kmer::new(4);
         for i in 0..4 {
             kmer.add(TwoBit(i & 3));
         }
@@ -270,7 +269,7 @@ mod tests {
     #[test]
     fn unique() {
         let mut seen = vec![false; 256];
-        let mut kmer: Kmer<u8> = Kmer::new(4, 0);
+        let mut kmer: Kmer<u8> = Kmer::new(4);
         for i in 0..=255 {
             for j in 0..4 {
                 kmer.add(TwoBit((i >> (j << 1)) & 3));
@@ -285,7 +284,7 @@ mod tests {
     fn test_revcmp() {
         let mut rng = thread_rng();
         let kmerlen = rng.gen_range(2..32);
-        let mut kmer: Kmer<u64> = Kmer::new(kmerlen, 0);
+        let mut kmer: Kmer<u64> = Kmer::new(kmerlen);
         for _ in 0..32 {
             kmer.add(TwoBit(rng.gen_range(0..4)));
         }
@@ -302,7 +301,7 @@ mod tests {
         let last = rng.gen_range((kmerlen + 1)..102);
         let pick = rng.gen_range(kmerlen..cmp::max(last - 1, kmerlen + 1));
 
-        let mut kmer: Kmer<u64> = Kmer::new(kmerlen, 0);
+        let mut kmer: Kmer<u64> = Kmer::new(kmerlen);
         for i in 0..last {
             kmer.add(TwoBit(rng.gen_range(0..4)));
             if i == pick {
@@ -325,7 +324,7 @@ mod tests {
     }
     #[test]
     fn extra() {
-        let mut kmer: Kmer<u64> = Kmer::new(4, 0);
+        let mut kmer: Kmer<u64> = Kmer::new(4);
         for _ in 0..16 {
             kmer.add(TwoBit(1));
         }

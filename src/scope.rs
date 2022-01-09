@@ -1,12 +1,12 @@
 use crate::kmer::Kmer;
 use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{ExtPosEtc, KmerLoc};
+use crate::kmerloc::{ExtPosEtc, KmerLoc, Position};
 use crate::kmerstore::KmerStore;
 use crate::past_scope::PastScope;
 use crate::rdbg::STAT_DB;
 use anyhow::Result;
-use std::{cmp, fmt};
+use std::cmp;
 
 pub trait Scope {
     fn get_mark(&self) -> Option<&KmerLoc>;
@@ -20,9 +20,15 @@ pub trait Scope {
     fn extend_p(&mut self);
     fn mark_reset(&mut self);
     fn set_mark(&mut self, idx: usize, p: u64, x: usize);
-    fn set_period(&mut self, period: u64);
+    fn set_period(&mut self, period: Position);
     fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()>;
-    fn dist_if_repetitive(&self, stored_p: u64, mark_p: u64, max_dist: u64) -> Option<u64>;
+    fn dist_if_repetitive(
+        &self,
+        stored_p: u64,
+        mark_p: u64,
+        max_dist: Position,
+    ) -> Option<Position>;
+    fn unset_period(&mut self);
 
     /// is occ complete? call na complete_kmer() - self.i increment.
     fn all_kmers(&self) -> bool {
@@ -64,12 +70,12 @@ pub trait Scope {
             }
             let stored_p = ks.kmp[min_idx];
 
-            if ks.kmp[min_idx].is_no_pos() {
+            if ks.kmp[min_idx].is_zero() {
                 ks.set_kmp(min_idx, min_p);
                 return Ok(());
             } else if stored_p.is_replaceable_by(min_p) {
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
-                    ks.p_max = cmp::max(ks.p_max, self.get_p().pos());
+                    ks.pos_max = cmp::max(ks.pos_max, self.get_p().pos());
                     let mut new_scp = PastScope::new(ks, self.get_kc(), &stored_p, min_idx)?;
 
                     // unset when kmer is not observed before bound.1:
@@ -90,9 +96,7 @@ pub trait Scope {
             if stored_p.extension() == min_p.extension() {
                 // If a kmer occurs multiple times within an extending readlength (repetition),
                 // only the first gets a position. During mapping this should be kept in mind.
-                if let Some(dist) =
-                    self.dist_if_repetitive(stored_p, mark.p, ks.repetition_max_dist)
-                {
+                if let Some(dist) = self.dist_if_repetitive(stored_p, mark.p, ks.rep_max_dist) {
                     self.set_period(dist);
                     ks.kmp[min_idx].set_repetitive();
                     return Ok(());
@@ -153,10 +157,12 @@ pub trait Scope {
             let mut hash = kmer1.get_idx(bin.0 <= bin.1);
             let mut p = if let Some(mark) = self.get_mark() {
                 match hash.cmp(&mark.get_idx()) {
-                    cmp::Ordering::Less => self.get_p().pos_with_ext(x) - (bin.0 as u64).as_pos(),
+                    cmp::Ordering::Less => {
+                        self.get_p().pos_with_ext(x) - (bin.0 as u64).as_pos().as_u64()
+                    }
                     cmp::Ordering::Greater => return false,
                     cmp::Ordering::Equal => {
-                        let p = self.get_p().pos_with_ext(x) - (bin.0 as u64).as_pos();
+                        let p = self.get_p().pos_with_ext(x) - (bin.0 as u64).as_pos().as_u64();
                         if p >= mark.p {
                             return false;
                         }
@@ -164,7 +170,7 @@ pub trait Scope {
                     }
                 }
             } else {
-                self.get_p().pos_with_ext(x) - (bin.0 as u64).as_pos()
+                self.get_p().pos_with_ext(x) - (bin.0 as u64).as_pos().as_u64()
             };
             p ^= match bin.0.cmp(&bin.1) {
                 cmp::Ordering::Less => {

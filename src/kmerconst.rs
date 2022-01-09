@@ -1,4 +1,4 @@
-use crate::kmerloc::ExtPosEtc;
+use crate::kmerloc::{BasePos, ExtPosEtc, Position};
 use crate::rdbg::STAT_DB;
 use std::cmp;
 
@@ -74,11 +74,21 @@ impl KmerConst {
         cmp::max(kmer.0, kmer.1)
     }
 
-    pub fn get_kmer_boundaries(&self, p: u64, contig: (u64, u64)) -> (u64, u64) {
+    pub fn get_kmer_boundaries(
+        &self,
+        pos: Position,
+        contig: (Position, Position),
+    ) -> (Position, Position) {
         //let afs = self.afstand(p.x()); // => zou van venster / no_kmers afgetrokken kunnen
+        let venster = Position::from(BasePos::from(self.venster));
+        let lower = if pos > venster {
+            pos - venster
+        } else {
+            Position::zero()
+        };
         (
-            cmp::max(p.saturating_sub((self.venster as u64).as_pos()), contig.0),
-            cmp::min(p + (self.no_kmers as u64 - 1).as_pos(), contig.1),
+            cmp::max(lower, contig.0),
+            cmp::min(pos + (self.no_kmers as u64 - 1).as_pos(), contig.1),
         )
     }
 }

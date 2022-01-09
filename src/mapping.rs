@@ -1,6 +1,6 @@
 use crate::kmer::{Kmer, ThreeBit, TwoBit};
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{ExtPosEtc, KmerLoc};
+use crate::kmerloc::{ExtPosEtc, KmerLoc, Position};
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
@@ -30,7 +30,7 @@ impl<'a> Mapping<'a> {
             i: 0,
             mod_i: 0,
             mark: KmerLoc::new(usize::max_value(), 0),
-            d: vec![Kmer::new(kc.kmerlen as u32, 0); kc.no_kmers],
+            d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         };
         let mut x = 0;
@@ -48,7 +48,7 @@ impl<'a> Mapping<'a> {
         }
         Ok(scp)
     }
-    fn pick_mark(&mut self, x: usize) -> (usize, u64) {
+    fn pick_mark(&mut self, x: usize) -> (usize, Position) {
         let med = self.kc.no_kmers >> 1;
         let i = self
             .z
@@ -62,7 +62,10 @@ impl<'a> Scope for Mapping<'a> {
     fn is_repetitive(&self) -> bool {
         panic!();
     }
-    fn set_period(&mut self, _period: u64) {
+    fn set_period(&mut self, _period: Position) {
+        panic!();
+    }
+    fn unset_period(&mut self) {
         panic!();
     }
     fn get_mark(&self) -> Option<&KmerLoc> {
@@ -93,7 +96,12 @@ impl<'a> Scope for Mapping<'a> {
         dbg_assert!(self.increment(b2));
         Ok(())
     }
-    fn dist_if_repetitive(&self, stored_p: u64, mark_p: u64, max_dist: u64) -> Option<u64> {
+    fn dist_if_repetitive(
+        &self,
+        stored_p: u64,
+        mark_p: u64,
+        max_dist: Position,
+    ) -> Option<Position> {
         None
     }
 

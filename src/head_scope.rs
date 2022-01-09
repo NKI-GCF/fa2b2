@@ -1,6 +1,6 @@
 use crate::kmer::{Kmer, TwoBit};
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{ExtPosEtc, KmerLoc};
+use crate::kmerloc::{ExtPosEtc, KmerLoc, Position};
 use crate::kmerstore::KmerStore;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
@@ -23,7 +23,7 @@ impl<'a> HeadScope<'a> {
         HeadScope {
             kc,
             p,
-            d: vec![Kmer::new(kc.kmerlen as u32, 0); kc.no_kmers],
+            d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).into_iter().collect(),
             mark: KmerLoc::new(usize::max_value(), p.extension()),
             i: 0,
@@ -73,9 +73,12 @@ impl<'a> Scope for HeadScope<'a> {
     fn is_repetitive(&self) -> bool {
         self.period != 0
     }
-    fn set_period(&mut self, period: u64) {
-        dbg_assert!(self.p.is_no_pos() || period < self.p);
-        self.period = period;
+    fn set_period(&mut self, period: Position) {
+        dbg_assert!(self.p.is_zero() || period < self.p.pos());
+        self.period = period.as_u64();
+    }
+    fn unset_period(&mut self) {
+        self.set_period(Position::zero());
     }
     fn clear_p_extension(&mut self) {
         self.p.clear_extension();
@@ -86,7 +89,12 @@ impl<'a> Scope for HeadScope<'a> {
         Ok(())
     }
 
-    fn dist_if_repetitive(&self, stored_p: u64, mark_p: u64, max_dist: u64) -> Option<u64> {
+    fn dist_if_repetitive(
+        &self,
+        stored_p: u64,
+        mark_p: u64,
+        max_dist: Position,
+    ) -> Option<Position> {
         let stored_pos = stored_p.pos();
         let mark_pos = mark_p.pos();
         dbg_assert!(mark_pos > stored_pos);

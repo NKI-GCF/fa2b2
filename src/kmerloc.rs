@@ -1,4 +1,7 @@
-use crate::new_types::position::{BasePos, Position};
+use crate::new_types::{
+    extension::Extension,
+    position::{BasePos, Position},
+};
 use crate::rdbg::STAT_DB;
 use std::clone::Clone;
 use std::cmp;
@@ -40,7 +43,7 @@ pub trait ExtPosEtc: Clone {
     fn get_ori(&self) -> u64;
     fn incr_pos(&mut self);
     fn decr_pos(&mut self);
-    fn extension(&self) -> u64;
+    fn extension(&self) -> Extension;
     fn x(&self) -> usize;
     fn same_ori(&self, p: u64) -> bool;
     fn blacklist(&mut self);
@@ -112,13 +115,14 @@ impl ExtPosEtc for u64 {
         *self -= 1_u64.checked_shl(POS_SHIFT).expect("decr_pos shft");
     }
     // not all extensions may apply, it's dependent on genome size.
-    fn extension(&self) -> u64 {
+    fn extension(&self) -> Extension {
+        // TODO: rewrite when ExtPosEtc is a new type
         //FIXME: change so that extension is counted down.
-        //assert!(self.is_set());
-        self & EXT_MASK
+
+        Extension::from(((*self & EXT_MASK) >> EXT_SHIFT) as usize)
     }
     fn x(&self) -> usize {
-        self.extension().checked_shr(EXT_SHIFT).expect("x() shft") as usize
+        usize::from(self.extension())
     }
     fn same_ori(&self, p: u64) -> bool {
         dbg_assert!(self.is_set());
@@ -174,7 +178,7 @@ impl ExtPosEtc for u64 {
     }
     fn is_replaceable_by(&self, new_entry: u64) -> bool {
         // only extension bits means blacklisting, except for extension 0. pos is always > kmerlen
-        new_entry.extension() > self.rep_dup_masked() // TODO: count down extension?
+        new_entry.extension().as_u64() > self.rep_dup_masked() // TODO: count down extension?
             || (new_entry.extension() == self.extension() && new_entry.pos() <= self.pos())
     }
     fn is_set_and_not(&self, other: u64) -> bool {

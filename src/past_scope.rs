@@ -33,15 +33,16 @@ impl<'a> PastScope<'a> {
         let plim = ks.get_contig_start_end_for_p(pos);
         let bound = kc.get_kmer_boundaries(pos, plim);
         dbg_print!("{:?}", bound);
+        let extension_u64 = p.extension().as_u64();
 
         let mut scp = PastScope {
             kc,
-            p: bound.0.as_u64() | p.extension(),
+            p: bound.0.as_u64() | extension_u64,
             i: 0,
             mod_i: 0,
             plim,
             period: 0,
-            mark: KmerLoc::new(usize::max_value(), p.extension()),
+            mark: KmerLoc::new(usize::max_value(), extension_u64),
             d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         };

@@ -26,7 +26,7 @@ impl<'a> HeadScope<'a> {
             p,
             d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).into_iter().collect(),
-            mark: KmerLoc::new(usize::max_value(), p.extension()),
+            mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
             i: 0,
             mod_i: 0,
             period: 0,

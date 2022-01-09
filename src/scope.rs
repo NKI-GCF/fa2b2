@@ -78,7 +78,7 @@ pub trait Scope {
             } else if stored_p.is_replaceable_by(min_p) {
                 if dbgx!(stored_p.is_set_and_not(min_p)) {
                     ks.pos_max = cmp::max(ks.pos_max, self.get_p().pos());
-                    let mut new_scp = PastScope::new(ks, self.get_kc(), &stored_p, min_idx)?;
+                    let mut new_scp = PastScope::new(ks, self.get_kc(), stored_p, min_idx)?;
 
                     // unset when kmer is not observed before bound.1:
                     if new_scp.get_p().is_set() {

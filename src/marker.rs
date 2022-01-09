@@ -63,7 +63,7 @@ impl<'a> KmerIter<'a> {
                         self.ks.extend_repetitive(mark_pos, dist);
                     } else {
                         dbg_print!(
-                            "repetitive occurs before already stored [{:x}] p {:#x} <=> stored {:#x}",
+                            "repetitive occurs before already stored [{:x}] p {:?} <=> stored {:?}",
                             idx,
                             self.scp.mark.p,
                             stored
@@ -103,7 +103,7 @@ impl<'a> KmerIter<'a> {
                     self.finalize_n_stretch();
                 } else if self.scp.period != 0 && dbg_dump_if!(self.scp.mark.is_set(), false) {
                     let pd = self.scp.period;
-                    dbg_assert!(pd <= self.scp.p, "{:#x} {:#x}", pd, self.scp.p);
+                    dbg_assert!(pd <= self.scp.p.pos(), "{:?} {:?}", pd, self.scp.p);
                     if self.ks.b2_for_p(self.scp.p - pd, true)? == b2 {
                         repetitive += 1;
                         self.update_repetitive(pd);

@@ -89,7 +89,7 @@ impl KmerConst {
         };
         (
             cmp::max(lower, contig.0),
-            cmp::min(pos + (self.no_kmers as u64 - 1).basepos_to_pos(), contig.1),
+            cmp::min(pos + Position::from(BasePos::from(self.no_kmers)), contig.1),
         )
     }
 }

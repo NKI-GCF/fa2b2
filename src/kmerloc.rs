@@ -67,12 +67,12 @@ impl ExtPosEtc {
     pub fn is_zero(&self) -> bool {
         self.pos() == Position::zero()
     }
-    pub fn set_ori(&mut self, p: ExtPosEtc) {
-        self.0 ^= (self.0 ^ p.0) & ORI_MASK
+    pub fn set_ori(&mut self, ori: bool) {
+        self.0 ^= (self.0 ^ if ori { 1 } else { 0 }) & ORI_MASK
     }
-    pub fn get_ori(&self) -> u64 {
+    pub fn get_ori(&self) -> bool {
         dbg_assert!(self.is_set());
-        self.0 & ORI_MASK
+        self.0 & ORI_MASK != 0
     }
     pub fn incr_pos(&mut self) {
         self.0 += 1_u64.checked_shl(POS_SHIFT).expect("incr_pos shft");
@@ -163,6 +163,18 @@ impl ExtPosEtc {
      * fn ext_max() -> Self {
         0xFF
     }*/
+}
+
+impl From<Extension> for ExtPosEtc {
+    fn from(e: Extension) -> ExtPosEtc {
+        ExtPosEtc(e.as_u64())
+    }
+}
+
+impl From<(Extension, Position)> for ExtPosEtc {
+    fn from(ep: (Extension, Position)) -> ExtPosEtc {
+        ExtPosEtc(ep.0.as_u64() | ep.1.as_u64())
+    }
 }
 
 impl fmt::Debug for ExtPosEtc {

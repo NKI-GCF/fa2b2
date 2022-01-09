@@ -23,7 +23,7 @@ impl<'a> HeadScope<'a> {
     pub fn new(kc: &'a KmerConst) -> Self {
         HeadScope {
             kc,
-            ExtPosEtc::zero(),
+            p: ExtPosEtc::zero(),
             d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).into_iter().collect(),
             mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),

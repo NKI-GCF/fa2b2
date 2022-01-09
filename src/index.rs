@@ -47,7 +47,7 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
     let mut ks = KmerStore::new(kc.bitlen, repetition_max_dist);
     let mut kmi = KmerIter::new(&mut ks, &kc);
     for record in fa.records() {
-        kmi.markcontig::<u64>(record?)?;
+        kmi.markcontig(record?)?;
     }
     dump_stats(&ks, kc.extent.len());
 

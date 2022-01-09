@@ -3,6 +3,7 @@ use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::{ExtPosEtc, KmerLoc};
 use crate::kmerstore::KmerStore;
+use crate::new_types::extension::Extension;
 use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
@@ -22,22 +23,22 @@ pub struct PastScope<'a> {
 }
 
 impl<'a> PastScope<'a> {
-    pub fn new(ks: &KmerStore, kc: &'a KmerConst, p: &ExtPosEtc, idx: usize) -> Result<Self> {
-        let pos = p.pos();
+    pub fn new(ks: &KmerStore, kc: &'a KmerConst, p: ExtPosEtc, idx: usize) -> Result<Self> {
+        let pos = Position::from(p);
         ensure!(pos != Position::zero());
         let plim = ks.get_contig_start_end_for_p(pos);
         let bound = kc.get_kmer_boundaries(pos, plim);
         dbg_print!("{:?}", bound);
-        let extension_u64 = p.extension().as_u64();
+        let extension = Extension::from(p);
 
         let mut scp = PastScope {
             kc,
-            p: bound.0.as_u64() | extension_u64,
+            p: ExtPosEtc::from((extension, bound.0)),
             i: 0,
             mod_i: 0,
             plim,
             period: 0,
-            mark: KmerLoc::new(usize::max_value(), extension_u64),
+            mark: KmerLoc::new(usize::max_value(), ExtPosEtc::from(extension)),
             d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         };

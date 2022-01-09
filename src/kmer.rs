@@ -144,13 +144,13 @@ where
     }
 
     /// Add twobit to k-mers and return orientation bit as first bit for stored
-    pub fn update(&mut self, b2: TwoBit) -> u64 {
+    pub fn update(&mut self, b2: TwoBit) -> bool {
         // XXX function is hot
         self.add(b2);
         match self.dna.cmp(&self.rc) {
-            cmp::Ordering::Greater => 0,
-            cmp::Ordering::Less => 1,
-            cmp::Ordering::Equal => T::to_u64(&self.dna).unwrap() & 1,
+            cmp::Ordering::Greater => false,
+            cmp::Ordering::Less => true,
+            cmp::Ordering::Equal => T::to_u64(&self.dna).unwrap() & 1 != 0,
         }
     }
 

@@ -48,7 +48,7 @@ pub trait ExtPosEtc: Clone {
     fn same_ori(&self, p: u64) -> bool;
     fn blacklist(&mut self);
     fn extend(&mut self);
-    fn set_extension(&mut self, x: u64);
+    fn set_extension(&mut self, x: usize);
     fn clear_extension(&mut self);
     fn is_same(&self, other: u64) -> bool;
     fn pos_with_ext(&self, x: usize) -> u64;
@@ -138,11 +138,11 @@ impl ExtPosEtc for u64 {
         dbg_assert!(self.is_set());
         *self += 1_u64.checked_shl(EXT_SHIFT).expect("extend shft");
     }
-    fn set_extension(&mut self, x: u64) {
+    // preserves orientation, but not replication and duplication bits
+    fn set_extension(&mut self, x: usize) {
         dbg_assert!(self.is_set());
-        //XXX does not work with !EXT_MASK; (?)
         *self &= POS_MASK | ORI_MASK;
-        *self |= x.checked_shl(EXT_SHIFT).expect("x beyond max extension");
+        *self |= Extension::from(x).as_u64();
     }
     fn clear_extension(&mut self) {
         dbg_assert!(self.is_set());
@@ -154,7 +154,7 @@ impl ExtPosEtc for u64 {
     }
     /// Note: unsets dup and rep bits.
     fn pos_with_ext(&self, x: usize) -> u64 {
-        self.pos().as_u64() | (x as u64).checked_shl(EXT_SHIFT).expect("x beyond max ext")
+        self.pos().as_u64() | Extension::from(x).as_u64()
     }
     fn set_dup(&mut self) {
         dbg_assert!(self.is_set());
@@ -230,7 +230,7 @@ impl KmerLoc {
         dbg_assert!(self.is_set() || self.p.is_zero() || self_p_extension == p_extension);
         self.idx = idx;
         self.p = p.rep_dup_masked();
-        self.p.set_extension(x as u64);
+        self.p.set_extension(x);
     }
 }
 

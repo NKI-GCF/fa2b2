@@ -23,10 +23,10 @@ impl<'a> Mapping<'a> {
     pub fn new(ks: &KmerStore, kc: &'a KmerConst, record: fastq::Record) -> Result<Self> {
         let mut scp = Mapping {
             kc,
-            p: 0,
+            p: ExtPosEtc::zero(),
             i: 0,
             mod_i: 0,
-            mark: KmerLoc::new(usize::max_value(), 0),
+            mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
             d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         };
@@ -75,7 +75,7 @@ impl<'a> Scope for Mapping<'a> {
     fn get_kc(&self) -> &KmerConst {
         self.kc
     }
-    fn get_p(&self) -> u64 {
+    fn get_p(&self) -> ExtPosEtc {
         self.p
     }
     fn clear_p_extension(&mut self) {
@@ -127,7 +127,7 @@ impl<'a> Scope for Mapping<'a> {
         self.mark.reset();
     }
     fn set_mark(&mut self, idx: usize, p: ExtPosEtc, x: usize) {
-        dbg_print!("{:<30}<P>", format!("[{:x}] = {:x} | x({})", idx, p, x));
+        dbg_print!("[{:x}] = {:?} | x({})", idx, p, x);
         self.mark.set(idx, p, x);
     }
 }

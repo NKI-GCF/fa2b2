@@ -1,6 +1,6 @@
 use crate::kmer::{TwoBit, TwoBitx4};
 use crate::kmerloc::ExtPosEtc;
-use crate::new_types::position::Position;
+use crate::new_types::position::{BasePos, Position};
 use crate::rdbg::STAT_DB;
 use ahash::AHashMap;
 use anyhow::{anyhow, ensure, Result};
@@ -22,7 +22,7 @@ pub struct KmerStore {
     pub opt: u64,
     pub rep_max_dist: Position,
     pub b2: Vec<u8>,
-    pub kmp: Vec<u64>, // position + strand per k-mer.
+    pub kmp: Vec<ExtPosEtc>, // position + strand per k-mer.
     pub contig: Vec<Contig>,
     pub repeat: AHashMap<Position, Repeat>,
 }
@@ -33,9 +33,9 @@ impl KmerStore {
         KmerStore {
             pos_max: Position::zero(),
             opt: 0,
-            rep_max_dist: rep_max_dist.basepos_to_pos(),
-            b2: vec![0; 1 << shift],                  // sequence (4 per u8).
-            kmp: vec![u64::zero(); 1 << (shift + 1)], // kmer positions
+            rep_max_dist: Position::from(BasePos::from(rep_max_dist)),
+            b2: vec![0; 1 << shift], // sequence (4 per u8).
+            kmp: vec![ExtPosEtc::zero(); 1 << (shift + 1)], // kmer positions
             //kmp,
             contig: Vec::new(), // contig info
             repeat: AHashMap::new(),
@@ -107,7 +107,7 @@ impl KmerStore {
         self.b2
             .get(pos.byte_pos())
             .map(|b2x4| TwoBitx4::from(b2x4).to_b2(p, is_repeat))
-            .ok_or_else(|| anyhow!("stored pos past contig? {:#x}", p))
+            .ok_or_else(|| anyhow!("stored pos past contig? {:?}", p))
     }
     pub fn extend_repetitive(&mut self, min_pos: Position, dist: u64) {
         let dist_u32 = u32::try_from(dist).expect("dist for repeat extension doesn't fit in u32");

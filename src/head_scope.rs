@@ -20,10 +20,10 @@ pub struct HeadScope<'a> {
 }
 
 impl<'a> HeadScope<'a> {
-    pub fn new(kc: &'a KmerConst, p: ExtPosEtc) -> Self {
+    pub fn new(kc: &'a KmerConst) -> Self {
         HeadScope {
             kc,
-            p,
+            ExtPosEtc::zero(),
             d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).into_iter().collect(),
             mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
@@ -62,7 +62,7 @@ impl<'a> Scope for HeadScope<'a> {
     fn get_kc(&self) -> &KmerConst {
         self.kc
     }
-    fn get_p(&self) -> u64 {
+    fn get_p(&self) -> ExtPosEtc {
         self.p
     }
     fn get_i(&self) -> usize {
@@ -131,7 +131,7 @@ impl<'a> Scope for HeadScope<'a> {
         self.mark.reset();
     }
     fn set_mark(&mut self, idx: usize, p: ExtPosEtc, x: usize) {
-        dbg_print!("{:<30}<H>", format!("[{:x}] = {:x} | x({})", idx, p, x));
+        format!("[{:x}] = {:?} | x({})", idx, p, x);
         self.mark.set(idx, p, x);
     }
 }

@@ -54,7 +54,7 @@ impl<'a> PastScope<'a> {
                     }
                     if scp.mark.get_idx() == idx {
                         dbg_print!(
-                            "idx {:x} observed but for {:#x}, not {:#x}",
+                            "idx {:x} observed but for {:?}, not {:?}",
                             idx,
                             scp.mark.p,
                             p
@@ -68,7 +68,7 @@ impl<'a> PastScope<'a> {
                         p
                     );*/
                     if scp.p.pos() >= bound.1 {
-                        dbg_print!("kmer {:x} not observed for {:x} !!", idx, p);
+                        dbg_print!("kmer {:x} not observed for {:?} !!", idx, p);
                         scp.p.clear();
                         break;
                     }
@@ -96,7 +96,7 @@ impl<'a> Scope for PastScope<'a> {
     fn get_kc(&self) -> &KmerConst {
         self.kc
     }
-    fn get_p(&self) -> u64 {
+    fn get_p(&self) -> ExtPosEtc {
         self.p
     }
     fn get_i(&self) -> usize {
@@ -165,7 +165,7 @@ impl<'a> Scope for PastScope<'a> {
         self.mark.reset();
     }
     fn set_mark(&mut self, idx: usize, p: ExtPosEtc, x: usize) {
-        dbg_print!("{:<30}<P>", format!("[{:x}] = {:x} | x({})", idx, p, x));
+        dbg_print!("[{:x}] = {:?} | x({})", idx, p, x);
         self.mark.set(idx, p, x);
     }
     fn set_period(&mut self, period: Position) {

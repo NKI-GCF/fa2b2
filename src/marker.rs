@@ -23,7 +23,7 @@ pub struct KmerIter<'a> {
 
 impl<'a> KmerIter<'a> {
     pub fn new(ks: &'a mut KmerStore, kc: &'a KmerConst) -> Self {
-        let scp = HeadScope::new(kc, 0);
+        let scp = HeadScope::new(kc);
         KmerIter {
             n_stretch: 0,
             goffs: 0,

@@ -3,7 +3,7 @@ use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::{ExtPosEtc, KmerLoc};
 use crate::kmerstore::KmerStore;
-use crate::new_types::position::Position;
+use crate::new_types::position::{BasePos, Position};
 use crate::past_scope::PastScope;
 use crate::rdbg::STAT_DB;
 use anyhow::Result;
@@ -12,7 +12,7 @@ use std::cmp;
 pub trait Scope {
     fn get_mark(&self) -> Option<&KmerLoc>;
     fn get_kc(&self) -> &KmerConst;
-    fn get_p(&self) -> u64;
+    fn get_p(&self) -> ExtPosEtc;
     fn get_i(&self) -> usize;
     fn get_d(&self, i: usize) -> &Kmer<u64>;
     fn is_repetitive(&self) -> bool;
@@ -38,8 +38,9 @@ pub trait Scope {
 
     fn is_mark_out_of_scope(&self, mark: &KmerLoc) -> bool {
         let p = self.get_p();
-        dbg_assert!(p.pos() >= mark.p.pos(), "{:#x}, {:#x}", p, mark.p);
-        p.pos() >= mark.p.pos() + (self.get_kc().no_xmers(p.x()) as u64).basepos_to_pos()
+        dbg_assert!(p.pos() >= mark.p.pos(), "{:?}, {:?}", p, mark.p);
+        let afstand = self.get_kc().no_xmers(p.x());
+        p.pos() >= mark.p.pos() + Position::from(BasePos::from(afstand))
     }
 
     /// Manage mark, do we have any minimum?
@@ -82,7 +83,7 @@ pub trait Scope {
                     // unset when kmer is not observed before bound.1:
                     if new_scp.get_p().is_set() {
                         dbg_print!(
-                            "resolving past for [{:x}], {:#x} <= {:#x}",
+                            "resolving past for [{:x}], {:?} <= {:?}",
                             min_idx,
                             stored_p,
                             min_p
@@ -159,12 +160,12 @@ pub trait Scope {
             let mut p = if let Some(mark) = self.get_mark() {
                 match hash.cmp(&mark.get_idx()) {
                     cmp::Ordering::Less => {
-                        self.get_p().pos_with_ext(x) - (bin.0 as u64).basepos_to_pos().as_u64()
+                        self.get_p().pos_with_ext(x) - Position::from(BasePos::from(bin.0)).as_u64()
                     }
                     cmp::Ordering::Greater => return false,
                     cmp::Ordering::Equal => {
-                        let p =
-                            self.get_p().pos_with_ext(x) - (bin.0 as u64).basepos_to_pos().as_u64();
+                        let p = self.get_p().pos_with_ext(x)
+                            - Position::from(BasePos::from(bin.0)).as_u64();
                         if p >= mark.p {
                             return false;
                         }
@@ -172,7 +173,7 @@ pub trait Scope {
                     }
                 }
             } else {
-                self.get_p().pos_with_ext(x) - (bin.0 as u64).basepos_to_pos().as_u64()
+                self.get_p().pos_with_ext(x) - Position::from(BasePos::from(bin.0)).as_u64()
             };
             p ^= match bin.0.cmp(&bin.1) {
                 cmp::Ordering::Less => {

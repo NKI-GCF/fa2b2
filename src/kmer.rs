@@ -47,7 +47,7 @@ impl TwoBitx4 {
         let ob2 = self.0.checked_shr(p.pos().b2_shift());
         let b2 = ob2.expect("bug shifting to b2") & 3;
         if !for_repeat {
-            dbg_print!("=> b2 {:x}, p: {:#x}", b2, p);
+            dbg_print!("=> b2 {:x}, p: {:?}", b2, p);
         }
         TwoBit(b2)
     }

@@ -1,5 +1,5 @@
-use crate::kmerloc::{BasePos, ExtPosEtc};
-use crate::new_types::position::Position;
+use crate::kmerloc::ExtPosEtc;
+use crate::new_types::position::{BasePos, Position};
 use crate::rdbg::STAT_DB;
 use std::cmp;
 

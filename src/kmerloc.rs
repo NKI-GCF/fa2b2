@@ -1,11 +1,10 @@
-use crate::new_types::position::Position;
+use crate::new_types::position::{BasePos, Position};
 use crate::rdbg::STAT_DB;
-use derive_more::{Add, Sub};
-use serde::{Deserialize, Serialize};
 use std::clone::Clone;
 use std::cmp;
-use std::convert::TryFrom;
 use std::ops::Add;
+//use std::convert::TryFrom;
+//use serde::{Deserialize, Serialize};
 
 const POS_SHIFT: u32 = 4;
 const EXT_SHIFT: u32 = 56;
@@ -16,47 +15,6 @@ const DUP_MASK: u64 = 0x0000_0000_0000_0004;
 const _INFO_MASK: u64 = 0x0000_0000_0000_0008;
 const POS_MASK: u64 = 0x00FF_FFFF_FFFF_FFF0;
 const EXT_MASK: u64 = 0xFF00_0000_0000_0000;
-
-// 4 twobits per byte, so unshifted pos is shifted another 2.
-const BYTE_SHIFT: u32 = POS_SHIFT + 2;
-
-// only bits set for postion, but not shifted yet
-#[derive(Add, Sub, Serialize, Deserialize)]
-pub struct BasePos(u64);
-
-impl BasePos {
-    pub fn as_u64(&self) -> u64 {
-        self.0
-    }
-    pub fn as_usize(&self) -> usize {
-        usize::try_from(self.0).unwrap()
-    }
-}
-
-// converts into base pos.
-impl From<Position> for BasePos {
-    fn from(pos: Position) -> BasePos {
-        BasePos(pos.as_u64().checked_shr(POS_SHIFT).unwrap())
-    }
-}
-
-impl From<u64> for BasePos {
-    fn from(base_pos: u64) -> BasePos {
-        BasePos(base_pos & (POS_MASK >> POS_SHIFT))
-    }
-}
-
-impl From<BasePos> for u64 {
-    fn from(base_pos: BasePos) -> u64 {
-        base_pos.0
-    }
-}
-
-impl From<usize> for BasePos {
-    fn from(base_pos: usize) -> BasePos {
-        BasePos::from(u64::try_from(base_pos).expect("usize for BasePos doesn't fit in u64"))
-    }
-}
 
 // FIXME u64 moet hier ExtPosEtc worden !!
 impl Add<Position> for u64 {
@@ -113,7 +71,7 @@ impl ExtPosEtc for u64 {
     }
     fn basepos_to_pos(&self) -> Position {
         //FIXME: deprecate. as_pos() and pos() are confusing.
-        Position::from(BasePos(*self))
+        Position::from(BasePos::from(*self))
     }
     fn unshift_pos(&self) -> u64 {
         //TODO: BasePos
@@ -125,7 +83,7 @@ impl ExtPosEtc for u64 {
         Position::from(self.as_basepos())
     }
     fn as_basepos(&self) -> BasePos {
-        BasePos(self.checked_shr(POS_SHIFT).expect("shr pos shft"))
+        BasePos::from(self.checked_shr(POS_SHIFT).expect("shr pos shft"))
     }
     fn zero() -> Self {
         0x0
@@ -301,7 +259,6 @@ impl Ord for KmerLoc {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use num_traits::PrimInt;
     use rand::{thread_rng, Rng};
 
     impl KmerLoc {

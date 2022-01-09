@@ -1,4 +1,4 @@
-use crate::kmerloc::{BasePos, ExtPosEtc};
+use crate::kmerloc::ExtPosEtc;
 use derive_more::{Add, Rem, Sub};
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
@@ -11,11 +11,19 @@ const POS_MASK: u64 = 0x00FF_FFFF_FFFF_FFF0;
 // 4 twobits per byte, so unshifted pos is shifted another 2.
 const BYTE_SHIFT: u32 = POS_SHIFT + 2;
 
-// an u64 with only bits set for genomic position, shifted with POS_SHIFT
+// Two types are defined here.
+//
+// u64 with only bits set for genomic position, shifted with POS_SHIFT
 #[derive(
     Add, Sub, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash, Rem,
 )]
 pub struct Position(u64);
+
+// only bits set for postion, but not shifted yet
+#[derive(Add, Sub, Serialize, Deserialize)]
+pub struct BasePos(u64);
+
+/////////////// Position \\\\\\\\\\\\\\\\\\
 
 impl Position {
     pub fn as_u64(&self) -> u64 {
@@ -72,5 +80,41 @@ impl From<BasePos> for Position {
 impl fmt::Debug for Position {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:x}", self.0)
+    }
+}
+
+/////////////// BasePos \\\\\\\\\\\\\\\\\\
+
+impl BasePos {
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
+    pub fn as_usize(&self) -> usize {
+        usize::try_from(self.0).unwrap()
+    }
+}
+
+// converts into base pos.
+impl From<Position> for BasePos {
+    fn from(pos: Position) -> BasePos {
+        BasePos(pos.as_u64().checked_shr(POS_SHIFT).unwrap())
+    }
+}
+
+impl From<u64> for BasePos {
+    fn from(base_pos: u64) -> BasePos {
+        BasePos(base_pos & (POS_MASK >> POS_SHIFT))
+    }
+}
+
+impl From<BasePos> for u64 {
+    fn from(base_pos: BasePos) -> u64 {
+        base_pos.0
+    }
+}
+
+impl From<usize> for BasePos {
+    fn from(base_pos: usize) -> BasePos {
+        BasePos::from(u64::try_from(base_pos).expect("usize for BasePos doesn't fit in u64"))
     }
 }

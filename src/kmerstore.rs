@@ -98,16 +98,15 @@ impl KmerStore {
         ensure!(i != 0, "get_twobit_before(): Start of contig");
         Ok(self.contig[i - 1].twobit)
     }
-    pub fn b2_for_p(&self, p: ExtPosEtc, is_repeat: bool) -> Result<TwoBit> {
-        let pos = p.pos();
+    pub fn b2_for_p(&self, pos: Position, is_repeat: bool) -> Result<TwoBit> {
         ensure!(
             pos < self.pos_max || is_repeat,
             "running into sequence head"
         );
         self.b2
             .get(pos.byte_pos())
-            .map(|b2x4| TwoBitx4::from(b2x4).to_b2(p, is_repeat))
-            .ok_or_else(|| anyhow!("stored pos past contig? {:?}", p))
+            .map(|b2x4| TwoBitx4::from(b2x4).to_b2(pos, is_repeat))
+            .ok_or_else(|| anyhow!("stored pos past contig?"))
     }
     pub fn extend_repetitive(&mut self, min_pos: Position, dist: u64) {
         let dist_u32 = u32::try_from(dist).expect("dist for repeat extension doesn't fit in u32");

@@ -7,8 +7,8 @@ extern crate num_traits;
 use crate::head_scope::HeadScope;
 use crate::kmer::ThreeBit;
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::ExtPosEtc;
 use crate::kmerstore::KmerStore;
+use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
 use anyhow::Result;
@@ -51,7 +51,7 @@ impl<'a> KmerIter<'a> {
         self.scp.unset_period();
     }
 
-    fn update_repetitive(&mut self, pd: u64) {
+    fn update_repetitive(&mut self, pd: Position) {
         let idx = self.scp.mark.get_idx();
         let stored = self.ks.kmp[idx];
         if stored.is_set() {
@@ -101,10 +101,11 @@ impl<'a> KmerIter<'a> {
                 if self.n_stretch > 0 {
                     n_count += self.n_stretch;
                     self.finalize_n_stretch();
-                } else if self.scp.period != 0 && dbg_dump_if!(self.scp.mark.is_set(), false) {
+                } else if self.scp.period.is_set() && dbg_dump_if!(self.scp.mark.is_set(), false) {
                     let pd = self.scp.period;
-                    dbg_assert!(pd <= self.scp.p.pos(), "{:?} {:?}", pd, self.scp.p);
-                    if self.ks.b2_for_p(self.scp.p - pd, true)? == b2 {
+                    let pos = self.scp.p.pos();
+                    dbg_assert!(pd <= pos, "{:?} {:?}", pd, self.scp.p);
+                    if self.ks.b2_for_p(pos - pd, true)? == b2 {
                         repetitive += 1;
                         self.update_repetitive(pd);
                     } else {

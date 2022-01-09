@@ -1,10 +1,9 @@
-use crate::kmerloc::ExtPosEtc;
-use crate::new_types::position::Position;
+use crate::new_types::position::{BasePos, Position};
 use crate::rdbg::STAT_DB;
 use num::{FromPrimitive, Unsigned};
 use num_traits::PrimInt;
-use std::cmp;
 use std::mem::size_of;
+use std::{cmp, fmt};
 
 pub struct ThreeBit(u8);
 
@@ -40,16 +39,28 @@ impl TwoBit {
     }
 }
 
+impl fmt::Debug for TwoBit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            0 => write!(f, "0 (A)"),
+            1 => write!(f, "1 (C)"),
+            2 => write!(f, "2 (T)"),
+            3 => write!(f, "3 (G)"),
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// 4 packed twobits per u8.
 impl TwoBitx4 {
-    pub fn to_b2(&self, p: ExtPosEtc, for_repeat: bool) -> TwoBit {
+    pub fn to_b2(&self, pos: Position, for_repeat: bool) -> TwoBit {
         // the third bit (for N) is actually never set, because we don't store those in TwoBitx4
-        let ob2 = self.0.checked_shr(p.pos().b2_shift());
-        let b2 = ob2.expect("bug shifting to b2") & 3;
+        let ob2 = self.0.checked_shr(pos.b2_shift());
+        let b2 = TwoBit(ob2.expect("bug shifting to b2") & 3);
         if !for_repeat {
-            dbg_print!("=> b2 {:x}, p: {:?}", b2, p);
+            dbg_print!("{}: {:?}", BasePos::from(pos).as_u64(), b2);
         }
-        TwoBit(b2)
+        b2
     }
     pub fn as_u8(&self) -> u8 {
         self.0

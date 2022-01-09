@@ -16,7 +16,7 @@ pub struct HeadScope<'a> {
     pub mark: KmerLoc,
     pub i: usize,
     pub mod_i: usize,
-    pub period: u64,
+    pub period: Position,
 }
 
 impl<'a> HeadScope<'a> {
@@ -29,7 +29,7 @@ impl<'a> HeadScope<'a> {
             mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
             i: 0,
             mod_i: 0,
-            period: 0,
+            period: Position::zero(),
         }
     }
 
@@ -72,11 +72,11 @@ impl<'a> Scope for HeadScope<'a> {
         &self.d[i]
     }
     fn is_repetitive(&self) -> bool {
-        self.period != 0
+        self.period.is_set()
     }
     fn set_period(&mut self, period: Position) {
         dbg_assert!(self.p.is_zero() || period < self.p.pos());
-        self.period = period.as_u64();
+        self.period = period;
     }
     fn unset_period(&mut self) {
         self.set_period(Position::zero());
@@ -85,7 +85,7 @@ impl<'a> Scope for HeadScope<'a> {
         self.p.clear_extension();
     }
     fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()> {
-        let b2 = ks.b2_for_p(self.get_p(), false)?;
+        let b2 = ks.b2_for_p(self.get_p().pos(), false)?;
         dbg_assert!(self.increment(b2));
         Ok(())
     }

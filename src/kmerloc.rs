@@ -171,6 +171,18 @@ impl From<Extension> for ExtPosEtc {
     }
 }
 
+impl From<Position> for ExtPosEtc {
+    fn from(pos: Position) -> ExtPosEtc {
+        ExtPosEtc(pos.as_u64())
+    }
+}
+
+impl From<BasePos> for ExtPosEtc {
+    fn from(b: BasePos) -> ExtPosEtc {
+        ExtPosEtc::from(Position::from(b))
+    }
+}
+
 impl From<(Extension, Position)> for ExtPosEtc {
     fn from(ep: (Extension, Position)) -> ExtPosEtc {
         ExtPosEtc(ep.0.as_u64() | ep.1.as_u64())

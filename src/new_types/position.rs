@@ -33,6 +33,9 @@ impl Position {
     pub fn zero() -> Self {
         Position(0x0)
     }
+    pub fn is_set(&self) -> bool {
+        self.0 != 0
+    }
     pub fn byte_pos(&self) -> usize {
         // bytepos is calculated before kmer is complete, so we can't assert self.is.set()
         // the strand bit and 2b encoded, so 4 twobits per byte.
@@ -48,12 +51,12 @@ impl Position {
     }
 
     // for a repetitive mark, return if on period for the distance between current pos (self) and stored
-    pub fn get_if_mark_on_period(&self, stored_pos: Position, pd: u64) -> Option<u64> {
+    pub fn get_if_mark_on_period(&self, stored_pos: Position, pd: Position) -> Option<u64> {
         let dist = self
             .0
             .checked_sub(stored_pos.0)
             .expect("stored_pos is greater??");
-        if dist % pd == 0 {
+        if dist % pd.0 == 0 {
             Some(dist)
         } else {
             None

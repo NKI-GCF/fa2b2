@@ -16,7 +16,7 @@ pub struct PastScope<'a> {
     i: usize,
     mod_i: usize,
     plim: (Position, Position),
-    period: u64,
+    period: Position,
     mark: KmerLoc,
     d: Vec<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
     z: Vec<usize>,
@@ -37,7 +37,7 @@ impl<'a> PastScope<'a> {
             i: 0,
             mod_i: 0,
             plim,
-            period: 0,
+            period: Position::zero(),
             mark: KmerLoc::new(usize::max_value(), ExtPosEtc::from(extension)),
             d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
@@ -46,7 +46,7 @@ impl<'a> PastScope<'a> {
         let bin = kc.get_kmers(x);
 
         loop {
-            if scp.increment(ks.b2_for_p(scp.p, false).unwrap()) {
+            if scp.increment(ks.b2_for_p(scp.p.pos(), false).unwrap()) {
                 // we weten extension op voorhand.
                 let base = scp.get_i() - kc.kmerlen;
                 if (scp.set_if_optimum(x, base, bin) && scp.all_kmers()) || scp.remark(false)? {
@@ -107,14 +107,14 @@ impl<'a> Scope for PastScope<'a> {
         &self.d[i]
     }
     fn is_repetitive(&self) -> bool {
-        self.period != 0
+        self.period.is_set()
     }
     fn clear_p_extension(&mut self) {
         self.p.clear_extension();
     }
 
     fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()> {
-        let b2 = ks.b2_for_p(self.get_p(), false)?;
+        let b2 = ks.b2_for_p(self.get_p().pos(), false)?;
         ensure!(
             self.is_before_end_of_contig(),
             "increment_for_extension() runs into end of contig"
@@ -171,7 +171,7 @@ impl<'a> Scope for PastScope<'a> {
     }
     fn set_period(&mut self, period: Position) {
         dbg_assert!(period < self.p.pos());
-        self.period = period.as_u64();
+        self.period = period;
     }
     fn unset_period(&mut self) {
         self.set_period(Position::zero());

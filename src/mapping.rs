@@ -89,7 +89,7 @@ impl<'a> Scope for Mapping<'a> {
     }
 
     fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()> {
-        let b2 = ks.b2_for_p(self.get_p(), false)?;
+        let b2 = ks.b2_for_p(self.get_p().pos(), false)?;
         dbg_assert!(self.increment(b2));
         Ok(())
     }

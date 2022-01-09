@@ -160,12 +160,12 @@ pub trait Scope {
             let mut p = if let Some(mark) = self.get_mark() {
                 match hash.cmp(&mark.get_idx()) {
                     cmp::Ordering::Less => {
-                        self.get_p().pos_with_ext(x) - Position::from(BasePos::from(bin.0)).as_u64()
+                        self.get_p().pos_with_ext(x) - ExtPosEtc::from(BasePos::from(bin.0))
                     }
                     cmp::Ordering::Greater => return false,
                     cmp::Ordering::Equal => {
-                        let p = self.get_p().pos_with_ext(x)
-                            - Position::from(BasePos::from(bin.0)).as_u64();
+                        let p =
+                            self.get_p().pos_with_ext(x) - ExtPosEtc::from(BasePos::from(bin.0));
                         if p >= mark.p {
                             return false;
                         }
@@ -173,19 +173,19 @@ pub trait Scope {
                     }
                 }
             } else {
-                self.get_p().pos_with_ext(x) - Position::from(BasePos::from(bin.0)).as_u64()
+                self.get_p().pos_with_ext(x) - ExtPosEtc::from(BasePos::from(bin.0))
             };
-            p ^= match bin.0.cmp(&bin.1) {
+            match bin.0.cmp(&bin.1) {
                 cmp::Ordering::Less => {
                     hash ^= self.get_d(base.wrapping_sub(bin.1) % nk).get_idx(true);
-                    p & 1
+                    p.set_ori(false);
                 }
                 cmp::Ordering::Greater => {
                     hash ^= self.get_d(base.wrapping_sub(bin.1) % nk).get_idx(false);
-                    !p & 1
+                    p.set_ori(true);
                 }
-                cmp::Ordering::Equal => (p ^ kmer1.dna) & 1,
-            };
+                cmp::Ordering::Equal => p.set_ori(kmer1.dna & 1 != 0),
+            }
             if self.is_repetitive() {
                 p.set_repetitive();
             }

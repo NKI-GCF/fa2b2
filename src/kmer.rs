@@ -86,43 +86,9 @@ impl From<&u8> for ThreeBit {
 pub struct Kmer<T> {
     pub dna: T,
     pub rc: T,
-    topb2_shift: u32,
     pub pos: Position,
+    topb2_shift: u32,
 } //^-^\\
-
-pub trait RevCmp<T: PrimInt + FromPrimitive> {
-    fn revcmp(self, kmerlen: usize) -> T;
-}
-
-/// create bitmask. e.g. dvm::<u32>(0xf0  0xff) => 0xf0_f0_f0_f0
-#[inline]
-fn dvm<T: PrimInt + FromPrimitive>(numerator: u32, divisor: u32) -> T {
-    let base = T::max_value() / T::from_u32(divisor).unwrap();
-    T::from_u32(numerator).unwrap() * base
-}
-
-macro_rules! implement_revcmp { ($($ty:ty),*) => ($(
-    /// give twobit reverse complent for given kmerlen
-    impl RevCmp<$ty> for $ty {
-        #[inline]
-        fn revcmp(self, kmerlen: usize) -> $ty {
-            let mut seq = self.swap_bytes() ^ dvm::<$ty>(2, 3);
-
-            let left_nibbles = (seq & dvm::<$ty>(0xf, 0xff)) << 4;
-            let right_nibbles = (seq & dvm::<$ty>(0xf0, 0xff)) >> 4;
-            seq = left_nibbles | right_nibbles;
-
-            let all_left_two_bits = (seq & dvm::<$ty>(0x3, 0xf)) << 2;
-            let all_right_two_bits = (seq & dvm::<$ty>(0xc, 0xf)) >> 2;
-            seq = all_left_two_bits | all_right_two_bits;
-
-            seq >> (size_of::<$ty>() * 8 - kmerlen * 2)
-        }
-    }
-    )*)
-}
-
-implement_revcmp!(u8, u16, u32, u64, u128, usize);
 
 impl<T> Kmer<T>
 where
@@ -135,8 +101,8 @@ where
         Kmer {
             dna: <T>::zero(),
             rc: <T>::zero(),
-            topb2_shift,
             pos: Position::zero(),
+            topb2_shift,
         }
     }
 
@@ -184,6 +150,8 @@ where
             (overbit - 1) & !seq
         }
     }
+
+    // TODO: implement this instead.
     /// return an index specific per sequence but the same for the other orientation
     pub fn get_hash(&self, x: usize) -> (usize, Position) {
         let seq = T::to_usize(if self.dna < self.rc {

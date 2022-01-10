@@ -108,14 +108,16 @@ impl KmerStore {
             .map(|b2x4| TwoBitx4::from(b2x4).to_b2(pos, is_repeat))
             .ok_or_else(|| anyhow!("stored pos past contig?"))
     }
-    pub fn extend_repetitive(&mut self, min_pos: Position, dist: u64) {
-        let dist_u32 = u32::try_from(dist).expect("dist for repeat extension doesn't fit in u32");
+    pub fn extend_repetitive(&mut self, min_pos: Position, dist: BasePos) {
+        let dist_u32 =
+            u32::try_from(u64::from(dist)).expect("dist for repeat extension doesn't fit in u32");
         let repeat = self.repeat.entry(min_pos).or_insert((dist_u32, 0));
         repeat.1 = dist_u32;
     }
 
-    pub fn replace_repetitive(&mut self, old_pos: Position, new_pos: Position, dist: u64) {
-        let dist_u32 = u32::try_from(dist).expect("dist for repeat extension doesn't fit in u32");
+    pub fn replace_repetitive(&mut self, old_pos: Position, new_pos: Position, dist: BasePos) {
+        let dist_u32 =
+            u32::try_from(u64::from(dist)).expect("dist for repeat replacment doesn't fit in u32");
         let old_repeat = self.repeat.remove(&old_pos).expect("oldpos not stored");
 
         let repeat = self.repeat.entry(new_pos).or_insert(old_repeat);

@@ -1,4 +1,6 @@
 use crate::kmerloc::ExtPosEtc;
+use crate::num::ToPrimitive;
+use crate::rdbg::STAT_DB;
 
 const EXT_SHIFT: u32 = 56;
 const EXT_MASK: u64 = 0xFF00_0000_0000_0000;
@@ -18,15 +20,16 @@ impl Extension {
 // usize is assumed to be a base_extension, i.e. shifted to base.
 impl From<usize> for Extension {
     fn from(base_ext: usize) -> Extension {
-        let base_ext_u64 = u64::try_from(base_ext).unwrap();
+        let base_ext_u64 = base_ext.to_u64().unwrap();
+        let masked = base_ext_u64 & (EXT_MASK >> EXT_SHIFT);
+        dbg_assert_eq!(base_ext_u64, masked, "extension bleeds beyond!");
         Extension(base_ext_u64.checked_shl(EXT_SHIFT).unwrap() & EXT_MASK)
     }
 }
 
 impl From<Extension> for usize {
     fn from(ext: Extension) -> usize {
-        let base_ext_u64 = ext.0.checked_shr(EXT_SHIFT).unwrap();
-        usize::try_from(base_ext_u64).unwrap()
+        ext.0.checked_shr(EXT_SHIFT).unwrap().to_usize().unwrap()
     }
 }
 

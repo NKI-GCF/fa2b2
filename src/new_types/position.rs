@@ -1,8 +1,9 @@
 use crate::kmerloc::ExtPosEtc;
+use crate::num::ToPrimitive;
+use crate::rdbg::STAT_DB;
 use derive_more::{Add, Rem, Sub};
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
-use std::convert::TryFrom;
 use std::fmt;
 
 const POS_SHIFT: u32 = 4;
@@ -43,21 +44,18 @@ impl Position {
     }
     //twobit shifts are bit positions 0, 2, 4 and 6 in a byte.
     pub fn b2_shift(&self) -> u32 {
-        self.0
-            .checked_shr(POS_SHIFT - 1)
-            .map(|p| u32::try_from(p).expect("u32??"))
-            .unwrap()
-            & 6
+        let bit_pos = self.0.checked_shr(POS_SHIFT - 1).unwrap() & 6;
+        bit_pos.to_u32().unwrap()
     }
 
     // for a repetitive mark, return if on period for the distance between current pos (self) and stored
-    pub fn get_if_mark_on_period(&self, stored_pos: Position, pd: Position) -> Option<u64> {
+    pub fn get_if_mark_on_period(&self, stored_pos: Position, pd: Position) -> Option<BasePos> {
         let dist = self
             .0
             .checked_sub(stored_pos.0)
             .expect("stored_pos is greater??");
         if dist % pd.0 == 0 {
-            Some(dist)
+            Some(BasePos(dist >> POS_SHIFT))
         } else {
             None
         }
@@ -70,7 +68,9 @@ impl Position {
 
 impl From<BasePos> for Position {
     fn from(base_pos: BasePos) -> Position {
-        Position(u64::from(base_pos).checked_shl(POS_SHIFT).unwrap() & POS_MASK)
+        let shl = u64::from(base_pos).checked_shl(POS_SHIFT).unwrap();
+        dbg_assert_eq!(shl, shl & POS_MASK, "basepos bleeds into extension!");
+        Position(shl)
     }
 }
 
@@ -111,20 +111,22 @@ impl From<ExtPosEtc> for BasePos {
     }
 }
 
+impl From<usize> for BasePos {
+    fn from(base_pos: usize) -> BasePos {
+        BasePos::from(u64::try_from(base_pos).expect("doesn't fit in u64"))
+    }
+}
+
 impl From<u64> for BasePos {
     fn from(base_pos: u64) -> BasePos {
-        BasePos(base_pos & (POS_MASK >> POS_SHIFT))
+        let masked = base_pos & (POS_MASK >> POS_SHIFT);
+        dbg_assert_eq!(base_pos, masked, "bleeds beyond position!");
+        BasePos(base_pos)
     }
 }
 
 impl From<BasePos> for u64 {
     fn from(base_pos: BasePos) -> u64 {
         base_pos.0
-    }
-}
-
-impl From<usize> for BasePos {
-    fn from(base_pos: usize) -> BasePos {
-        BasePos::from(u64::try_from(base_pos).expect("usize for BasePos doesn't fit in u64"))
     }
 }

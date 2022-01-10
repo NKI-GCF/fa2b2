@@ -12,6 +12,9 @@ const POS_MASK: u64 = 0x00FF_FFFF_FFFF_FFF0;
 // 4 twobits per byte, so unshifted pos is shifted another 2.
 const BYTE_SHIFT: u32 = POS_SHIFT + 2;
 
+// twobit shifts are bit positions 0, 2, 4 and 6 in a byte.
+const TWOBIT_SHIFT: u32 = POS_SHIFT - 1;
+
 // Two types are defined here.
 //
 // u64 with only bits set for genomic position, shifted with POS_SHIFT
@@ -38,13 +41,11 @@ impl Position {
         self.0 != 0
     }
     pub fn byte_pos(&self) -> usize {
-        // bytepos is calculated before kmer is complete, so we can't assert self.is.set()
-        // the strand bit and 2b encoded, so 4 twobits per byte.
+        // 4 twobits per byte.
         (self.0 >> BYTE_SHIFT) as usize
     }
-    //twobit shifts are bit positions 0, 2, 4 and 6 in a byte.
     pub fn b2_shift(&self) -> u32 {
-        let bit_pos = self.0.checked_shr(POS_SHIFT - 1).unwrap() & 6;
+        let bit_pos = self.0.checked_shr(TWOBIT_SHIFT).unwrap() & 6;
         bit_pos.to_u32().unwrap()
     }
 
@@ -63,6 +64,7 @@ impl Position {
     // increment the position one
     pub fn incr(&mut self) {
         self.0 += 1_u64.checked_shl(POS_SHIFT).expect("pos.incr shft");
+        dbg_assert_eq!(self.0, self.0 & POS_MASK);
     }
 }
 

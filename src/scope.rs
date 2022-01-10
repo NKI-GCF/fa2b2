@@ -153,7 +153,6 @@ pub trait Scope {
     fn set_if_optimum(&mut self, x: usize, base: usize, bin: (usize, usize)) -> bool {
         if self.is_xmer_complete(x) {
             let kc = self.get_kc();
-            let base = self.get_i() - kc.kmerlen;
             let nk = kc.no_kmers;
             let kmer1 = self.get_d(base.wrapping_sub(bin.0) % nk);
             let mut hash = kmer1.get_idx(bin.0 <= bin.1);

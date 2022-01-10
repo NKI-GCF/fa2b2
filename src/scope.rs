@@ -10,7 +10,7 @@ use anyhow::Result;
 use std::cmp;
 
 pub trait Scope {
-    fn get_mark(&self) -> Option<&KmerLoc>;
+    fn get_mark(&self) -> Option<(usize, ExtPosEtc)>;
     fn get_kc(&self) -> &KmerConst;
     fn get_p(&self) -> ExtPosEtc;
     fn get_i(&self) -> usize;
@@ -23,12 +23,7 @@ pub trait Scope {
     fn set_mark(&mut self, idx: usize, p: ExtPosEtc, x: usize);
     fn set_period(&mut self, period: Position);
     fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()>;
-    fn dist_if_repetitive(
-        &self,
-        stored_p: ExtPosEtc,
-        mark_p: ExtPosEtc,
-        max_dist: Position,
-    ) -> Option<Position>;
+    fn dist_if_repetitive(&self, ks: &KmerStore, stored_p: ExtPosEtc) -> Option<Position>;
     fn unset_period(&mut self);
 
     /// is occ complete? call na complete_kmer() - self.i increment.
@@ -36,18 +31,18 @@ pub trait Scope {
         self.get_i() >= self.get_kc().venster
     }
 
-    fn is_mark_out_of_scope(&self, mark: &KmerLoc) -> bool {
+    fn is_mark_out_of_scope(&self, mark_p: ExtPosEtc) -> bool {
         let p = self.get_p();
-        dbg_assert!(p.pos() >= mark.p.pos(), "{:?}, {:?}", p, mark.p);
+        dbg_assert!(p.pos() >= mark_p.pos(), "{:?}, {:?}", p, mark_p);
         let afstand = self.get_kc().no_xmers(p.x());
-        p.pos() >= mark.p.pos() + Position::from(BasePos::from(afstand))
+        p.pos() >= mark_p.pos() + Position::from(BasePos::from(afstand))
     }
 
     /// Manage mark, do we have any minimum?
     fn remark(&mut self, reset_extension_if_leaving: bool) -> Result<bool> {
         if self.all_kmers() {
             if let Some(mark) = self.get_mark() {
-                if self.is_mark_out_of_scope(mark) {
+                if self.is_mark_out_of_scope(mark.1) {
                     if reset_extension_if_leaving {
                         self.clear_p_extension();
                     }
@@ -64,8 +59,7 @@ pub trait Scope {
     }
 
     fn handle_mark(&mut self, ks: &mut KmerStore) -> Result<()> {
-        if let Some(mark) = self.get_mark() {
-            let (min_idx, min_p) = mark.get();
+        if let Some((min_idx, min_p)) = self.get_mark() {
             if self.is_repetitive() && ks.kmp[min_idx].is_set() {
                 ks.kmp[min_idx].set_repetitive();
                 return Ok(());
@@ -98,7 +92,7 @@ pub trait Scope {
             if stored_p.extension() == min_p.extension() {
                 // If a kmer occurs multiple times within an extending readlength (repetition),
                 // only the first gets a position. During mapping this should be kept in mind.
-                if let Some(dist) = self.dist_if_repetitive(stored_p, mark.p, ks.rep_max_dist) {
+                if let Some(dist) = self.dist_if_repetitive(ks, stored_p) {
                     self.set_period(dist);
                     ks.kmp[min_idx].set_repetitive();
                     return Ok(());
@@ -112,7 +106,7 @@ pub trait Scope {
             self.extend_p();
             if self
                 .get_mark()
-                .filter(|m| self.is_mark_out_of_scope(m))
+                .filter(|m| self.is_mark_out_of_scope(m.1))
                 .is_some()
             {
                 if let Err(e) = self.increment_for_extension(ks) {
@@ -157,7 +151,7 @@ pub trait Scope {
             let kmer1 = self.get_d(base.wrapping_sub(bin.0) % nk);
             let mut hash = kmer1.get_idx(bin.0 <= bin.1);
             let mut p = if let Some(mark) = self.get_mark() {
-                match hash.cmp(&mark.get_idx()) {
+                match hash.cmp(&mark.0) {
                     cmp::Ordering::Less => {
                         self.get_p().pos_with_ext(x) - ExtPosEtc::from(BasePos::from(bin.0))
                     }
@@ -165,7 +159,7 @@ pub trait Scope {
                     cmp::Ordering::Equal => {
                         let p =
                             self.get_p().pos_with_ext(x) - ExtPosEtc::from(BasePos::from(bin.0));
-                        if p >= mark.p {
+                        if p >= mark.1 {
                             return false;
                         }
                         p

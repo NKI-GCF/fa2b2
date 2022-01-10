@@ -65,12 +65,8 @@ impl<'a> Scope for Mapping<'a> {
     fn unset_period(&mut self) {
         panic!();
     }
-    fn get_mark(&self) -> Option<&KmerLoc> {
-        if self.mark.is_set() {
-            Some(&self.mark)
-        } else {
-            None
-        }
+    fn get_mark(&self) -> Option<(usize, ExtPosEtc)> {
+        self.mark.get()
     }
     fn get_kc(&self) -> &KmerConst {
         self.kc
@@ -93,12 +89,7 @@ impl<'a> Scope for Mapping<'a> {
         dbg_assert!(self.increment(b2));
         Ok(())
     }
-    fn dist_if_repetitive(
-        &self,
-        stored_p: ExtPosEtc,
-        mark_p: ExtPosEtc,
-        max_dist: Position,
-    ) -> Option<Position> {
+    fn dist_if_repetitive(&self, _ks: &KmerStore, _stored_p: ExtPosEtc) -> Option<Position> {
         None
     }
 

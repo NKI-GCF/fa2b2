@@ -49,15 +49,14 @@ impl<'a> HeadScope<'a> {
         }
         Ok(())
     }
+    fn is_on_last_contig(&self, ks: &KmerStore, pos: Position) -> bool {
+        pos >= ks.contig.last().unwrap().twobit
+    }
 }
 
 impl<'a> Scope for HeadScope<'a> {
-    fn get_mark(&self) -> Option<&KmerLoc> {
-        if self.mark.is_set() {
-            Some(&self.mark)
-        } else {
-            None
-        }
+    fn get_mark(&self) -> Option<(usize, ExtPosEtc)> {
+        self.mark.get()
     }
     fn get_kc(&self) -> &KmerConst {
         self.kc
@@ -90,18 +89,17 @@ impl<'a> Scope for HeadScope<'a> {
         Ok(())
     }
 
-    fn dist_if_repetitive(
-        &self,
-        stored_p: ExtPosEtc,
-        mark_p: ExtPosEtc,
-        max_dist: Position,
-    ) -> Option<Position> {
+    fn dist_if_repetitive(&self, ks: &KmerStore, stored_p: ExtPosEtc) -> Option<Position> {
+        // FIXME: the contig check was removed. for the upper bound that makes sense for head
+        // scope, as upperbound is pos_max rather than previous
         let stored_pos = stored_p.pos();
-        let mark_pos = mark_p.pos();
+        let mark_pos = self.mark.p.pos();
         dbg_assert!(mark_pos > stored_pos);
-        let dist = mark_pos - stored_pos;
-        if dist < max_dist {
-            return Some(dist);
+        if self.is_on_last_contig(ks, stored_pos) {
+            let dist = mark_pos - stored_pos;
+            if dist < ks.rep_max_dist {
+                return Some(dist);
+            }
         }
         None
     }

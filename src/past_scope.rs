@@ -87,12 +87,8 @@ impl<'a> PastScope<'a> {
 }
 
 impl<'a> Scope for PastScope<'a> {
-    fn get_mark(&self) -> Option<&KmerLoc> {
-        if self.mark.is_set() {
-            Some(&self.mark)
-        } else {
-            None
-        }
+    fn get_mark(&self) -> Option<(usize, ExtPosEtc)> {
+        self.mark.get()
     }
     fn get_kc(&self) -> &KmerConst {
         self.kc
@@ -123,18 +119,13 @@ impl<'a> Scope for PastScope<'a> {
         Ok(())
     }
 
-    fn dist_if_repetitive(
-        &self,
-        stored_p: ExtPosEtc,
-        mark_p: ExtPosEtc,
-        max_dist: Position,
-    ) -> Option<Position> {
+    fn dist_if_repetitive(&self, ks: &KmerStore, stored_p: ExtPosEtc) -> Option<Position> {
         let stored_pos = stored_p.pos();
-        let mark_pos = mark_p.pos();
+        let mark_pos = self.mark.p.pos();
         dbg_assert!(mark_pos > stored_pos);
         if self.is_on_contig(stored_pos) {
             let dist = mark_pos - stored_pos;
-            if dist < max_dist {
+            if dist < ks.rep_max_dist {
                 return Some(dist);
             }
         }

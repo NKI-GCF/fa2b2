@@ -192,8 +192,12 @@ pub struct KmerLoc {
     pub p: ExtPosEtc,
 }
 impl KmerLoc {
-    pub fn get(&self) -> (usize, ExtPosEtc) {
-        (self.idx, self.p)
+    pub fn get(&self) -> Option<(usize, ExtPosEtc)> {
+        if self.is_set() {
+            Some((self.idx, self.p))
+        } else {
+            None
+        }
     }
     pub fn get_idx(&self) -> usize {
         self.idx

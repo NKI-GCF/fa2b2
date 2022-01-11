@@ -16,7 +16,7 @@ pub trait Scope {
     fn get_i(&self) -> usize;
     fn get_d(&self, i: usize) -> &Kmer;
     fn is_repetitive(&self) -> bool;
-    fn clear_p_extension(&mut self);
+    fn set_p_extension(&mut self, x: usize);
     fn increment(&mut self, b2: TwoBit) -> bool;
     fn extend_p(&mut self);
     fn mark_reset(&mut self);
@@ -39,12 +39,12 @@ pub trait Scope {
     }
 
     /// Manage mark, do we have any minimum?
-    fn remark(&mut self, reset_extension_if_leaving: bool) -> Result<bool> {
+    fn remark(&mut self, change_p_extension: bool) -> Result<bool> {
         if self.all_kmers() {
             if let Some(mark) = self.get_mark() {
                 if self.is_mark_out_of_scope(mark.1) {
-                    if reset_extension_if_leaving {
-                        self.clear_p_extension();
+                    if change_p_extension {
+                        self.set_p_extension(0);
                     }
                     return self.set_next_mark();
                 }
@@ -112,7 +112,7 @@ pub trait Scope {
             {
                 if let Err(e) = self.increment_for_extension(ks) {
                     dbg_print!("{}", e);
-                    self.clear_p_extension();
+                    self.set_p_extension(0);
                     break;
                 }
             }

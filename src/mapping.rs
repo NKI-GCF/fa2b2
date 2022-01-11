@@ -74,8 +74,8 @@ impl<'a> Scope for Mapping<'a> {
     fn get_p(&self) -> ExtPosEtc {
         self.p
     }
-    fn clear_p_extension(&mut self) {
-        self.p.clear_extension();
+    fn set_p_extension(&mut self, x: usize) {
+        self.p.set_extension(x);
     }
     fn get_i(&self) -> usize {
         self.i

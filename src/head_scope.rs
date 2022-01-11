@@ -89,8 +89,8 @@ impl<'a> Scope for HeadScope<'a> {
     fn unset_period(&mut self) {
         self.set_period(Position::zero());
     }
-    fn clear_p_extension(&mut self) {
-        self.p.clear_extension();
+    fn set_p_extension(&mut self, x: usize) {
+        self.p.set_extension(x);
     }
     fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()> {
         let b2 = ks.b2_for_p(self.get_p().pos(), false)?;
@@ -139,6 +139,7 @@ impl<'a> Scope for HeadScope<'a> {
     }
     fn set_mark(&mut self, idx: usize, p: ExtPosEtc, x: usize) {
         format!("[{:x}] = {:?} | x({})", idx, p, x);
+        self.p.set_extension(x);
         self.mark.set(idx, p, x);
     }
 }

@@ -105,8 +105,8 @@ impl<'a> Scope for PastScope<'a> {
     fn is_repetitive(&self) -> bool {
         self.period.is_set()
     }
-    fn clear_p_extension(&mut self) {
-        self.p.clear_extension();
+    fn set_p_extension(&mut self, x: usize) {
+        self.p.set_extension(x);
     }
 
     fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()> {

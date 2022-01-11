@@ -43,7 +43,7 @@ impl<'a> HeadScope<'a> {
                     break;
                 }
             }
-            if self.remark(true)? {
+            if self.remark(true) {
                 self.handle_mark(ks)?;
             }
         }

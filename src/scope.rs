@@ -39,7 +39,7 @@ pub trait Scope {
     }
 
     /// Manage mark, do we have any minimum?
-    fn remark(&mut self, change_p_extension: bool) -> Result<bool> {
+    fn remark(&mut self, change_p_extension: bool) -> bool {
         if self.all_kmers() {
             if let Some(mark) = self.get_mark() {
                 if self.is_mark_out_of_scope(mark.1) {
@@ -48,10 +48,10 @@ pub trait Scope {
                     }
                     return self.set_next_mark();
                 }
-                return Ok(true);
+                return true;
             }
         }
-        Ok(false)
+        false
     }
     fn new_extend(&mut self) {}
 
@@ -59,48 +59,61 @@ pub trait Scope {
         self.get_p().x() + 1 < self.get_kc().extent.len()
     }
 
+    fn try_store_mark(
+        &mut self,
+        ks: &mut KmerStore,
+        min_idx: usize,
+        min_p: ExtPosEtc,
+    ) -> Result<bool> {
+        if self.is_repetitive() && ks.kmp[min_idx].is_set() {
+            ks.kmp[min_idx].set_repetitive();
+            return Ok(true);
+        }
+        let stored_p = ks.kmp[min_idx];
+
+        if ks.kmp[min_idx].is_zero() {
+            ks.set_kmp(min_idx, min_p);
+            return Ok(true);
+        }
+        if stored_p.is_replaceable_by(min_p) {
+            if dbgx!(stored_p.is_set_and_not(min_p)) {
+                ks.pos_max = cmp::max(ks.pos_max, self.get_p().pos());
+                let mut new_scp = PastScope::new(ks, self.get_kc(), stored_p, min_idx)?;
+
+                // unset when kmer is not observed before bound.1:
+                if new_scp.get_p().is_set() {
+                    dbg_print!(
+                        "resolving past for [{:x}], {:?} <= {:?}",
+                        min_idx,
+                        stored_p,
+                        min_p
+                    );
+                    ks.set_kmp(min_idx, min_p);
+                    new_scp.handle_mark(ks)?;
+                }
+            }
+            // .. else set and already min_p. Then leave dupbit state.
+            return Ok(true);
+        }
+        if stored_p.extension() == min_p.extension() {
+            // If a kmer occurs multiple times within an extending readlength (repetition),
+            // only the first gets a position. During mapping this should be kept in mind.
+            if let Some(dist) = self.dist_if_repetitive(ks, stored_p) {
+                self.set_period(dist);
+                ks.kmp[min_idx].set_repetitive();
+                return Ok(true);
+            }
+            ks.kmp[min_idx].set_dup();
+        } else {
+            dbg_print!("not replacable, extend..");
+        }
+        Ok(false)
+    }
+
     fn handle_mark(&mut self, ks: &mut KmerStore) -> Result<()> {
         if let Some((min_idx, min_p)) = self.get_mark() {
-            if self.is_repetitive() && ks.kmp[min_idx].is_set() {
-                ks.kmp[min_idx].set_repetitive();
+            if self.try_store_mark(ks, min_idx, min_p)? {
                 return Ok(());
-            }
-            let stored_p = ks.kmp[min_idx];
-
-            if ks.kmp[min_idx].is_zero() {
-                ks.set_kmp(min_idx, min_p);
-                return Ok(());
-            } else if stored_p.is_replaceable_by(min_p) {
-                if dbgx!(stored_p.is_set_and_not(min_p)) {
-                    ks.pos_max = cmp::max(ks.pos_max, self.get_p().pos());
-                    let mut new_scp = PastScope::new(ks, self.get_kc(), stored_p, min_idx)?;
-
-                    // unset when kmer is not observed before bound.1:
-                    if new_scp.get_p().is_set() {
-                        dbg_print!(
-                            "resolving past for [{:x}], {:?} <= {:?}",
-                            min_idx,
-                            stored_p,
-                            min_p
-                        );
-                        ks.set_kmp(min_idx, min_p);
-                        new_scp.handle_mark(ks)?;
-                    }
-                }
-                // .. else set and already min_p. Then leave dupbit state.
-                return Ok(());
-            }
-            if stored_p.extension() == min_p.extension() {
-                // If a kmer occurs multiple times within an extending readlength (repetition),
-                // only the first gets a position. During mapping this should be kept in mind.
-                if let Some(dist) = self.dist_if_repetitive(ks, stored_p) {
-                    self.set_period(dist);
-                    ks.kmp[min_idx].set_repetitive();
-                    return Ok(());
-                }
-                ks.kmp[min_idx].set_dup();
-            } else {
-                dbg_print!("not replacable, extend..");
             }
         }
         while self.can_extend() {
@@ -117,7 +130,7 @@ pub trait Scope {
                 }
             }
             // every time we extend, we reiterate all for mark. May fail in repetitive DNA.
-            if self.set_next_mark()? {
+            if self.set_next_mark() {
                 self.handle_mark(ks)?;
                 break;
             }
@@ -127,7 +140,7 @@ pub trait Scope {
 
     /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)
     /// bij repetitive DNA kan geen enkel optimum de uitkomst zijn.
-    fn set_next_mark(&mut self) -> Result<bool> {
+    fn set_next_mark(&mut self) -> bool {
         self.mark_reset();
         let x = self.get_p().x();
         let kc = self.get_kc();
@@ -137,7 +150,7 @@ pub trait Scope {
         for i in (0..kc.no_xmers(x)).rev() {
             let _ = self.set_if_optimum(x, base, (bin.0 + i, bin.1 + i));
         }
-        Ok(self.get_mark().is_some())
+        self.get_mark().is_some()
     }
 
     fn is_xmer_complete(&self, x: usize) -> bool {

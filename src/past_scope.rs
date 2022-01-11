@@ -49,7 +49,7 @@ impl<'a> PastScope<'a> {
             if scp.increment(ks.b2_for_p(scp.p.pos(), false).unwrap()) {
                 // we weten extension op voorhand.
                 let base = scp.get_i() - kc.kmerlen;
-                if (scp.set_if_optimum(x, base, bin) && scp.all_kmers()) || scp.remark(false)? {
+                if (scp.set_if_optimum(x, base, bin) && scp.all_kmers()) || scp.remark(false) {
                     if p.same_pos_and_ext(scp.mark.p) {
                         break;
                     }

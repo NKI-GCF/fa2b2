@@ -11,7 +11,11 @@ pub struct TwoBit(u8);
 
 pub struct TwoBitx4(u8);
 
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct TwoBitDna(u64);
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct TwoBitRcDna(u64);
 
 /// Twobits may be unexpected: N: 0x7, A: 0x0, C: 0x1, T: 0x2, G: 0x3
 impl ThreeBit {
@@ -61,12 +65,11 @@ impl TwoBitDna {
     fn add(&mut self, b2: TwoBit, topb2_shift: u32) {
         self.0 = (self.0 >> 2) | b2.as_kmer_top(topb2_shift);
     }
-    fn as_u64(&self) -> u64 {
+    pub fn as_u64(&self) -> u64 {
         self.0
     }
 }
 
-pub struct TwoBitRcDna(u64);
 impl TwoBitRcDna {
     /// adds reverse complement of twobit to reverse complement in the bottom.
     fn add(&mut self, b2: TwoBit, topb2_shift: u32) {
@@ -106,8 +109,8 @@ impl From<&u8> for ThreeBit {
 #[derive(Copy, Clone, PartialEq, Eq)]
 /// A kmer that dissociates index and strand orientation
 pub struct Kmer {
-    pub dna: u64,
-    pub rc: u64,
+    pub dna: TwoBitDna,
+    pub rc: TwoBitRcDna,
     pub pos: Position,
     kmerlen: u32,
     topb2_shift: u32,
@@ -119,8 +122,8 @@ impl Kmer {
         let bitlen = kmerlen * 2;
         let topb2_shift = bitlen - 2;
         Kmer {
-            dna: 0,
-            rc: 0,
+            dna: TwoBitDna(0),
+            rc: TwoBitRcDna(0),
             pos: Position::zero(),
             kmerlen,
             topb2_shift,
@@ -130,33 +133,33 @@ impl Kmer {
     /// adds twobit to kmer sequences, to dna in the top two bits.
     fn add(&mut self, b2: TwoBit) {
         let kmer_mask = (1 << self.topb2_shift) - 1;
-        let dna = self.dna >> 2;
-        let rc = (self.rc & kmer_mask) << 2;
-        self.dna = dna | b2.as_kmer_top(self.topb2_shift);
-        self.rc = rc | b2.as_kmer_bottom_rc();
+        let dna = self.dna.0 >> 2;
+        let rc = (self.rc.0 & kmer_mask) << 2;
+        self.dna.0 = dna | b2.as_kmer_top(self.topb2_shift);
+        self.rc.0 = rc | b2.as_kmer_bottom_rc();
         self.pos.incr();
     }
     /// true if the kmer is from the template. Palindromes are special.
     pub fn is_template(&self) -> bool {
-        self.dna < self.rc || (self.dna == self.rc && (self.dna & 1) != 0)
+        self.dna.0 < self.rc.0 || (self.dna.0 == self.rc.0 && (self.dna.0 & 1) != 0)
     }
 
     /// Add twobit to k-mers and return orientation bit as first bit for stored
     pub fn update(&mut self, b2: TwoBit) -> bool {
         // XXX function is hot
         self.add(b2);
-        match self.dna.cmp(&self.rc) {
+        match self.dna.0.cmp(&self.rc.0) {
             cmp::Ordering::Greater => false,
             cmp::Ordering::Less => true,
-            cmp::Ordering::Equal => self.dna & 1 != 0,
+            cmp::Ordering::Equal => self.dna.0 & 1 != 0,
         }
     }
     //TODO: remove use_min
     pub fn get_base_seq(&self, use_min: bool) -> u64 {
-        if (self.dna < self.rc) == use_min {
-            self.dna
+        if (self.dna.0 < self.rc.0) == use_min {
+            self.dna.0
         } else {
-            self.rc
+            self.rc.0
         }
     }
 
@@ -258,8 +261,8 @@ mod tests {
         }
         let (dna, rc) = if ori { (dna, rc) } else { (rc, dna) };
         let mut kmer = Kmer::new(kmerlen);
-        kmer.dna = dna;
-        kmer.rc = rc;
+        kmer.dna.0 = dna;
+        kmer.rc.0 = rc;
         kmer
     }
     #[test]
@@ -268,8 +271,8 @@ mod tests {
         for i in 0..32 {
             kmer.add(TwoBit(i & 3));
         }
-        dbg_assert_eq!(kmer.dna, 0xE4E4E4E4E4E4E4E4); // GTCAGTCAGTCAGTCA => 3210321032103210 (in 2bits)
-        dbg_assert_eq!(kmer.rc, 0xB1B1B1B1B1B1B1B1); // xor 0xaaaaaaaa and reverse per 2bit
+        dbg_assert_eq!(kmer.dna.0, 0xE4E4E4E4E4E4E4E4); // GTCAGTCAGTCAGTCA => 3210321032103210 (in 2bits)
+        dbg_assert_eq!(kmer.rc.0, 0xB1B1B1B1B1B1B1B1); // xor 0xaaaaaaaa and reverse per 2bit
         dbg_assert_eq!(kmer.get_idx(true), 0x4E4E4E4E4E4E4E4E); // highest bit is set, so flipped.
     }
     #[test]
@@ -278,8 +281,8 @@ mod tests {
         for i in 0..16 {
             kmer.add(TwoBit(i & 3));
         }
-        dbg_assert_eq!(kmer.dna, 0xE4E4E4E4);
-        dbg_assert_eq!(kmer.rc, 0xB1B1B1B1);
+        dbg_assert_eq!(kmer.dna.0, 0xE4E4E4E4);
+        dbg_assert_eq!(kmer.rc.0, 0xB1B1B1B1);
         dbg_assert_eq!(kmer.get_idx(true), 0x4E4E4E4E);
     }
     #[test]
@@ -288,8 +291,8 @@ mod tests {
         for i in 0..4 {
             kmer.add(TwoBit(i & 3));
         }
-        dbg_assert_eq!(kmer.dna, 0xE4);
-        dbg_assert_eq!(kmer.rc, 0xB1);
+        dbg_assert_eq!(kmer.dna.0, 0xE4);
+        dbg_assert_eq!(kmer.rc.0, 0xB1);
         dbg_assert_eq!(kmer.get_idx(true), 0x4E);
     }
     #[test]
@@ -314,7 +317,7 @@ mod tests {
         for _ in 0..32 {
             kmer.add(TwoBit(rng.gen_range(0..4)));
         }
-        dbg_assert_eq!(kmer.dna.revcmp(kmerlen as usize), kmer.rc);
+        dbg_assert_eq!(kmer.dna.0.revcmp(kmerlen as usize), kmer.rc.0);
     }
     #[test]
     fn test_from_idx() {
@@ -331,22 +334,22 @@ mod tests {
         for i in 0..last {
             kmer.add(TwoBit(rng.gen_range(0..4)));
             if i == pick {
-                test_dna = kmer.dna;
-                test_rc = kmer.rc;
+                test_dna = kmer.dna.0;
+                test_rc = kmer.rc.0;
                 test_idx = kmer.get_idx(true);
-                test_ori = kmer.dna < kmer.rc;
+                test_ori = kmer.dna.0 < kmer.rc.0;
             }
         }
         dbg_assert_ne!(test_idx, 0xffffffffffffffff);
         let kmer2 = kmer_from_idx(test_idx, kmerlen, test_ori);
 
-        dbg_assert_eq!(test_dna, kmer2.dna);
-        dbg_assert_eq!(test_rc, kmer2.rc);
+        dbg_assert_eq!(test_dna, kmer2.dna.0);
+        dbg_assert_eq!(test_rc, kmer2.rc.0);
 
         let kmer3 = kmer_from_idx(test_idx, kmerlen, !test_ori);
 
-        dbg_assert_eq!(test_dna, kmer3.rc);
-        dbg_assert_eq!(test_rc, kmer3.dna);
+        dbg_assert_eq!(test_dna, kmer3.rc.0);
+        dbg_assert_eq!(test_rc, kmer3.dna.0);
     }
     #[test]
     fn extra() {
@@ -354,7 +357,7 @@ mod tests {
         for _ in 0..16 {
             kmer.add(TwoBit(1));
         }
-        dbg_assert_eq!(kmer.dna, 0x55);
-        dbg_assert_eq!(kmer.rc, 0xff);
+        dbg_assert_eq!(kmer.dna.0, 0x55);
+        dbg_assert_eq!(kmer.rc.0, 0xff);
     }
 }

@@ -178,7 +178,7 @@ pub trait Scope {
                     hash ^= self.get_d(base.wrapping_sub(bin.1) % nk).get_idx(false);
                     p.set_ori(true);
                 }
-                cmp::Ordering::Equal => p.set_ori(kmer1.dna & 1 != 0),
+                cmp::Ordering::Equal => p.set_ori(kmer1.dna.as_u64() & 1 != 0),
             }
             if self.is_repetitive() {
                 p.set_repetitive();

@@ -14,7 +14,7 @@ pub trait Scope {
     fn get_kc(&self) -> &KmerConst;
     fn get_p(&self) -> ExtPosEtc;
     fn get_i(&self) -> usize;
-    fn get_d(&self, i: usize) -> &Kmer<u64>;
+    fn get_d(&self, i: usize) -> &Kmer;
     fn is_repetitive(&self) -> bool;
     fn clear_p_extension(&mut self);
     fn increment(&mut self, b2: TwoBit) -> bool;
@@ -53,6 +53,7 @@ pub trait Scope {
         }
         Ok(false)
     }
+    fn new_extend(&mut self) {}
 
     fn can_extend(&self) -> bool {
         self.get_p().x() + 1 < self.get_kc().extent.len()

@@ -11,7 +11,7 @@ use std::fmt;
 pub struct HeadScope<'a> {
     kc: &'a KmerConst,
     pub p: ExtPosEtc,
-    d: Vec<Kmer<u64>>,
+    d: Vec<Kmer>,
     z: Vec<usize>,
     pub mark: KmerLoc,
     pub i: usize,
@@ -52,6 +52,15 @@ impl<'a> HeadScope<'a> {
     fn is_on_last_contig(&self, ks: &KmerStore, pos: Position) -> bool {
         pos >= ks.contig.last().unwrap().twobit
     }
+    fn pick_mark(&mut self, x: usize) -> (usize, ExtPosEtc) {
+        let med = self.kc.no_kmers >> 1;
+        let i = self
+            .z
+            .select_nth_unstable_by(med, |&a, &b| self.d[a].cmp(&self.d[b]))
+            .1;
+        self.d[*i].get_hash_and_p(x)
+    }
+    // TODO: binary search to highest set for baseidx. with dupbit 0.
 }
 
 impl<'a> Scope for HeadScope<'a> {
@@ -67,7 +76,7 @@ impl<'a> Scope for HeadScope<'a> {
     fn get_i(&self) -> usize {
         self.i
     }
-    fn get_d(&self, i: usize) -> &Kmer<u64> {
+    fn get_d(&self, i: usize) -> &Kmer {
         &self.d[i]
     }
     fn is_repetitive(&self) -> bool {

@@ -15,7 +15,7 @@ pub struct Mapping<'a> {
     i: usize,
     mod_i: usize,
     mark: KmerLoc,
-    d: Vec<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
+    d: Vec<Kmer>, // misschien is deze on the fly uit ks te bepalen?
     z: Vec<usize>,
 }
 
@@ -45,13 +45,13 @@ impl<'a> Mapping<'a> {
         }
         Ok(scp)
     }
-    fn pick_mark(&mut self, x: usize) -> (usize, Position) {
+    fn pick_mark(&mut self, x: usize) -> (usize, ExtPosEtc) {
         let med = self.kc.no_kmers >> 1;
         let i = self
             .z
             .select_nth_unstable_by(med, |&a, &b| self.d[a].cmp(&self.d[b]))
             .1;
-        self.d[*i].get_hash(x)
+        self.d[*i].get_hash_and_p(x)
     }
 }
 
@@ -80,7 +80,7 @@ impl<'a> Scope for Mapping<'a> {
     fn get_i(&self) -> usize {
         self.i
     }
-    fn get_d(&self, i: usize) -> &Kmer<u64> {
+    fn get_d(&self, i: usize) -> &Kmer {
         &self.d[i]
     }
 

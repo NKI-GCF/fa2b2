@@ -3,10 +3,9 @@ use crate::new_types::{
     position::{BasePos, Position},
 };
 use crate::rdbg::STAT_DB;
-use derive_more::{Add, Rem, Sub};
+use derive_more::Sub;
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
-use std::convert::TryFrom;
 use std::ops::Add;
 use std::{cmp, fmt};
 

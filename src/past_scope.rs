@@ -18,7 +18,7 @@ pub struct PastScope<'a> {
     plim: (Position, Position),
     period: Position,
     mark: KmerLoc,
-    d: Vec<Kmer<u64>>, // misschien is deze on the fly uit ks te bepalen?
+    d: Vec<Kmer>, // misschien is deze on the fly uit ks te bepalen?
     z: Vec<usize>,
 }
 
@@ -99,7 +99,7 @@ impl<'a> Scope for PastScope<'a> {
     fn get_i(&self) -> usize {
         self.i
     }
-    fn get_d(&self, i: usize) -> &Kmer<u64> {
+    fn get_d(&self, i: usize) -> &Kmer {
         &self.d[i]
     }
     fn is_repetitive(&self) -> bool {

@@ -130,21 +130,17 @@ impl Kmer {
         }
     }
 
-    /// adds twobit to kmer sequences, to dna in the top two bits.
-    fn add(&mut self, b2: TwoBit) {
-        self.dna.add(b2, self.topb2_shift);
-        self.rc.add(b2, self.topb2_shift);
-        self.pos.incr();
-    }
     /// true if the kmer is from the template. Palindromes are special.
     pub fn is_template(&self) -> bool {
         self.dna.0 < self.rc.0 || (self.dna.0 == self.rc.0 && (self.dna.0 & 1) != 0)
     }
 
-    /// Add twobit to k-mers and return orientation bit as first bit for stored
+    /// adds twobit to k-mer sequences, to dna in the top two bits. Returns orientation.
     pub fn update(&mut self, b2: TwoBit) -> bool {
         // XXX function is hot
-        self.add(b2);
+        self.dna.add(b2, self.topb2_shift);
+        self.rc.add(b2, self.topb2_shift);
+        self.pos.incr();
         match self.dna.0.cmp(&self.rc.0) {
             cmp::Ordering::Greater => false,
             cmp::Ordering::Less => true,
@@ -266,7 +262,7 @@ mod tests {
     fn test_u64() {
         let mut kmer: Kmer = Kmer::new(32);
         for i in 0..32 {
-            kmer.add(TwoBit(i & 3));
+            kmer.update(TwoBit(i & 3));
         }
         dbg_assert_eq!(kmer.dna.0, 0xE4E4E4E4E4E4E4E4); // GTCAGTCAGTCAGTCA => 3210321032103210 (in 2bits)
         dbg_assert_eq!(kmer.rc.0, 0xB1B1B1B1B1B1B1B1); // xor 0xaaaaaaaa and reverse per 2bit
@@ -276,7 +272,7 @@ mod tests {
     fn test_u32() {
         let mut kmer: Kmer = Kmer::new(16);
         for i in 0..16 {
-            kmer.add(TwoBit(i & 3));
+            kmer.update(TwoBit(i & 3));
         }
         dbg_assert_eq!(kmer.dna.0, 0xE4E4E4E4);
         dbg_assert_eq!(kmer.rc.0, 0xB1B1B1B1);
@@ -286,7 +282,7 @@ mod tests {
     fn test_u8() {
         let mut kmer: Kmer = Kmer::new(4);
         for i in 0..4 {
-            kmer.add(TwoBit(i & 3));
+            kmer.update(TwoBit(i & 3));
         }
         dbg_assert_eq!(kmer.dna.0, 0xE4);
         dbg_assert_eq!(kmer.rc.0, 0xB1);
@@ -298,7 +294,7 @@ mod tests {
         let mut kmer: Kmer = Kmer::new(4);
         for i in 0..=255 {
             for j in 0..4 {
-                kmer.add(TwoBit((i >> (j << 1)) & 3));
+                kmer.update(TwoBit((i >> (j << 1)) & 3));
             }
             let x = (if kmer.is_template() { 1 } else { 0 }) | kmer.get_idx(true) << 1;
             dbg_assert!(!seen[x], "0x{:x} already seen!", x);
@@ -312,7 +308,7 @@ mod tests {
         let kmerlen = rng.gen_range(2..32);
         let mut kmer: Kmer = Kmer::new(kmerlen);
         for _ in 0..32 {
-            kmer.add(TwoBit(rng.gen_range(0..4)));
+            kmer.update(TwoBit(rng.gen_range(0..4)));
         }
         dbg_assert_eq!(kmer.dna.0.revcmp(kmerlen as usize), kmer.rc.0);
     }
@@ -329,7 +325,7 @@ mod tests {
 
         let mut kmer: Kmer = Kmer::new(kmerlen);
         for i in 0..last {
-            kmer.add(TwoBit(rng.gen_range(0..4)));
+            kmer.update(TwoBit(rng.gen_range(0..4)));
             if i == pick {
                 test_dna = kmer.dna.0;
                 test_rc = kmer.rc.0;
@@ -352,7 +348,7 @@ mod tests {
     fn extra() {
         let mut kmer: Kmer = Kmer::new(4);
         for _ in 0..16 {
-            kmer.add(TwoBit(1));
+            kmer.update(TwoBit(1));
         }
         dbg_assert_eq!(kmer.dna.0, 0x55);
         dbg_assert_eq!(kmer.rc.0, 0xff);

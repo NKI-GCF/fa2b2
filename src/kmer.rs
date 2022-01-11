@@ -6,7 +6,7 @@ use std::{cmp, fmt};
 
 pub struct ThreeBit(u8);
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct TwoBit(u8);
 
 pub struct TwoBitx4(u8);
@@ -62,7 +62,7 @@ impl TwoBitx4 {
 
 impl TwoBitDna {
     /// adds twobit to kmer dna sequences, in the top two bits.
-    fn add(&mut self, b2: TwoBit, topb2_shift: u32) {
+    pub(super) fn add(&mut self, b2: TwoBit, topb2_shift: u32) {
         self.0 = (self.0 >> 2) | b2.as_kmer_top(topb2_shift);
     }
     pub fn as_u64(&self) -> u64 {
@@ -72,12 +72,12 @@ impl TwoBitDna {
 
 impl TwoBitRcDna {
     /// adds reverse complement of twobit to reverse complement in the bottom.
-    fn add(&mut self, b2: TwoBit, topb2_shift: u32) {
+    pub(super) fn add(&mut self, b2: TwoBit, topb2_shift: u32) {
         self.0 = ((self.0 & ((1 << topb2_shift) - 1)) << 2) | b2.as_kmer_bottom_rc();
     }
-    fn as_u64(&self) -> u64 {
+    /*fn as_u64(&self) -> u64 {
         self.0
-    }
+    }*/
 }
 
 impl fmt::Debug for TwoBit {
@@ -132,11 +132,8 @@ impl Kmer {
 
     /// adds twobit to kmer sequences, to dna in the top two bits.
     fn add(&mut self, b2: TwoBit) {
-        let kmer_mask = (1 << self.topb2_shift) - 1;
-        let dna = self.dna.0 >> 2;
-        let rc = (self.rc.0 & kmer_mask) << 2;
-        self.dna.0 = dna | b2.as_kmer_top(self.topb2_shift);
-        self.rc.0 = rc | b2.as_kmer_bottom_rc();
+        self.dna.add(b2, self.topb2_shift);
+        self.rc.add(b2, self.topb2_shift);
         self.pos.incr();
     }
     /// true if the kmer is from the template. Palindromes are special.

@@ -1,6 +1,6 @@
 use crate::kmerconst::KmerConst;
-use crate::new_types::extended_position::{ExtPosEtc, KmerLoc, DUPLICATE, EXT_MAX, REPETITIVE};
 use crate::kmerstore::KmerStore;
+use crate::new_types::extended_position::{ExtPosEtc, KmerLoc, EXT_MAX};
 use crate::new_types::{
     position::Position,
     twobit::{ThreeBit, TwoBit},
@@ -54,9 +54,8 @@ impl<'a> Mapper<'a> {
                 dbg_assert!(last_pos < pos, "Xmer invalid by ref coordinate order.");
 
                 last_pos = pos;
-                let recurrence = test_p.get_recurrence();
-                if recurrence & REPETITIVE != 0 {}
-                if recurrence & DUPLICATE != 0 {
+                if test_p.is_repetitive() {}
+                if test_p.is_last_on_ref() {
                     // no DUPLICATE: => last sequence that corresponded with this xmer.
                     break;
                 }

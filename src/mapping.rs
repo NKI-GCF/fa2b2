@@ -1,8 +1,11 @@
-use crate::kmer::{Kmer, ThreeBit, TwoBit};
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::{ExtPosEtc, KmerLoc, DUPLICATE, EXT_MAX, REPETITIVE};
 use crate::kmerstore::KmerStore;
-use crate::new_types::position::Position;
+use crate::new_types::{
+    position::Position,
+    twobit::{ThreeBit, TwoBit},
+    xmer::Xmer,
+};
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
 use anyhow::{anyhow, Result};
@@ -16,7 +19,7 @@ pub struct Mapper<'a> {
     i: usize,
     mod_i: usize,
     mark: KmerLoc,
-    d: Vec<Kmer>, // misschien is deze on the fly uit ks te bepalen?
+    d: Vec<Xmer>, // misschien is deze on the fly uit ks te bepalen?
     z: Vec<usize>,
 }
 
@@ -29,7 +32,7 @@ impl<'a> Mapper<'a> {
             i: 0,
             mod_i: 0,
             mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
-            d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
+            d: vec![Xmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         }
     }
@@ -80,7 +83,7 @@ impl<'a> Mapper<'a> {
                 if self.increment(b2) {
                     // we weten extension op voorhand.
                     if let Some(i) = self.new_xmer_median() {
-                        self.se_mapping(i);
+                        self.se_mapping(i)?;
                     }
                 }
             }
@@ -93,7 +96,7 @@ impl<'a> Scope for Mapper<'a> {
     fn get_kc(&self) -> &KmerConst {
         self.kc
     }
-    fn get_d(&self, i: usize) -> &Kmer {
+    fn get_d(&self, i: usize) -> &Xmer {
         &self.d[i]
     }
     fn pick_mark(&mut self) -> usize {

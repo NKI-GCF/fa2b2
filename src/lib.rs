@@ -22,7 +22,6 @@ pub mod rdbg;
 pub mod aln;
 pub mod head_scope;
 pub mod index;
-pub mod kmer;
 pub mod kmerconst;
 pub mod kmerloc;
 pub mod kmerstore;

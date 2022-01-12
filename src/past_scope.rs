@@ -1,10 +1,7 @@
-use crate::kmer::Kmer;
-use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::{ExtPosEtc, KmerLoc};
 use crate::kmerstore::KmerStore;
-use crate::new_types::extension::Extension;
-use crate::new_types::position::Position;
+use crate::new_types::{extension::Extension, position::Position, twobit::TwoBit, xmer::Xmer};
 use crate::rdbg::STAT_DB;
 use crate::scope::{Scope, WritingScope};
 use anyhow::{ensure, Result};
@@ -18,7 +15,7 @@ pub struct PastScope<'a> {
     plim: (Position, Position),
     period: Position,
     mark: KmerLoc,
-    d: Vec<Kmer>, // misschien is deze on the fly uit ks te bepalen?
+    d: Vec<Xmer>, // misschien is deze on the fly uit ks te bepalen?
     z: Vec<usize>,
 }
 
@@ -39,7 +36,7 @@ impl<'a> PastScope<'a> {
             plim,
             period: Position::zero(),
             mark: KmerLoc::new(usize::max_value(), ExtPosEtc::from(extension)),
-            d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
+            d: vec![Xmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         };
 
@@ -101,7 +98,7 @@ impl<'a> Scope for PastScope<'a> {
     fn get_kc(&self) -> &KmerConst {
         self.kc
     }
-    fn get_d(&self, i: usize) -> &Kmer {
+    fn get_d(&self, i: usize) -> &Xmer {
         &self.d[i]
     }
 

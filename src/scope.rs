@@ -1,15 +1,13 @@
-use crate::kmer::Kmer;
-use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::ExtPosEtc;
 use crate::kmerstore::KmerStore;
-use crate::new_types::position::Position;
+use crate::new_types::{position::Position, twobit::TwoBit, xmer::Xmer};
 use crate::rdbg::STAT_DB;
 use anyhow::Result;
 
 pub trait Scope {
     fn get_kc(&self) -> &KmerConst;
-    fn get_d(&self, i: usize) -> &Kmer;
+    fn get_d(&self, i: usize) -> &Xmer;
     fn increment(&mut self, b2: TwoBit) -> bool;
     fn set_mark(&mut self, idx: usize, p: ExtPosEtc);
     fn pick_mark(&mut self) -> usize;

@@ -99,6 +99,7 @@ impl ExtPosEtc {
         *self == other
     }
     /// Note: does not include ori, dup and rep bits.
+    #[must_use]
     pub fn pos_with_ext(&self, x: usize) -> ExtPosEtc {
         ExtPosEtc(Extension::from(x).as_u64() | self.pos().as_u64())
     }
@@ -125,6 +126,7 @@ impl ExtPosEtc {
     pub fn is_repetitive(&self) -> bool {
         self.0 & REPETITIVE != 0
     }
+    #[must_use]
     pub fn rep_dup_masked(&self) -> ExtPosEtc {
         ExtPosEtc(self.0 & !(DUPLICATE | REPETITIVE))
     }

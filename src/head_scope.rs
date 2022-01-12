@@ -1,8 +1,7 @@
-use crate::kmer::{Kmer, TwoBit};
 use crate::kmerconst::KmerConst;
 use crate::kmerloc::{ExtPosEtc, KmerLoc};
 use crate::kmerstore::KmerStore;
-use crate::new_types::position::Position;
+use crate::new_types::{position::Position, twobit::TwoBit, xmer::Xmer};
 use crate::rdbg::STAT_DB;
 use crate::scope::{Scope, WritingScope};
 use anyhow::Result;
@@ -11,7 +10,7 @@ use std::fmt;
 pub struct HeadScope<'a> {
     kc: &'a KmerConst,
     pub p: ExtPosEtc,
-    d: Vec<Kmer>,
+    d: Vec<Xmer>,
     z: Vec<usize>,
     pub mark: KmerLoc,
     pub i: usize,
@@ -24,7 +23,7 @@ impl<'a> HeadScope<'a> {
         HeadScope {
             kc,
             p: ExtPosEtc::zero(),
-            d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
+            d: vec![Xmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).into_iter().collect(),
             mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
             i: 0,
@@ -68,7 +67,7 @@ impl<'a> Scope for HeadScope<'a> {
     fn get_kc(&self) -> &KmerConst {
         self.kc
     }
-    fn get_d(&self, i: usize) -> &Kmer {
+    fn get_d(&self, i: usize) -> &Xmer {
         &self.d[i]
     }
     fn pick_mark(&mut self) -> usize {

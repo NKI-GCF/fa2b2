@@ -5,10 +5,9 @@ extern crate num;
 extern crate num_traits;
 
 use crate::head_scope::HeadScope;
-use crate::kmer::ThreeBit;
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
-use crate::new_types::position::Position;
+use crate::new_types::{position::Position, twobit::ThreeBit};
 use crate::rdbg::STAT_DB;
 use crate::scope::WritingScope;
 use anyhow::Result;

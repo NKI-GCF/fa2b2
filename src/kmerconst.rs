@@ -1,6 +1,8 @@
-use crate::kmer::xmer_hash;
 use crate::kmerloc::ExtPosEtc;
-use crate::new_types::position::{BasePos, Position};
+use crate::new_types::{
+    position::{BasePos, Position},
+    xmer::xmer_hash,
+};
 use crate::rdbg::STAT_DB;
 use num::{FromPrimitive, PrimInt};
 use std::cmp;
@@ -90,7 +92,7 @@ impl KmerConst {
         self.extent.len()
     }
 
-    // same hash function, from Kmer.
+    // same hash function, from Xmer.
     pub fn get_next_xmer(&self, orig_hash: usize, mut p: ExtPosEtc) -> Option<(usize, ExtPosEtc)> {
         if p.x() + 1 < 0x1_0000_0000 {
             /*was < self.get_ext_max()*/

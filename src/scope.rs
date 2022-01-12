@@ -1,64 +1,30 @@
 use crate::kmer::Kmer;
 use crate::kmer::TwoBit;
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{ExtPosEtc, KmerLoc};
+use crate::kmerloc::ExtPosEtc;
 use crate::kmerstore::KmerStore;
-use crate::new_types::position::{BasePos, Position};
-use crate::past_scope::PastScope;
+use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use anyhow::Result;
-use std::cmp;
 
 pub trait Scope {
-    fn get_mark(&self) -> Option<(usize, ExtPosEtc)>;
     fn get_kc(&self) -> &KmerConst;
-    fn get_p(&self) -> ExtPosEtc;
-    fn get_i(&self) -> usize;
     fn get_d(&self, i: usize) -> &Kmer;
-    fn is_repetitive(&self) -> bool;
-    fn set_p_extension(&mut self, x: usize);
     fn increment(&mut self, b2: TwoBit) -> bool;
-    fn extend_p(&mut self);
-    fn mark_reset(&mut self);
-    fn set_mark(&mut self, idx: usize, p: ExtPosEtc, x: usize);
+    fn set_mark(&mut self, idx: usize, p: ExtPosEtc);
+    fn pick_mark(&mut self) -> usize;
+    fn dist_if_repetitive(
+        &self,
+        ks: &KmerStore,
+        stored_p: ExtPosEtc,
+        min_p: ExtPosEtc,
+    ) -> Option<Position>;
+}
+
+pub trait WritingScope: Scope {
+    fn is_repetitive(&self) -> bool;
     fn set_period(&mut self, period: Position);
-    fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()>;
-    fn dist_if_repetitive(&self, ks: &KmerStore, stored_p: ExtPosEtc) -> Option<Position>;
     fn unset_period(&mut self);
-
-    /// is occ complete? call na complete_kmer() - self.i increment.
-    fn all_kmers(&self) -> bool {
-        self.get_i() >= self.get_kc().venster
-    }
-
-    fn is_mark_out_of_scope(&self, mark_p: ExtPosEtc) -> bool {
-        let p = self.get_p();
-        dbg_assert!(p.pos() >= mark_p.pos(), "{:?}, {:?}", p, mark_p);
-        let afstand = self.get_kc().no_xmers(p.x());
-        p.pos() >= mark_p.pos() + Position::from(BasePos::from(afstand))
-    }
-
-    /// Manage mark, do we have any minimum?
-    fn remark(&mut self, change_p_extension: bool) -> bool {
-        if self.all_kmers() {
-            if let Some(mark) = self.get_mark() {
-                if self.is_mark_out_of_scope(mark.1) {
-                    if change_p_extension {
-                        self.set_p_extension(0);
-                    }
-                    return self.set_next_mark();
-                }
-                return true;
-            }
-        }
-        false
-    }
-    fn new_extend(&mut self) {}
-
-    fn can_extend(&self) -> bool {
-        self.get_p().x() + 1 < self.get_kc().extent.len()
-    }
-
     fn try_store_mark(
         &mut self,
         ks: &mut KmerStore,
@@ -69,138 +35,51 @@ pub trait Scope {
             ks.kmp[min_idx].set_repetitive();
             return Ok(true);
         }
-        let stored_p = ks.kmp[min_idx];
+        let old_stored_p = ks.kmp[min_idx];
 
         if ks.kmp[min_idx].is_zero() {
             ks.set_kmp(min_idx, min_p);
             return Ok(true);
         }
-        if stored_p.is_replaceable_by(min_p) {
-            if dbgx!(stored_p.is_set_and_not(min_p)) {
-                ks.pos_max = cmp::max(ks.pos_max, self.get_p().pos());
-                let mut new_scp = PastScope::new(ks, self.get_kc(), stored_p, min_idx)?;
-
-                // unset when kmer is not observed before bound.1:
-                if new_scp.get_p().is_set() {
-                    dbg_print!(
-                        "resolving past for [{:x}], {:?} <= {:?}",
-                        min_idx,
-                        stored_p,
-                        min_p
-                    );
-                    ks.set_kmp(min_idx, min_p);
-                    new_scp.handle_mark(ks)?;
+        if old_stored_p.is_replaceable_by(min_p) {
+            if dbgx!(old_stored_p.is_set_and_not(min_p)) {
+                while let Some((store_idx, store_p)) =
+                    self.get_kc().get_next_xmer(min_idx, old_stored_p)
+                {
+                    if self.try_store_mark(ks, store_idx, store_p)? {
+                        break;
+                    }
                 }
+                ks.set_kmp(min_idx, min_p);
             }
-            // .. else set and already min_p. Then leave dupbit state.
+            // .. else set and already min_p. Then leave bit states.
             return Ok(true);
         }
-        if stored_p.extension() == min_p.extension() {
+        if old_stored_p.extension() == min_p.extension() {
             // If a kmer occurs multiple times within an extending readlength (repetition),
             // only the first gets a position. During mapping this should be kept in mind.
-            if let Some(dist) = self.dist_if_repetitive(ks, stored_p) {
+            if let Some(dist) = self.dist_if_repetitive(ks, old_stored_p, min_p) {
                 self.set_period(dist);
+                // TODO: repetitive should be moved to higher extensions.
                 ks.kmp[min_idx].set_repetitive();
                 return Ok(true);
             }
-            ks.kmp[min_idx].set_dup();
-        } else {
-            dbg_print!("not replacable, extend..");
+            ks.kmp[min_idx].mark_more_upseq();
         }
+        dbg_print!("not replacable, extend..");
         Ok(false)
     }
 
-    fn handle_mark(&mut self, ks: &mut KmerStore) -> Result<()> {
-        if let Some((min_idx, min_p)) = self.get_mark() {
+    fn store_mark(&mut self, ks: &mut KmerStore, i: usize) -> Result<()> {
+        let mut min_idx = 0;
+        let mut min_p = ExtPosEtc::zero();
+        for x in 0..self.get_kc().get_ext_max() {
+            (min_idx, min_p) = self.get_d(i).get_hash_and_p(x);
             if self.try_store_mark(ks, min_idx, min_p)? {
-                return Ok(());
-            }
-        }
-        while self.can_extend() {
-            self.extend_p();
-            if self
-                .get_mark()
-                .filter(|m| self.is_mark_out_of_scope(m.1))
-                .is_some()
-            {
-                if let Err(e) = self.increment_for_extension(ks) {
-                    dbg_print!("{}", e);
-                    self.set_p_extension(0);
-                    break;
-                }
-            }
-            // every time we extend, we reiterate all for mark. May fail in repetitive DNA.
-            if self.set_next_mark() {
-                self.handle_mark(ks)?;
                 break;
             }
         }
+        self.set_mark(min_idx, min_p);
         Ok(())
-    }
-
-    /// bepaal van alle kmers het nieuwe minimum/optimum (na leaving mark of extensie)
-    /// bij repetitive DNA kan geen enkel optimum de uitkomst zijn.
-    fn set_next_mark(&mut self) -> bool {
-        self.mark_reset();
-        let x = self.get_p().x();
-        let kc = self.get_kc();
-        let base = self.get_i() - kc.kmerlen;
-        let bin = kc.get_kmers(x);
-        // reverse is logischer omdat we bij gelijke extensie voor een lagere positie kiezen.
-        for i in (0..kc.no_xmers(x)).rev() {
-            let _ = self.set_if_optimum(x, base, (bin.0 + i, bin.1 + i));
-        }
-        self.get_mark().is_some()
-    }
-
-    fn is_xmer_complete(&self, x: usize) -> bool {
-        let kc = self.get_kc();
-        self.get_i() >= kc.kmerlen + kc.afstand(x)
-    }
-    /// voor een offset i en extensie x, maak de kmer/hash en zet mark + return true als optimum.
-    fn set_if_optimum(&mut self, x: usize, base: usize, bin: (usize, usize)) -> bool {
-        if self.is_xmer_complete(x) {
-            let kc = self.get_kc();
-            let nk = kc.no_kmers;
-            let kmer1 = self.get_d(base.wrapping_sub(bin.0) % nk);
-            let mut hash = kmer1.get_idx(bin.0 <= bin.1);
-            let mut p = if let Some(mark) = self.get_mark() {
-                match hash.cmp(&mark.0) {
-                    cmp::Ordering::Less => {
-                        self.get_p().pos_with_ext(x) - ExtPosEtc::from(BasePos::from(bin.0))
-                    }
-                    cmp::Ordering::Greater => return false,
-                    cmp::Ordering::Equal => {
-                        let p =
-                            self.get_p().pos_with_ext(x) - ExtPosEtc::from(BasePos::from(bin.0));
-                        if p >= mark.1 {
-                            return false;
-                        }
-                        p
-                    }
-                }
-            } else {
-                self.get_p().pos_with_ext(x) - ExtPosEtc::from(BasePos::from(bin.0))
-            };
-            match bin.0.cmp(&bin.1) {
-                cmp::Ordering::Less => {
-                    hash ^= self.get_d(base.wrapping_sub(bin.1) % nk).get_idx(true);
-                    p.set_ori(false);
-                }
-                cmp::Ordering::Greater => {
-                    hash ^= self.get_d(base.wrapping_sub(bin.1) % nk).get_idx(false);
-                    p.set_ori(true);
-                }
-                cmp::Ordering::Equal => p.set_ori(kmer1.dna.as_u64() & 1 != 0),
-            }
-            if self.is_repetitive() {
-                p.set_repetitive();
-            }
-            self.set_mark(hash, p, x);
-            // XXX maybe return self.all_kmers() ??
-            true
-        } else {
-            false
-        }
     }
 }

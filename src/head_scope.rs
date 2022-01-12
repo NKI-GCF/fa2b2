@@ -4,7 +4,7 @@ use crate::kmerloc::{ExtPosEtc, KmerLoc};
 use crate::kmerstore::KmerStore;
 use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
-use crate::scope::Scope;
+use crate::scope::{Scope, WritingScope};
 use anyhow::Result;
 use std::fmt;
 
@@ -37,14 +37,10 @@ impl<'a> HeadScope<'a> {
     // .i & .p increments en kmer .d[] updates vinden plaats.
     pub fn complete_and_update_mark(&mut self, b2: TwoBit, ks: &mut KmerStore) -> Result<()> {
         if self.increment(b2) {
-            let base = self.get_i() - self.kc.kmerlen;
-            for x in 0..=self.p.x() {
-                if self.set_if_optimum(x, base, self.kc.get_kmers(x)) {
-                    break;
-                }
-            }
-            if self.remark(true) {
-                self.handle_mark(ks)?;
+            // one mark is added, and one leaving. both influence mark (and order).
+            let i = self.pick_mark();
+            if self.d[i].pos != self.mark.p.pos() {
+                self.store_mark(ks, i)?;
             }
         }
         Ok(())
@@ -52,33 +48,10 @@ impl<'a> HeadScope<'a> {
     fn is_on_last_contig(&self, ks: &KmerStore, pos: Position) -> bool {
         pos >= ks.contig.last().unwrap().twobit
     }
-    fn pick_mark(&mut self, x: usize) -> (usize, ExtPosEtc) {
-        let med = self.kc.no_kmers >> 1;
-        let i = self
-            .z
-            .select_nth_unstable_by(med, |&a, &b| self.d[a].cmp(&self.d[b]))
-            .1;
-        self.d[*i].get_hash_and_p(x)
-    }
     // TODO: binary search to highest set for baseidx. with dupbit 0.
 }
 
-impl<'a> Scope for HeadScope<'a> {
-    fn get_mark(&self) -> Option<(usize, ExtPosEtc)> {
-        self.mark.get()
-    }
-    fn get_kc(&self) -> &KmerConst {
-        self.kc
-    }
-    fn get_p(&self) -> ExtPosEtc {
-        self.p
-    }
-    fn get_i(&self) -> usize {
-        self.i
-    }
-    fn get_d(&self, i: usize) -> &Kmer {
-        &self.d[i]
-    }
+impl<'a> WritingScope for HeadScope<'a> {
     fn is_repetitive(&self) -> bool {
         self.period.is_set()
     }
@@ -89,20 +62,34 @@ impl<'a> Scope for HeadScope<'a> {
     fn unset_period(&mut self) {
         self.set_period(Position::zero());
     }
-    fn set_p_extension(&mut self, x: usize) {
-        self.p.set_extension(x);
+}
+
+impl<'a> Scope for HeadScope<'a> {
+    fn get_kc(&self) -> &KmerConst {
+        self.kc
     }
-    fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()> {
-        let b2 = ks.b2_for_p(self.get_p().pos(), false)?;
-        dbg_assert!(self.increment(b2));
-        Ok(())
+    fn get_d(&self, i: usize) -> &Kmer {
+        &self.d[i]
+    }
+    fn pick_mark(&mut self) -> usize {
+        let med = self.kc.no_kmers >> 1;
+        let i = self
+            .z
+            .select_nth_unstable_by(med, |&a, &b| self.d[a].cmp(&self.d[b]))
+            .1;
+        *i
     }
 
-    fn dist_if_repetitive(&self, ks: &KmerStore, stored_p: ExtPosEtc) -> Option<Position> {
+    fn dist_if_repetitive(
+        &self,
+        ks: &KmerStore,
+        stored_p: ExtPosEtc,
+        min_p: ExtPosEtc,
+    ) -> Option<Position> {
         // FIXME: the contig check was removed. for the upper bound that makes sense for head
         // scope, as upperbound is pos_max rather than previous
         let stored_pos = stored_p.pos();
-        let mark_pos = self.mark.p.pos();
+        let mark_pos = min_p.pos();
         dbg_assert!(mark_pos > stored_pos);
         if self.is_on_last_contig(ks, stored_pos) {
             let dist = mark_pos - stored_pos;
@@ -124,6 +111,7 @@ impl<'a> Scope for HeadScope<'a> {
                 self.mod_i = 0;
             }
             self.d[self.mod_i] = old_d;
+            self.d[self.mod_i].pos = self.p.pos();
         }
         // first bit is strand bit, set according to kmer orientation bit.
         self.p.set_ori(self.d[self.mod_i].update(b2));
@@ -131,16 +119,9 @@ impl<'a> Scope for HeadScope<'a> {
         self.i += 1;
         self.i >= self.kc.kmerlen
     }
-    fn extend_p(&mut self) {
-        self.p.extend();
-    }
-    fn mark_reset(&mut self) {
-        self.mark.reset();
-    }
-    fn set_mark(&mut self, idx: usize, p: ExtPosEtc, x: usize) {
-        format!("[{:x}] = {:?} | x({})", idx, p, x);
-        self.p.set_extension(x);
-        self.mark.set(idx, p, x);
+    fn set_mark(&mut self, idx: usize, p: ExtPosEtc) {
+        format!("[{:x}] = {:?}", idx, p);
+        self.mark.set(idx, p);
     }
 }
 

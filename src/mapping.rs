@@ -1,15 +1,16 @@
 use crate::kmer::{Kmer, ThreeBit, TwoBit};
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{ExtPosEtc, KmerLoc};
+use crate::kmerloc::{ExtPosEtc, KmerLoc, DUPLICATE, EXT_MAX, REPETITIVE};
 use crate::kmerstore::KmerStore;
 use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use noodles_fastq as fastq;
 use std::fmt;
 
-pub struct Mapping<'a> {
+pub struct Mapper<'a> {
+    ks: &'a KmerStore,
     kc: &'a KmerConst,
     p: ExtPosEtc,
     i: usize,
@@ -19,9 +20,10 @@ pub struct Mapping<'a> {
     z: Vec<usize>,
 }
 
-impl<'a> Mapping<'a> {
-    pub fn new(ks: &KmerStore, kc: &'a KmerConst, record: fastq::Record) -> Result<Self> {
-        let mut scp = Mapping {
+impl<'a> Mapper<'a> {
+    pub fn new(ks: &'a KmerStore, kc: &'a KmerConst) -> Self {
+        Mapper {
+            ks,
             kc,
             p: ExtPosEtc::zero(),
             i: 0,
@@ -29,67 +31,85 @@ impl<'a> Mapping<'a> {
             mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
             d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
-        };
-        let mut x = 0;
-        let mut bin = kc.get_kmers(x);
+        }
+    }
+
+    // This function evaluates the number of multimappers.
+    // An error indicates an xmer inconsistency: should be a mismatch to ref
+    // in the window for this xmer. Read on until next xmer? else, try adjacent to picked median?
+    fn se_mapping(&mut self, i: usize) -> Result<()> {
+        let xmer = &self.d[i];
+        // binary search for dupbit 0 status
+        let mut last_pos = Position::zero();
+        for x in 0..=EXT_MAX {
+            let hash = xmer.get_hash(x);
+            let test_p = self.ks.kmp[hash];
+            if test_p.x() == x {
+                let pos = test_p.pos();
+                // Because we haven't seen a non-DUPLICATE, we know there should follow more.
+                // x and hash lead to one baseindex. That should be position ordered.
+                dbg_assert!(last_pos < pos, "Xmer invalid by ref coordinate order.");
+
+                last_pos = pos;
+                let recurrence = test_p.get_recurrence();
+                if recurrence & REPETITIVE != 0 {}
+                if recurrence & DUPLICATE != 0 {
+                    // no DUPLICATE: => last sequence that corresponded with this xmer.
+                    break;
+                }
+            } else if test_p.x() < x {
+                return Err(anyhow!("Xmer invalid by non-pos."));
+            }
+            // test_p.x() > x can happen: collisions
+            // since the other extension was greater, this xmer & p got extended.
+        }
+        Ok(())
+    }
+    fn new_xmer_median(&mut self) -> Option<usize> {
+        let i = self.pick_mark();
+        if self.d[i].pos == self.mark.p.pos() {
+            None
+        } else {
+            Some(i)
+        }
+    }
+
+    pub fn read_record(&mut self, record: fastq::Record) -> Result<()> {
         for b3 in record.sequence().iter().map(ThreeBit::from) {
-            //let x = scp.p.x();
-            //let bin = kc.get_kmers(x);
             if let Some(b2) = b3.as_twobit_if_not_n() {
-                if scp.increment(b2) {
+                if self.increment(b2) {
                     // we weten extension op voorhand.
-                    let base = scp.i - kc.kmerlen;
-                    if scp.set_if_optimum(x, base, bin) && scp.all_kmers() {}
+                    if let Some(i) = self.new_xmer_median() {
+                        self.se_mapping(i);
+                    }
                 }
             }
         }
-        Ok(scp)
+        Ok(())
     }
-    fn pick_mark(&mut self, x: usize) -> (usize, ExtPosEtc) {
+}
+
+impl<'a> Scope for Mapper<'a> {
+    fn get_kc(&self) -> &KmerConst {
+        self.kc
+    }
+    fn get_d(&self, i: usize) -> &Kmer {
+        &self.d[i]
+    }
+    fn pick_mark(&mut self) -> usize {
         let med = self.kc.no_kmers >> 1;
         let i = self
             .z
             .select_nth_unstable_by(med, |&a, &b| self.d[a].cmp(&self.d[b]))
             .1;
-        self.d[*i].get_hash_and_p(x)
+        *i
     }
-}
-
-impl<'a> Scope for Mapping<'a> {
-    fn is_repetitive(&self) -> bool {
-        panic!();
-    }
-    fn set_period(&mut self, _period: Position) {
-        panic!();
-    }
-    fn unset_period(&mut self) {
-        panic!();
-    }
-    fn get_mark(&self) -> Option<(usize, ExtPosEtc)> {
-        self.mark.get()
-    }
-    fn get_kc(&self) -> &KmerConst {
-        self.kc
-    }
-    fn get_p(&self) -> ExtPosEtc {
-        self.p
-    }
-    fn set_p_extension(&mut self, x: usize) {
-        self.p.set_extension(x);
-    }
-    fn get_i(&self) -> usize {
-        self.i
-    }
-    fn get_d(&self, i: usize) -> &Kmer {
-        &self.d[i]
-    }
-
-    fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()> {
-        let b2 = ks.b2_for_p(self.get_p().pos(), false)?;
-        dbg_assert!(self.increment(b2));
-        Ok(())
-    }
-    fn dist_if_repetitive(&self, _ks: &KmerStore, _stored_p: ExtPosEtc) -> Option<Position> {
+    fn dist_if_repetitive(
+        &self,
+        _ks: &KmerStore,
+        _sp: ExtPosEtc,
+        _mp: ExtPosEtc,
+    ) -> Option<Position> {
         None
     }
 
@@ -104,6 +124,7 @@ impl<'a> Scope for Mapping<'a> {
                 self.mod_i = 0;
             }
             self.d[self.mod_i] = old_d;
+            self.d[self.mod_i].pos = self.p.pos();
         }
         // first bit is strand orientation (ori), set according to k-mer.
         self.p.set_ori(self.d[self.mod_i].update(b2));
@@ -111,14 +132,8 @@ impl<'a> Scope for Mapping<'a> {
         self.i += 1;
         self.i >= self.kc.kmerlen
     }
-    fn extend_p(&mut self) {
-        self.p.extend();
-    }
-    fn mark_reset(&mut self) {
-        self.mark.reset();
-    }
-    fn set_mark(&mut self, idx: usize, p: ExtPosEtc, x: usize) {
-        dbg_print!("[{:x}] = {:?} | x({})", idx, p, x);
-        self.mark.set(idx, p, x);
+    fn set_mark(&mut self, idx: usize, p: ExtPosEtc) {
+        dbg_print!("[{:x}] = {:?}", idx, p);
+        self.mark.set(idx, p);
     }
 }

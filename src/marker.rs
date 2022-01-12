@@ -10,7 +10,7 @@ use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
-use crate::scope::Scope;
+use crate::scope::WritingScope;
 use anyhow::Result;
 use noodles_fasta as fasta;
 
@@ -101,7 +101,7 @@ impl<'a> KmerIter<'a> {
                 if self.n_stretch > 0 {
                     n_count += self.n_stretch;
                     self.finalize_n_stretch();
-                } else if self.scp.period.is_set() && dbg_dump_if!(self.scp.mark.is_set(), false) {
+                } else if self.scp.period.is_set() {
                     let pd = self.scp.period;
                     let pos = self.scp.p.pos();
                     dbg_assert!(pd <= pos, "{:?} {:?}", pd, self.scp.p);

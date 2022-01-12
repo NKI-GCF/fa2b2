@@ -1,7 +1,10 @@
+use crate::kmer::xmer_hash;
 use crate::kmerloc::ExtPosEtc;
 use crate::new_types::position::{BasePos, Position};
 use crate::rdbg::STAT_DB;
+use num::{FromPrimitive, PrimInt};
 use std::cmp;
+use std::mem::size_of;
 
 pub struct KmerConst {
     pub no_kmers: usize,
@@ -11,6 +14,40 @@ pub struct KmerConst {
     max_afstand: usize,
     pub extent: Vec<usize>,
 }
+
+pub trait RevCmp<T: PrimInt + FromPrimitive> {
+    fn revcmp(self, kmerlen: u32) -> T;
+}
+
+/// create bitmask. e.g. dvm::<u32>(0xf0  0xff) => 0xf0_f0_f0_f0
+#[inline]
+fn dvm<T: PrimInt + FromPrimitive>(numerator: u32, divisor: u32) -> T {
+    let base = T::max_value() / T::from_u32(divisor).unwrap();
+    T::from_u32(numerator).unwrap() * base
+}
+
+#[macro_export]
+macro_rules! implement_revcmp { ($($ty:ty),*) => ($(
+    /// give twobit reverse complent for given kmerlen
+    impl RevCmp<$ty> for $ty {
+        #[inline]
+        fn revcmp(self, kmerlen: u32) -> $ty {
+            let mut seq = self.swap_bytes() ^ dvm::<$ty>(2, 3);
+
+            let left_nibbles = (seq & dvm::<$ty>(0xf, 0xff)) << 4;
+            let right_nibbles = (seq & dvm::<$ty>(0xf0, 0xff)) >> 4;
+            seq = left_nibbles | right_nibbles;
+
+            let all_left_two_bits = (seq & dvm::<$ty>(0x3, 0xf)) << 2;
+            let all_right_two_bits = (seq & dvm::<$ty>(0xc, 0xf)) >> 2;
+            seq = all_left_two_bits | all_right_two_bits;
+
+            seq >> (size_of::<$ty>() * 8 - usize::try_from(kmerlen).unwrap() * 2)
+        }
+    }
+    )*)
+}
+implement_revcmp!(usize, u64);
 
 impl KmerConst {
     pub fn from_bitlen(bitlen: usize) -> Self {
@@ -47,6 +84,40 @@ impl KmerConst {
             venster,
             max_afstand,
             extent,
+        }
+    }
+    pub fn get_ext_max(&self) -> usize {
+        self.extent.len()
+    }
+
+    // same hash function, from Kmer.
+    pub fn get_next_xmer(&self, orig_hash: usize, mut p: ExtPosEtc) -> Option<(usize, ExtPosEtc)> {
+        if p.x() + 1 < 0x1_0000_0000 {
+            /*was < self.get_ext_max()*/
+            let k = self.kmerlen as u32;
+            let overbit = 1 << (k * 2 - 1);
+
+            // in get_hash_and_p() bits are flipped if the highest bit was set.
+            //
+            let mut hash = xmer_hash(orig_hash, p.x(), k);
+
+            if hash < hash.revcmp(k) {
+                // XXX: why is this not the inverse ??
+
+                //then flipped, yes: orig_hash here !!
+                hash = xmer_hash(!orig_hash & (overbit | (overbit - 1)), p.x(), k);
+            }
+
+            p.extend();
+            // set to idx for next extension; x is incremented:
+            hash = xmer_hash(hash, p.x(), k);
+            if (hash & overbit) == 0 {
+                Some((hash, p))
+            } else {
+                Some(((overbit - 1) & !hash, p))
+            }
+        } else {
+            None
         }
     }
 

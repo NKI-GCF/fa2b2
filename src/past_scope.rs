@@ -6,7 +6,7 @@ use crate::kmerstore::KmerStore;
 use crate::new_types::extension::Extension;
 use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
-use crate::scope::Scope;
+use crate::scope::{Scope, WritingScope};
 use anyhow::{ensure, Result};
 use std::fmt;
 
@@ -23,7 +23,7 @@ pub struct PastScope<'a> {
 }
 
 impl<'a> PastScope<'a> {
-    pub fn new(ks: &KmerStore, kc: &'a KmerConst, p: ExtPosEtc, idx: usize) -> Result<Self> {
+    pub fn new(ks: &mut KmerStore, kc: &'a KmerConst, p: ExtPosEtc, idx: usize) -> Result<Self> {
         let pos = Position::from(p);
         ensure!(pos != Position::zero());
         let plim = ks.get_contig_start_end_for_p(pos);
@@ -42,14 +42,15 @@ impl<'a> PastScope<'a> {
             d: vec![Kmer::new(kc.kmerlen as u32); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         };
-        let x = scp.p.x();
-        let bin = kc.get_kmers(x);
 
         loop {
             if scp.increment(ks.b2_for_p(scp.p.pos(), false).unwrap()) {
                 // we weten extension op voorhand.
-                let base = scp.get_i() - kc.kmerlen;
-                if (scp.set_if_optimum(x, base, bin) && scp.all_kmers()) || scp.remark(false) {
+                //
+                // we weten extension op voorhand.
+                let i = scp.pick_mark();
+                if scp.d[i].pos != scp.mark.p.pos() {
+                    scp.store_mark(ks, i)?;
                     if p.same_pos_and_ext(scp.mark.p) {
                         break;
                     }
@@ -78,50 +79,40 @@ impl<'a> PastScope<'a> {
         }
         Ok(scp)
     }
-    fn is_before_end_of_contig(&self) -> bool {
-        self.p.basepos_to_pos() < self.plim.1
-    }
     fn is_on_contig(&self, pos: Position) -> bool {
         pos >= self.plim.0 && pos < self.plim.1
     }
 }
 
-impl<'a> Scope for PastScope<'a> {
-    fn get_mark(&self) -> Option<(usize, ExtPosEtc)> {
-        self.mark.get()
+impl<'a> WritingScope for PastScope<'a> {
+    fn set_period(&mut self, period: Position) {
+        dbg_assert!(period < self.p.pos());
+        self.period = period;
     }
-    fn get_kc(&self) -> &KmerConst {
-        self.kc
-    }
-    fn get_p(&self) -> ExtPosEtc {
-        self.p
-    }
-    fn get_i(&self) -> usize {
-        self.i
-    }
-    fn get_d(&self, i: usize) -> &Kmer {
-        &self.d[i]
+    fn unset_period(&mut self) {
+        self.set_period(Position::zero());
     }
     fn is_repetitive(&self) -> bool {
         self.period.is_set()
     }
-    fn set_p_extension(&mut self, x: usize) {
-        self.p.set_extension(x);
+}
+
+impl<'a> Scope for PastScope<'a> {
+    fn get_kc(&self) -> &KmerConst {
+        self.kc
+    }
+    fn get_d(&self, i: usize) -> &Kmer {
+        &self.d[i]
     }
 
-    fn increment_for_extension(&mut self, ks: &KmerStore) -> Result<()> {
-        let b2 = ks.b2_for_p(self.get_p().pos(), false)?;
-        ensure!(
-            self.is_before_end_of_contig(),
-            "increment_for_extension() runs into end of contig"
-        );
-        dbg_assert!(self.increment(b2));
-        Ok(())
-    }
-
-    fn dist_if_repetitive(&self, ks: &KmerStore, stored_p: ExtPosEtc) -> Option<Position> {
+    fn dist_if_repetitive(
+        &self,
+        ks: &KmerStore,
+        stored_p: ExtPosEtc,
+        min_p: ExtPosEtc,
+    ) -> Option<Position> {
         let stored_pos = stored_p.pos();
-        let mark_pos = self.mark.p.pos();
+        let mark_pos = min_p.pos();
         dbg_assert!(mark_pos > stored_pos);
         if self.is_on_contig(stored_pos) {
             let dist = mark_pos - stored_pos;
@@ -131,7 +122,14 @@ impl<'a> Scope for PastScope<'a> {
         }
         None
     }
-
+    fn pick_mark(&mut self) -> usize {
+        let med = self.kc.no_kmers >> 1;
+        let i = self
+            .z
+            .select_nth_unstable_by(med, |&a, &b| self.d[a].cmp(&self.d[b]))
+            .1;
+        *i
+    }
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
     /// true if we have at least one kmer.
     fn increment(&mut self, b2: TwoBit) -> bool {
@@ -143,6 +141,8 @@ impl<'a> Scope for PastScope<'a> {
                 self.mod_i = 0;
             }
             self.d[self.mod_i] = old_d;
+            // FIXME: why off by one?
+            self.d[self.mod_i].pos = self.p.pos();
         }
         // first bit is strand bit, set according to kmer orientation bit.
         self.p.set_ori(self.d[self.mod_i].update(b2));
@@ -150,22 +150,9 @@ impl<'a> Scope for PastScope<'a> {
         self.i += 1;
         self.i >= self.kc.kmerlen
     }
-    fn extend_p(&mut self) {
-        self.p.extend();
-    }
-    fn mark_reset(&mut self) {
-        self.mark.reset();
-    }
-    fn set_mark(&mut self, idx: usize, p: ExtPosEtc, x: usize) {
-        dbg_print!("[{:x}] = {:?} | x({})", idx, p, x);
-        self.mark.set(idx, p, x);
-    }
-    fn set_period(&mut self, period: Position) {
-        dbg_assert!(period < self.p.pos());
-        self.period = period;
-    }
-    fn unset_period(&mut self) {
-        self.set_period(Position::zero());
+    fn set_mark(&mut self, idx: usize, p: ExtPosEtc) {
+        dbg_print!("[{:x}] = {:?}", idx, p);
+        self.mark.set(idx, p);
     }
 }
 
@@ -228,7 +215,7 @@ mod tests {
             let p = kmi.ks.kmp[hash];
             if p.is_set() {
                 dbg_print!("---[ {:#x} p:{:?} ]---", hash, p);
-                let scp = PastScope::new(&kmi.ks, &kc, p, hash)?;
+                let scp = PastScope::new(&mut kmi.ks, &kc, p, hash)?;
                 dbg_assert_eq!(scp.mark.p, p.rep_dup_masked(), "[{}]: {:x}", seen, hash);
                 seen += 1;
             }
@@ -270,7 +257,7 @@ mod tests {
                 let p = kmi.ks.kmp[hash];
                 if p.is_set() {
                     dbg_print!("hash: [{:#x}]: p: {:?}", hash, p);
-                    let scp = PastScope::new(&kmi.ks, &kc, p, hash)?;
+                    let scp = PastScope::new(&mut kmi.ks, &kc, p, hash)?;
                     dbg_assert_eq!(
                         scp.mark.p,
                         p.rep_dup_masked(),

@@ -1,5 +1,6 @@
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
+use crate::mapping::Mapper;
 use anyhow::{ensure, Result};
 use bincode::deserialize_from;
 use clap::ArgMatches;
@@ -26,9 +27,11 @@ pub fn aln(matches: &ArgMatches) -> Result<()> {
     let kc = KmerConst::from_bitlen(bitlen);
 
     let mut n = 0;
+    let mut mapper = Mapper::new(&ks, &kc);
 
     for res in reader.records() {
         let record = res?;
+        mapper.read_record(record)?;
         n += 1;
     }
     eprintln!("Read {} reads", n);

@@ -6,30 +6,25 @@ use crate::rdbg::STAT_DB;
 use derive_more::Sub;
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
-use std::ops::Add;
 use std::{cmp, fmt};
 
-const POS_SHIFT: u32 = 4;
-const EXT_SHIFT: u32 = 56;
+const POS_SHIFT: u32 = 3;
+const EXT_SHIFT: u32 = 48;
 const ORI_MASK: u64 = 0x0000_0000_0000_0001;
-const REP_MASK: u64 = 0x0000_0000_0000_0002;
-const DUP_MASK: u64 = 0x0000_0000_0000_0004;
+pub const DUPLICATE: u64 = 0x0000_0000_0000_0002;
 // TODO: indicate this position has annotation
 const _INFO_MASK: u64 = 0x0000_0000_0000_0008;
-const POS_MASK: u64 = 0x00FF_FFFF_FFFF_FFF0;
-const EXT_MASK: u64 = 0xFF00_0000_0000_0000;
+const POS_MASK: u64 = 0x0000_7FFF_FFFF_FFF8;
+pub const REPETITIVE: u64 = 0x0000_8000_0000_0004;
+const EXT_MASK: u64 = 0xFFFF_0000_0000_0000;
 
-// FIXME u64 moet hier ExtPosEtc worden !!
-impl Add<Position> for u64 {
-    type Output = u64;
-    fn add(self, other: Position) -> u64 {
-        self + other.as_u64()
-    }
-}
+pub const EXT_MAX: usize = 0xFFFF;
 
 #[derive(Sub, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct ExtPosEtc(u64);
 
+/// The stored information per xmer: in u64 position, extension and flags:
+/// Orientation, Duplicate, Replication(, HasInfo: TODO)
 impl ExtPosEtc {
     pub fn set(&mut self, p: ExtPosEtc) {
         *self = p;
@@ -37,12 +32,7 @@ impl ExtPosEtc {
     pub fn as_u64(&self) -> u64 {
         self.0
     }
-    pub fn basepos_to_pos(&self) -> Position {
-        //FIXME: deprecate. as_pos() and pos() are confusing.
-        Position::from(BasePos::from(*self))
-    }
     pub fn unshift_pos(&self) -> u64 {
-        //TODO: BasePos
         BasePos::from(self.pos()).as_u64()
     }
     pub fn pos(&self) -> Position {
@@ -50,7 +40,6 @@ impl ExtPosEtc {
         Position::from(self.as_basepos())
     }
     pub fn as_basepos(&self) -> BasePos {
-        //TODO: replace with BasePos::from()
         BasePos::from(*self)
     }
     pub fn zero() -> Self {
@@ -113,22 +102,31 @@ impl ExtPosEtc {
     pub fn pos_with_ext(&self, x: usize) -> ExtPosEtc {
         ExtPosEtc(Extension::from(x).as_u64() | self.pos().as_u64())
     }
-    pub fn set_dup(&mut self) {
+    pub fn mark_more_upseq(&mut self) {
         dbg_assert!(self.is_set());
-        self.0 |= DUP_MASK;
+        self.0 |= DUPLICATE;
     }
     pub fn is_dup(&self) -> bool {
-        self.0 & DUP_MASK != 0
+        self.0 & DUPLICATE != 0
+    }
+    pub fn has_more_upseq(&self) -> bool {
+        self.0 & DUPLICATE != 0
+    }
+    pub fn last_on_seq(&self) -> bool {
+        self.0 & DUPLICATE == 0
+    }
+    pub fn get_recurrence(&self) -> u64 {
+        self.0 & (DUPLICATE | REPETITIVE)
     }
     pub fn set_repetitive(&mut self) {
         dbg_assert!(self.is_set());
-        self.0 |= REP_MASK;
+        self.0 |= REPETITIVE;
     }
     pub fn is_repetitive(&self) -> bool {
-        self.0 & REP_MASK != 0
+        self.0 & REPETITIVE != 0
     }
     pub fn rep_dup_masked(&self) -> ExtPosEtc {
-        ExtPosEtc(self.0 & !(DUP_MASK | REP_MASK))
+        ExtPosEtc(self.0 & !(DUPLICATE | REPETITIVE))
     }
     pub fn is_replaceable_by(&self, new_entry: ExtPosEtc) -> bool {
         // only extension bits means blacklisting, except for extension 0. pos is always > kmerlen
@@ -148,11 +146,6 @@ impl ExtPosEtc {
             true
         }
     }
-    /* does not work because extension is currently limited by readlen.
-     * could maybe instead also shift base kmer or bits
-     * fn ext_max() -> Self {
-        0xFF
-    }*/
 }
 
 impl From<Extension> for ExtPosEtc {
@@ -210,14 +203,13 @@ impl KmerLoc {
         self.idx != usize::max_value()
     }
 
-    pub fn set(&mut self, idx: usize, p: ExtPosEtc, x: usize) {
+    pub fn set(&mut self, idx: usize, p: ExtPosEtc) {
         // during rebuilding the strange case occurs that mark is not set, but p is (extension)
         let self_p_extension = self.p.extension();
         let p_extension = p.extension();
         dbg_assert!(self.is_set() || self.p.is_zero() || self_p_extension == p_extension);
         self.idx = idx;
-        self.p = p.rep_dup_masked();
-        self.p.set_extension(x);
+        self.p = p;
     }
 }
 

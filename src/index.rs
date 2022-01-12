@@ -1,5 +1,4 @@
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::ExtPosEtc;
 use crate::kmerstore::KmerStore;
 use crate::marker::KmerIter;
 
@@ -49,7 +48,7 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
     for record in fa.records() {
         kmi.markcontig(record?)?;
     }
-    dump_stats(&ks, kc.extent.len());
+    make_stats(&ks, kc.extent.len());
 
     if let Some(out_file) = opt_out {
         serialize_into(out_file, &ks)?;
@@ -57,7 +56,7 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn dump_stats(ks: &KmerStore, extent_len: usize) {
+fn make_stats(ks: &KmerStore, extent_len: usize) {
     let mut stat = [[0; 0x100]; 2];
     for k in ks.kmp.iter() {
         stat[if k.is_set() { 1 } else { 0 }][k.x()] += 1;

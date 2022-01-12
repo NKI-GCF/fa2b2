@@ -1,13 +1,10 @@
-use crate::new_types::extended_position::ExtPosEtc;
+use crate::new_types::extended_position::{ExtPosEtc, POS_MASK, POS_SHIFT};
 use crate::num::ToPrimitive;
 use crate::rdbg::STAT_DB;
 use derive_more::{Add, Rem, Sub};
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
 use std::fmt;
-
-const POS_SHIFT: u32 = 3;
-const POS_MASK: u64 = 0x0000_7FFF_FFFF_FFF8;
 
 // 4 twobits per byte, so unshifted pos is shifted another 2.
 const BYTE_SHIFT: u32 = POS_SHIFT + 2;

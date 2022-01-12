@@ -1,9 +1,6 @@
-use crate::new_types::extended_position::ExtPosEtc;
+use crate::new_types::extended_position::{ExtPosEtc, EXT_MASK, EXT_SHIFT};
 use crate::num::ToPrimitive;
 use crate::rdbg::STAT_DB;
-
-const EXT_SHIFT: u32 = 48;
-const EXT_MASK: u64 = 0xFFFF_0000_0000_0000;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Extension(u64);

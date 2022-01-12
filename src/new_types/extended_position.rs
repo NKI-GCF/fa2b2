@@ -8,15 +8,15 @@ use serde::{Deserialize, Serialize};
 use std::clone::Clone;
 use std::{cmp, fmt};
 
-const POS_SHIFT: u32 = 3;
-const EXT_SHIFT: u32 = 48;
+pub(super) const POS_SHIFT: u32 = 3;
+pub(super) const EXT_SHIFT: u32 = 48;
+pub(crate) const DUPLICATE: u64 = 0x0000_0000_0000_0002;
+pub(super) const POS_MASK: u64 = 0x0000_7FFF_FFFF_FFF8;
+pub(crate) const REPETITIVE: u64 = 0x0000_8000_0000_0004;
+pub(crate) const EXT_MASK: u64 = 0xFFFF_0000_0000_0000;
 const ORI_MASK: u64 = 0x0000_0000_0000_0001;
-pub const DUPLICATE: u64 = 0x0000_0000_0000_0002;
 // TODO: indicate this position has annotation
 const _INFO_MASK: u64 = 0x0000_0000_0000_0008;
-const POS_MASK: u64 = 0x0000_7FFF_FFFF_FFF8;
-pub const REPETITIVE: u64 = 0x0000_8000_0000_0004;
-const EXT_MASK: u64 = 0xFFFF_0000_0000_0000;
 
 pub const EXT_MAX: usize = 0xFFFF;
 

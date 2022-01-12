@@ -79,12 +79,13 @@ impl<'a> Mapper<'a> {
     pub fn read_record(&mut self, record: fastq::Record) -> Result<()> {
         for b3 in record.sequence().iter().map(ThreeBit::from) {
             if let Some(b2) = b3.as_twobit_if_not_n() {
-                if self.increment(b2) {
+                if self.update() {
                     // we weten extension op voorhand.
                     if let Some(i) = self.new_xmer_median() {
                         self.se_mapping(i)?;
                     }
                 }
+                self.increment(b2)
             }
         }
         Ok(())
@@ -117,7 +118,7 @@ impl<'a> Scope for Mapper<'a> {
 
     /// add twobit to k-mers, update k-mer vec, incr. pos and update ori
     /// true if we have at least one kmer.
-    fn increment(&mut self, b2: TwoBit) -> bool {
+    fn update(&mut self) -> bool {
         // XXX: function is hot
         if self.i >= self.kc.kmerlen {
             let old_d = self.d[self.mod_i];
@@ -127,12 +128,16 @@ impl<'a> Scope for Mapper<'a> {
             }
             self.d[self.mod_i] = old_d;
             self.d[self.mod_i].pos = self.p.pos();
+            true
+        } else {
+            false
         }
+    }
+    fn increment(&mut self, b2: TwoBit) {
         // first bit is strand orientation (ori), set according to k-mer.
         self.p.set_ori(self.d[self.mod_i].update(b2));
         self.p.incr_pos();
         self.i += 1;
-        self.i >= self.kc.kmerlen
     }
     fn set_mark(&mut self, idx: usize, p: ExtPosEtc) {
         dbg_print!("[{:x}] = {:?}", idx, p);

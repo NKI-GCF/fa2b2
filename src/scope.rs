@@ -1,6 +1,6 @@
 use crate::kmerconst::KmerConst;
-use crate::new_types::extended_position::ExtPosEtc;
 use crate::kmerstore::KmerStore;
+use crate::new_types::extended_position::ExtPosEtc;
 use crate::new_types::{position::Position, twobit::TwoBit, xmer::Xmer};
 use crate::rdbg::STAT_DB;
 use anyhow::Result;
@@ -8,8 +8,7 @@ use anyhow::Result;
 pub trait Scope {
     fn get_kc(&self) -> &KmerConst;
     fn get_d(&self, i: usize) -> &Xmer;
-    fn increment(&mut self, b2: TwoBit) -> bool;
-    fn set_mark(&mut self, idx: usize, p: ExtPosEtc);
+    fn update(&mut self) -> bool;
     fn pick_mark(&mut self) -> usize;
     fn dist_if_repetitive(
         &self,
@@ -17,6 +16,8 @@ pub trait Scope {
         stored_p: ExtPosEtc,
         min_p: ExtPosEtc,
     ) -> Option<Position>;
+    fn set_mark(&mut self, idx: usize, p: ExtPosEtc);
+    fn increment(&mut self, b2: TwoBit);
 }
 
 pub trait WritingScope: Scope {
@@ -40,7 +41,10 @@ pub trait WritingScope: Scope {
             return Ok(true);
         }
         if old_stored_p.is_replaceable_by(min_p) {
-            if dbgx!(old_stored_p.is_set_and_not(min_p)) {
+            if old_stored_p.is_set_and_not(min_p) {
+                // collision with a different baseindex, it had lesser extension.
+                ks.set_kmp(min_idx, min_p);
+                dbg_print!("[{:x}] -> {:?} (?)", min_idx, old_stored_p);
                 while let Some((store_idx, store_p)) =
                     self.get_kc().get_next_xmer(min_idx, old_stored_p)
                 {
@@ -48,7 +52,6 @@ pub trait WritingScope: Scope {
                         break;
                     }
                 }
-                ks.set_kmp(min_idx, min_p);
             }
             // .. else set and already min_p. Then leave bit states.
             return Ok(true);
@@ -62,8 +65,10 @@ pub trait WritingScope: Scope {
                 ks.kmp[min_idx].set_repetitive();
                 return Ok(true);
             }
-            ks.kmp[min_idx].mark_more_upseq();
+            ks.kmp[min_idx].mark_more_recurs_upseq();
         }
+        // collision with a different baseindex, it had greater extension.
+        // the current baseindex will be extended and tried again.
         dbg_print!("not replacable, extend..");
         Ok(false)
     }

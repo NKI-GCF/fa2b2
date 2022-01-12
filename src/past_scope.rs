@@ -1,6 +1,6 @@
 use crate::kmerconst::KmerConst;
-use crate::new_types::extended_position::{ExtPosEtc, KmerLoc};
 use crate::kmerstore::KmerStore;
+use crate::new_types::extended_position::{ExtPosEtc, KmerLoc};
 use crate::new_types::{extension::Extension, position::Position, twobit::TwoBit, xmer::Xmer};
 use crate::rdbg::STAT_DB;
 use crate::scope::{Scope, WritingScope};
@@ -41,7 +41,7 @@ impl<'a> PastScope<'a> {
         };
 
         loop {
-            if scp.increment(ks.b2_for_p(scp.p.pos(), false).unwrap()) {
+            if scp.update() {
                 // we weten extension op voorhand.
                 //
                 // we weten extension op voorhand.
@@ -73,6 +73,7 @@ impl<'a> PastScope<'a> {
                     }
                 }
             }
+            scp.increment(ks.b2_for_p(scp.p.pos(), false).unwrap());
         }
         Ok(scp)
     }
@@ -129,7 +130,7 @@ impl<'a> Scope for PastScope<'a> {
     }
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
     /// true if we have at least one kmer.
-    fn increment(&mut self, b2: TwoBit) -> bool {
+    fn update(&mut self) -> bool {
         // XXX: function is hot
         if self.i >= self.kc.kmerlen {
             let old_d = self.d[self.mod_i];
@@ -140,12 +141,16 @@ impl<'a> Scope for PastScope<'a> {
             self.d[self.mod_i] = old_d;
             // FIXME: why off by one?
             self.d[self.mod_i].pos = self.p.pos();
+            true
+        } else {
+            false
         }
+    }
+    fn increment(&mut self, b2: TwoBit) {
         // first bit is strand bit, set according to kmer orientation bit.
         self.p.set_ori(self.d[self.mod_i].update(b2));
         self.p.incr_pos();
         self.i += 1;
-        self.i >= self.kc.kmerlen
     }
     fn set_mark(&mut self, idx: usize, p: ExtPosEtc) {
         dbg_print!("[{:x}] = {:?}", idx, p);

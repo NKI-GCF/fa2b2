@@ -170,9 +170,8 @@ mod tests {
     fn test_16n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN);
         let mut ks = KmerStore::new(kc.bitlen, 10_000);
-        {
-            process(&mut ks, &kc, b"NNNNNNNNNNNNNNNN"[..].to_owned())?;
-        }
+        process(&mut ks, &kc, b"NNNNNNNNNNNNNNNN"[..].to_owned())?;
+
         dbg_assert_eq!(ks.contig.len(), 1);
         dbg_assert_eq!(ks.contig[0].twobit, Position::zero());
         dbg_assert_eq!(ks.contig[0].genomic, 16);
@@ -182,9 +181,8 @@ mod tests {
     fn test_1n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN);
         let mut ks = KmerStore::new(kc.bitlen, 10_000);
-        {
-            process(&mut ks, &kc, b"N"[..].to_owned())?;
-        }
+        process(&mut ks, &kc, b"N"[..].to_owned())?;
+
         dbg_assert_eq!(ks.contig.len(), 1);
         dbg_assert_eq!(ks.contig[0].twobit, Position::zero());
         dbg_assert_eq!(ks.contig[0].genomic, 1);
@@ -194,9 +192,8 @@ mod tests {
     fn test_1n1c1n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN);
         let mut ks = KmerStore::new(kc.bitlen, 10_000);
-        {
-            process(&mut ks, &kc, b"NCN"[..].to_owned())?;
-        }
+        process(&mut ks, &kc, b"NCN"[..].to_owned())?;
+
         dbg_assert_eq!(ks.contig.len(), 2);
         dbg_assert_eq!(ks.contig[0].twobit, Position::zero());
         dbg_assert_eq!(ks.contig[0].genomic, 1);
@@ -208,12 +205,9 @@ mod tests {
     fn test_17c() -> Result<()> {
         let kc = KmerConst::new(SEQLEN);
         let mut ks = KmerStore::new(kc.bitlen, 10_000);
-        {
-            process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
-        }
+        process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
         dbg_assert_eq!(ks.kmp.len(), 128);
         let mut first_pos = ExtPosEtc::from(BasePos::from(kc.kmerlen));
-        first_pos.set_ori(true);
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 1..ks.kmp.len() {
@@ -233,10 +227,9 @@ mod tests {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
         }
         let mut first_pos = ExtPosEtc::from(BasePos::from(kc.kmerlen));
-        first_pos.set_ori(true);
         first_pos.set_repetitive();
         let mut seen = 0;
-        for i in 1..ks.kmp.len() {
+        for i in 0..ks.kmp.len() {
             if ks.kmp[i].is_set() {
                 dbg_assert_eq!(ks.kmp[i], first_pos, "i: {}", i);
                 seen += 1;
@@ -254,9 +247,8 @@ mod tests {
         }
         let mut seen = 0;
         let mut first_pos = ExtPosEtc::from(BasePos::from(kc.kmerlen));
-        first_pos.set_ori(true);
         first_pos.set_repetitive();
-        for i in 1..ks.kmp.len() {
+        for i in 0..ks.kmp.len() {
             if ks.kmp[i].is_set() {
                 dbg_assert_eq!(ks.kmp[i], first_pos, "i: {}", i);
                 seen += 1;

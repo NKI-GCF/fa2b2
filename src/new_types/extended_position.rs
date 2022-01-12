@@ -92,7 +92,7 @@ impl ExtPosEtc {
     pub(crate) fn is_same(&self, other: ExtPosEtc) -> bool {
         *self == other
     }
-    pub(crate) fn mark_more_upseq(&mut self) {
+    pub(crate) fn mark_more_recurs_upseq(&mut self) {
         dbg_assert!(self.is_set());
         self.0 |= DUPLICATE;
     }
@@ -123,13 +123,6 @@ impl ExtPosEtc {
     }
     pub(crate) fn same_pos_and_ext(&self, new_entry: ExtPosEtc) -> bool {
         (self.0 ^ new_entry.0) & (EXT_MASK | POS_MASK) == 0
-    }
-    pub(crate) fn has_samepos(&self, other: ExtPosEtc) -> bool {
-        self.pos() == other.pos() && {
-            // XXX: may want to remove this later if orientation doesn't matter
-            dbg_assert!(self.same_ori(other), "{:?}, {:?}", self, other);
-            true
-        }
     }
 }
 

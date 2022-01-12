@@ -1,6 +1,6 @@
 use crate::kmerconst::KmerConst;
-use crate::new_types::extended_position::{ExtPosEtc, KmerLoc};
 use crate::kmerstore::KmerStore;
+use crate::new_types::extended_position::{ExtPosEtc, KmerLoc};
 use crate::new_types::{position::Position, twobit::TwoBit, xmer::Xmer};
 use crate::rdbg::STAT_DB;
 use crate::scope::{Scope, WritingScope};
@@ -35,13 +35,14 @@ impl<'a> HeadScope<'a> {
     // hier krijgen we nieuwe sequence, zijn geen past scope aan het behandelen, of zo.
     // .i & .p increments en kmer .d[] updates vinden plaats.
     pub fn complete_and_update_mark(&mut self, b2: TwoBit, ks: &mut KmerStore) -> Result<()> {
-        if self.increment(b2) {
+        if self.update() {
             // one mark is added, and one leaving. both influence mark (and order).
             let i = self.pick_mark();
             if self.d[i].pos != self.mark.p.pos() {
                 self.store_mark(ks, i)?;
             }
         }
+        self.increment(b2);
         Ok(())
     }
     fn is_on_last_contig(&self, ks: &KmerStore, pos: Position) -> bool {
@@ -69,6 +70,24 @@ impl<'a> Scope for HeadScope<'a> {
     }
     fn get_d(&self, i: usize) -> &Xmer {
         &self.d[i]
+    }
+
+    /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
+    /// true if we have at least one kmer.
+    fn update(&mut self) -> bool {
+        // XXX: function is hot
+        if self.i >= self.kc.kmerlen {
+            let old_d = self.d[self.mod_i];
+            self.mod_i += 1;
+            if self.mod_i == self.kc.no_kmers {
+                self.mod_i = 0;
+            }
+            self.d[self.mod_i] = old_d;
+            self.d[self.mod_i].pos = self.p.pos();
+            true
+        } else {
+            false
+        }
     }
     fn pick_mark(&mut self) -> usize {
         let med = self.kc.no_kmers >> 1;
@@ -99,28 +118,16 @@ impl<'a> Scope for HeadScope<'a> {
         None
     }
 
-    /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
-    /// true if we have at least one kmer.
-    fn increment(&mut self, b2: TwoBit) -> bool {
-        // XXX: function is hot
-        if self.i >= self.kc.kmerlen {
-            let old_d = self.d[self.mod_i];
-            self.mod_i += 1;
-            if self.mod_i == self.kc.no_kmers {
-                self.mod_i = 0;
-            }
-            self.d[self.mod_i] = old_d;
-            self.d[self.mod_i].pos = self.p.pos();
-        }
+    fn set_mark(&mut self, idx: usize, p: ExtPosEtc) {
+        format!("[{:x}] = {:?}", idx, p);
+        self.mark.set(idx, p);
+    }
+
+    fn increment(&mut self, b2: TwoBit) {
         // first bit is strand bit, set according to kmer orientation bit.
         self.p.set_ori(self.d[self.mod_i].update(b2));
         self.p.incr_pos();
         self.i += 1;
-        self.i >= self.kc.kmerlen
-    }
-    fn set_mark(&mut self, idx: usize, p: ExtPosEtc) {
-        format!("[{:x}] = {:?}", idx, p);
-        self.mark.set(idx, p);
     }
 }
 

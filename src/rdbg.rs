@@ -229,7 +229,7 @@ impl StatDeq {
                 self.d.pop_front();
             }
             if self.repeat > 1 {
-                last_msg.push_str(&format!(" (repeated {} times)", self.repeat));
+                last_msg.push_str(&format!(" ({}x)", self.repeat));
                 self.repeat = 1;
             }
             self.d.push_back(last_msg);

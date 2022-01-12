@@ -59,6 +59,7 @@ impl KmerStore {
         }
     }
     pub fn set_kmp(&mut self, min_idx: usize, min_p: ExtPosEtc) {
+        dbg_print!("[{:x}] <- {:?}", min_idx, min_p);
         self.kmp[min_idx].set(min_p);
     }
     pub fn get_bitlen(&self) -> usize {

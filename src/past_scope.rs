@@ -43,8 +43,6 @@ impl<'a> PastScope<'a> {
         loop {
             if scp.update() {
                 // we weten extension op voorhand.
-                //
-                // we weten extension op voorhand.
                 let i = scp.pick_mark();
                 if scp.d[i].pos != scp.mark.p.pos() {
                     scp.store_mark(ks, i)?;

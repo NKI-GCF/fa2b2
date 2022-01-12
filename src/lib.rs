@@ -3,7 +3,7 @@ extern crate bincode;
 extern crate flate2;
 extern crate serde;
 
-//kmerloc
+//extended_position
 #[macro_use]
 extern crate derive_new;
 extern crate derive_more;
@@ -23,7 +23,6 @@ pub mod aln;
 pub mod head_scope;
 pub mod index;
 pub mod kmerconst;
-pub mod kmerloc;
 pub mod kmerstore;
 pub mod mapping;
 pub mod marker;

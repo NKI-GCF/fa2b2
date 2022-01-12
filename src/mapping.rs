@@ -1,5 +1,5 @@
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::{ExtPosEtc, KmerLoc, DUPLICATE, EXT_MAX, REPETITIVE};
+use crate::new_types::extended_position::{ExtPosEtc, KmerLoc, DUPLICATE, EXT_MAX, REPETITIVE};
 use crate::kmerstore::KmerStore;
 use crate::new_types::{
     position::Position,

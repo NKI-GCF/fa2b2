@@ -1,4 +1,4 @@
-use crate::kmerloc::ExtPosEtc;
+use crate::new_types::extended_position::ExtPosEtc;
 use crate::num::ToPrimitive;
 use crate::rdbg::STAT_DB;
 use derive_more::{Add, Rem, Sub};

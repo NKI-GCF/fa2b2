@@ -3,7 +3,7 @@ use super::{
     position::Position,
     twobit::{TwoBit, TwoBitDna, TwoBitRcDna},
 };
-use crate::kmerloc::ExtPosEtc;
+use crate::new_types::extended_position::ExtPosEtc;
 use crate::rdbg::STAT_DB;
 use derive_more::Into;
 use std::cmp;

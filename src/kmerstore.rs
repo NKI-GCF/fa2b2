@@ -1,4 +1,4 @@
-use crate::kmerloc::ExtPosEtc;
+use crate::new_types::extended_position::ExtPosEtc;
 use crate::new_types::{
     position::{BasePos, Position},
     twobit::{TwoBit, TwoBitx4},

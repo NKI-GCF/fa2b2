@@ -1,5 +1,5 @@
 use crate::kmerconst::KmerConst;
-use crate::kmerloc::ExtPosEtc;
+use crate::new_types::extended_position::ExtPosEtc;
 use crate::kmerstore::KmerStore;
 use crate::new_types::{position::Position, twobit::TwoBit, xmer::Xmer};
 use crate::rdbg::STAT_DB;

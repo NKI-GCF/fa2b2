@@ -154,7 +154,7 @@ impl<'a> KmerIter<'a> {
 mod tests {
     use super::*;
     use crate::kmerconst::KmerConst;
-    use crate::kmerloc::ExtPosEtc;
+    use crate::new_types::extended_position::ExtPosEtc;
     use crate::new_types::position::BasePos;
     use anyhow::Result;
     const SEQLEN: usize = 250;

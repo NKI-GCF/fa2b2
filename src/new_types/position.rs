@@ -27,34 +27,35 @@ pub struct BasePos(u64);
 /////////////// Position \\\\\\\\\\\\\\\\\\
 
 impl Position {
-    pub fn as_u64(&self) -> u64 {
+    pub(crate) fn as_u64(&self) -> u64 {
         self.0
     }
     // used both for position0 and 'unset'. The context should make the distinction.
-    pub fn zero() -> Self {
+    pub(crate) fn zero() -> Self {
         Position(0x0)
     }
-    pub fn is_set(&self) -> bool {
+    pub(crate) fn is_set(&self) -> bool {
         self.0 != 0
     }
-    pub fn byte_pos(&self) -> usize {
+    pub(crate) fn byte_pos(&self) -> usize {
         // 4 twobits per byte.
         (self.0 >> BYTE_SHIFT) as usize
     }
     // before applying TWOBIT_SHIFT (4 places) I had this:
     // XXX: thread 'main' panicked at 'u32??: TryFromIntError(())', src/new_types/position.rs:49:39
     // TODO: check that distances are sensible.
-    pub fn b2_shift(&self) -> u32 {
+    pub(crate) fn b2_shift(&self) -> u32 {
         let bit_pos = self.0.checked_shr(TWOBIT_SHIFT).unwrap() & 6;
         bit_pos.to_u32().unwrap()
     }
 
     // for a repetitive mark, return if on period for the distance between current pos (self) and stored
-    pub fn get_if_mark_on_period(&self, stored_pos: Position, pd: Position) -> Option<BasePos> {
-        let dist = self
-            .0
-            .checked_sub(stored_pos.0)
-            .expect("stored_pos is greater??");
+    pub(crate) fn get_if_mark_on_period(&self, stored_pos: Position, pd: Position) -> Option<BasePos> {
+        let dist = if self.0 >= stored_pos.0 {
+            self.0 - stored_pos.0
+        } else {
+            stored_pos.0 - self.0
+        };
         if dist % pd.0 == 0 {
             Some(BasePos(dist >> POS_SHIFT))
         } else {
@@ -62,12 +63,12 @@ impl Position {
         }
     }
     // increment the position one
-    pub fn incr(&mut self) {
+    pub(crate) fn incr(&mut self) {
         self.0 += 1_u64.checked_shl(POS_SHIFT).expect("pos.incr shft");
         dbg_assert_eq!(self.0, self.0 & POS_MASK);
     }
     // increment the position one
-    pub fn decr(&mut self) {
+    pub(crate) fn decr(&mut self) {
         dbg_assert_ne!(self.0, 0);
         self.0 -= 1_u64.checked_shl(POS_SHIFT).expect("pos.incr shft");
     }
@@ -96,10 +97,10 @@ impl fmt::Debug for Position {
 /////////////// BasePos \\\\\\\\\\\\\\\\\\
 
 impl BasePos {
-    pub fn as_u64(&self) -> u64 {
+    pub(crate) fn as_u64(&self) -> u64 {
         self.0
     }
-    pub fn as_usize(&self) -> usize {
+    pub(crate) fn as_usize(&self) -> usize {
         usize::try_from(self.0).unwrap()
     }
 }

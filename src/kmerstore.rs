@@ -30,7 +30,7 @@ pub struct KmerStore {
 }
 
 impl KmerStore {
-    pub fn new(bitlen: usize, rep_max_dist: u64) -> Self {
+    pub(crate) fn new(bitlen: usize, rep_max_dist: u64) -> Self {
         let shift = bitlen - 2;
         KmerStore {
             pos_max: Position::zero(),
@@ -43,26 +43,26 @@ impl KmerStore {
             repeat: AHashMap::new(),
         }
     }
-    pub fn store_twobit(&mut self, pos: Position, b2: TwoBit) {
+    /*pub(crate) fn store_twobit(&mut self, pos: Position, b2: TwoBit) {
         self.b2[pos.byte_pos()] |= b2.pos_shift(pos).as_u8();
-    }
-    pub fn push_contig(&mut self, pos: Position, goffs: u64) {
+    }*/
+    pub(crate) fn push_contig(&mut self, pos: Position, goffs: u64) {
         self.contig.push(Contig {
             twobit: pos,
             genomic: goffs,
         });
     }
     /// Adjust offset for contig.
-    pub fn offset_contig(&mut self, offset: u64) {
+    pub(crate) fn offset_contig(&mut self, offset: u64) {
         if let Some(ctg) = self.contig.last_mut() {
             ctg.genomic += offset;
         }
     }
-    pub fn set_kmp(&mut self, min_idx: usize, min_p: ExtPosEtc) {
+    pub(crate) fn set_kmp(&mut self, min_idx: usize, min_p: ExtPosEtc) {
         dbg_print!("[{:x}] <- {:?}", min_idx, min_p);
         self.kmp[min_idx].set(min_p);
     }
-    pub fn get_bitlen(&self) -> usize {
+    pub(crate) fn get_bitlen(&self) -> usize {
         self.b2.len().trailing_zeros() as usize + 2
     }
 
@@ -80,7 +80,7 @@ impl KmerStore {
         }
         base
     }
-    pub fn get_contig_start_end_for_p(&self, pos: Position) -> ContigRng {
+    pub(crate) fn get_contig_start_end_for_p(&self, pos: Position) -> ContigRng {
         let i = self.get_contig(pos);
 
         dbg_assert!(i < self.contig.len());
@@ -102,7 +102,7 @@ impl KmerStore {
         ensure!(i != 0, "get_twobit_before(): Start of contig");
         Ok(self.contig[i - 1].twobit)
     }
-    pub fn b2_for_p(&self, pos: Position, is_repeat: bool) -> Result<TwoBit> {
+    pub(crate) fn b2_for_p(&self, pos: Position, is_repeat: bool) -> Result<TwoBit> {
         ensure!(
             pos < self.pos_max || is_repeat,
             "running into sequence head"
@@ -112,20 +112,25 @@ impl KmerStore {
             .map(|b2x4| TwoBitx4::from(b2x4).to_b2(pos, is_repeat))
             .ok_or_else(|| anyhow!("stored pos past contig?"))
     }
-    pub fn extend_repetitive(&mut self, min_pos: Position, dist: BasePos) {
+    pub(crate) fn extend_repetitive(&mut self, min_pos: Position, dist: BasePos) {
         let dist_u32 =
             u32::try_from(u64::from(dist)).expect("dist for repeat extension doesn't fit in u32");
         let repeat = self.repeat.entry(min_pos).or_insert((dist_u32, 0));
         repeat.1 = dist_u32;
     }
 
-    pub fn replace_repetitive(&mut self, old_pos: Position, new_pos: Position, dist: BasePos) {
+    pub(crate) fn replace_repetitive(
+        &mut self,
+        old_pos: Position,
+        new_pos: Position,
+        dist: BasePos,
+    ) {
         let dist_u32 =
             u32::try_from(u64::from(dist)).expect("dist for repeat replacment doesn't fit in u32");
-        let old_repeat = self.repeat.remove(&old_pos).expect("oldpos not stored");
-
-        let repeat = self.repeat.entry(new_pos).or_insert(old_repeat);
-        repeat.1 += dist_u32;
+        if let Some(old_repeat) = self.repeat.remove(&old_pos) {
+            let repeat = self.repeat.entry(new_pos).or_insert(old_repeat);
+            repeat.1 += dist_u32;
+        }
     }
 }
 

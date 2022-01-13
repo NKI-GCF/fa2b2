@@ -13,7 +13,6 @@ pub struct KmerConst {
     pub kmerlen: usize,
     pub bitlen: usize,
     pub venster: usize,
-    max_afstand: usize,
     pub extent: Vec<usize>,
 }
 
@@ -52,12 +51,11 @@ macro_rules! implement_revcmp { ($($ty:ty),*) => ($(
 implement_revcmp!(usize, u64);
 
 impl KmerConst {
-    pub fn from_bitlen(bitlen: usize) -> Self {
+    pub(crate) fn from_bitlen(bitlen: usize) -> Self {
         let kmerlen = bitlen / 2;
-        let max_afstand = kmerlen / 2;
 
         // Een venster, groot genoeg voor de meeste unieke x-mers (wat arbitrair)
-        let venster = kmerlen + max_afstand;
+        let venster = kmerlen + kmerlen / 2;
 
         // e.g. with a RL 4 & KL 2: (0,1), (1,2), (2,3) => 3 kmers.
         let no_kmers = venster - kmerlen + 1;
@@ -67,33 +65,25 @@ impl KmerConst {
         // in no xor-hash and a complemented xor-hash with the max for index.
         let extent: Vec<usize> = (0..kmerlen).collect();
 
-        dbg_restart!(
-            "venster: {}, kmerlen: {}, max_afstand: {}\n--",
-            venster,
-            kmerlen,
-            max_afstand
-        );
+        dbg_restart!("venster: {}, kmerlen: {}\n--", venster, kmerlen);
         if !cfg!(debug_assertions) {
-            eprintln!(
-                "venster: {}, kmerlen: {}, max_afstand: {}",
-                venster, kmerlen, max_afstand
-            );
+            eprintln!("venster: {}, kmerlen: {}", venster, kmerlen);
         }
         KmerConst {
             no_kmers,
             kmerlen,
             bitlen,
             venster,
-            max_afstand,
             extent,
         }
     }
-    pub fn get_ext_max(&self) -> usize {
-        self.extent.len()
-    }
 
     // same hash function, from Xmer.
-    pub fn get_next_xmer(&self, orig_hash: usize, mut p: ExtPosEtc) -> Option<(usize, ExtPosEtc)> {
+    pub(crate) fn get_next_xmer(
+        &self,
+        orig_hash: usize,
+        mut p: ExtPosEtc,
+    ) -> Option<(usize, ExtPosEtc)> {
         if p.x() + 1 < 0x1_0000_0000 {
             /*was < self.get_ext_max()*/
             let k = self.kmerlen as u32;
@@ -123,7 +113,7 @@ impl KmerConst {
         }
     }
 
-    pub fn new(genomesize: usize) -> Self {
+    pub(crate) fn new(genomesize: usize) -> Self {
         // bit width, required to store all (cumulative) genomic positions, is used as len
 
         let mut bitlen = genomesize.next_power_of_two().trailing_zeros() as usize;
@@ -134,26 +124,11 @@ impl KmerConst {
         KmerConst::from_bitlen(bitlen)
     }
 
-    pub fn no_xmers(&self, x: usize) -> usize {
-        self.no_kmers - self.afstand(x)
-    }
-    pub fn get_kmers(&self, x: usize) -> (usize, usize) {
-        dbg_assert!(x < self.extent.len());
-        let first = self.extent[x] >> self.max_afstand;
-        let second = self.extent[x] & (self.max_afstand - 1);
-        (first, second)
-    }
-    pub fn afstand(&self, x: usize) -> usize {
-        let kmer = self.get_kmers(x);
-        cmp::max(kmer.0, kmer.1)
-    }
-
-    pub fn get_kmer_boundaries(
+    pub(crate) fn get_kmer_boundaries(
         &self,
         pos: Position,
         contig: (Position, Position),
     ) -> (Position, Position) {
-        //let afs = self.afstand(p.x()); // => zou van venster / no_kmers afgetrokken kunnen
         let venster = Position::from(BasePos::from(self.venster));
         let lower = if pos > venster {
             pos - venster

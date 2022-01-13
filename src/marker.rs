@@ -21,7 +21,7 @@ pub struct KmerIter<'a> {
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
-    pub fn new(ks: &'a mut KmerStore, kc: &'a KmerConst) -> Self {
+    pub(crate) fn new(ks: &'a mut KmerStore, kc: &'a KmerConst) -> Self {
         let scp = HeadScope::new(kc);
         KmerIter {
             n_stretch: 0,
@@ -80,7 +80,7 @@ impl<'a> KmerIter<'a> {
         }
     }
 
-    pub fn markcontig(&mut self, record: fasta::Record) -> Result<()> {
+    pub(crate) fn markcontig(&mut self, record: fasta::Record) -> Result<()> {
         self.goffs = 0;
         self.ks.push_contig(self.scp.p.pos(), self.goffs);
 

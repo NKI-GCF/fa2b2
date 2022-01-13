@@ -19,7 +19,7 @@ pub struct HeadScope<'a> {
 }
 
 impl<'a> HeadScope<'a> {
-    pub fn new(kc: &'a KmerConst) -> Self {
+    pub(crate) fn new(kc: &'a KmerConst) -> Self {
         HeadScope {
             kc,
             p: ExtPosEtc::zero(),
@@ -34,7 +34,7 @@ impl<'a> HeadScope<'a> {
 
     // hier krijgen we nieuwe sequence, zijn geen past scope aan het behandelen, of zo.
     // .i & .p increments en kmer .d[] updates vinden plaats.
-    pub fn complete_and_update_mark(&mut self, b2: TwoBit, ks: &mut KmerStore) -> Result<()> {
+    pub(crate) fn complete_and_update_mark(&mut self, b2: TwoBit, ks: &mut KmerStore) -> Result<()> {
         if self.update() {
             // one mark is added, and one leaving. both influence mark (and order).
             let i = self.pick_mark();

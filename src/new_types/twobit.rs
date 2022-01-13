@@ -19,7 +19,7 @@ pub(super) struct TwoBitRcDna(u64);
 
 /// Twobits may be unexpected: N: 0x7, A: 0x0, C: 0x1, T: 0x2, G: 0x3
 impl ThreeBit {
-    pub fn as_twobit_if_not_n(&self) -> Option<TwoBit> {
+    pub(crate) fn as_twobit_if_not_n(&self) -> Option<TwoBit> {
         if self.0 < 4 {
             Some(TwoBit(self.0))
         } else {
@@ -30,23 +30,23 @@ impl ThreeBit {
 
 /// No N, 2 bits for code, same as above.
 impl TwoBit {
-    pub fn pos_shift(&self, pos: Position) -> TwoBitx4 {
+    pub(crate) fn pos_shift(&self, pos: Position) -> TwoBitx4 {
         let ob2 = self.0.checked_shl(pos.b2_shift());
         TwoBitx4(ob2.expect("bug shifting from b2"))
     }
-    pub fn as_kmer_top(&self, shift: u32) -> u64 {
+    pub(crate) fn as_kmer_top(&self, shift: u32) -> u64 {
         (self.0 as u64)
             .checked_shl(shift)
             .expect("bug shifting to u64 top")
     }
-    pub fn as_kmer_bottom_rc(&self) -> u64 {
+    pub(crate) fn as_kmer_bottom_rc(&self) -> u64 {
         2 ^ self.0 as u64
     }
 }
 
 /// 4 packed twobits per u8.
 impl TwoBitx4 {
-    pub fn to_b2(&self, pos: Position, for_repeat: bool) -> TwoBit {
+    pub(crate) fn to_b2(&self, pos: Position, for_repeat: bool) -> TwoBit {
         // the third bit (for N) is actually never set, because we don't store those in TwoBitx4
         let ob2 = self.0.checked_shr(pos.b2_shift());
         let b2 = TwoBit(ob2.expect("bug shifting to b2") & 3);
@@ -55,7 +55,7 @@ impl TwoBitx4 {
         }
         b2
     }
-    pub fn as_u8(&self) -> u8 {
+    pub(crate) fn as_u8(&self) -> u8 {
         self.0
     }
 }
@@ -65,13 +65,13 @@ impl TwoBitDna {
     pub(super) fn add(&mut self, b2: TwoBit, topb2_shift: u32) {
         self.0 = (self.0 >> 2) | b2.as_kmer_top(topb2_shift);
     }
-    /*pub fn as_u64(&self) -> u64 {
+    /*pub(crate) fn as_u64(&self) -> u64 {
         self.0
     }*/
-    pub fn lt_strand(&self, rc: TwoBitRcDna) -> bool {
+    pub(crate) fn lt_strand(&self, rc: TwoBitRcDna) -> bool {
         self.0 < rc.0 || (self.0 == rc.0 && (self.0 & 1) != 0)
     }
-    pub fn to_usize(self) -> usize {
+    pub(crate) fn to_usize(self) -> usize {
         usize::try_from(self.0).unwrap()
     }
     fn revcmp(&self, k: u32) -> u64 {
@@ -84,7 +84,7 @@ impl TwoBitRcDna {
     pub(super) fn add(&mut self, b2: TwoBit, topb2_shift: u32) {
         self.0 = ((self.0 & ((1 << topb2_shift) - 1)) << 2) | b2.as_kmer_bottom_rc();
     }
-    pub fn to_usize(self) -> usize {
+    pub(crate) fn to_usize(self) -> usize {
         usize::try_from(self.0).unwrap()
     }
 

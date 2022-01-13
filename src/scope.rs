@@ -25,7 +25,6 @@ pub trait WritingScope: Scope {
     fn set_period(&mut self, period: Position);
     fn unset_period(&mut self);
 
-    //FIXME remove recursiveness and mutability, just return what needs to be extended & stored.
     fn try_store_mark(
         &mut self,
         ks: &mut KmerStore,

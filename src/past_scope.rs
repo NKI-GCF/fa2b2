@@ -20,7 +20,12 @@ pub struct PastScope<'a> {
 }
 
 impl<'a> PastScope<'a> {
-    pub fn new(ks: &mut KmerStore, kc: &'a KmerConst, p: ExtPosEtc, idx: usize) -> Result<Self> {
+    pub(crate) fn new(
+        ks: &mut KmerStore,
+        kc: &'a KmerConst,
+        p: ExtPosEtc,
+        idx: usize,
+    ) -> Result<Self> {
         let pos = Position::from(p);
         ensure!(pos != Position::zero());
         let plim = ks.get_contig_start_end_for_p(pos);

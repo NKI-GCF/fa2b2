@@ -18,7 +18,7 @@ pub struct Xmer {
     topb2_shift: u32,
 } //^-^\\
 
-pub fn xmer_hash(idx: usize, x: usize, k: u32) -> usize {
+pub(crate) fn xmer_hash(idx: usize, x: usize, k: u32) -> usize {
     let t = 1 << k;
     dbg_assert!(x < t);
     idx ^ (((idx & !x & (t - 1)) << k) | ((idx >> k) & x))
@@ -26,7 +26,7 @@ pub fn xmer_hash(idx: usize, x: usize, k: u32) -> usize {
 
 impl Xmer {
     /// get a kmer for this length
-    pub fn new(kmerlen: u32) -> Self {
+    pub(crate) fn new(kmerlen: u32) -> Self {
         let bitlen = kmerlen * 2;
         let topb2_shift = bitlen - 2;
         Xmer {
@@ -39,12 +39,12 @@ impl Xmer {
     }
 
     /// true if the kmer is from the template. Palindromes are special.
-    pub fn is_template(&self) -> bool {
+    pub(crate) fn is_template(&self) -> bool {
         self.dna.lt_strand(self.rc)
     }
 
     /// adds twobit to k-mer sequences, to dna in the top two bits. Returns orientation.
-    pub fn update(&mut self, b2: TwoBit) -> bool {
+    pub(crate) fn update(&mut self, b2: TwoBit) -> bool {
         // XXX function is hot
         self.dna.add(b2, self.topb2_shift);
         self.rc.add(b2, self.topb2_shift);
@@ -60,7 +60,7 @@ impl Xmer {
         }
     }
     /// an extension specific index
-    pub fn get_hash(&self, x: usize) -> usize {
+    pub(crate) fn get_hash(&self, x: usize) -> usize {
         let seq = self.get_base_seq();
 
         let idx = xmer_hash(seq, x, self.kmerlen);
@@ -72,7 +72,7 @@ impl Xmer {
             (overbit - 1) & !idx
         }
     }
-    pub fn get_hash_and_p(&self, x: usize) -> (usize, ExtPosEtc) {
+    pub(crate) fn get_hash_and_p(&self, x: usize) -> (usize, ExtPosEtc) {
         (
             self.get_hash(x),
             ExtPosEtc::from((Extension::from(x), self.pos)),

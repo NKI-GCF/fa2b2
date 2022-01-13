@@ -24,7 +24,7 @@ pub struct Mapper<'a> {
 }
 
 impl<'a> Mapper<'a> {
-    pub fn new(ks: &'a KmerStore, kc: &'a KmerConst) -> Self {
+    pub(crate) fn new(ks: &'a KmerStore, kc: &'a KmerConst) -> Self {
         Mapper {
             ks,
             kc,
@@ -76,7 +76,7 @@ impl<'a> Mapper<'a> {
         }
     }
 
-    pub fn read_record(&mut self, record: fastq::Record) -> Result<()> {
+    pub(crate) fn read_record(&mut self, record: fastq::Record) -> Result<()> {
         for b3 in record.sequence().iter().map(ThreeBit::from) {
             if let Some(b2) = b3.as_twobit_if_not_n() {
                 if self.update() {

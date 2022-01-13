@@ -6,10 +6,10 @@ use crate::rdbg::STAT_DB;
 pub struct Extension(u64);
 
 impl Extension {
-    pub fn as_u64(&self) -> u64 {
+    pub(crate) fn as_u64(&self) -> u64 {
         self.0
     }
-    pub fn max_value() -> Extension {
+    pub(crate) fn max_value() -> Extension {
         Extension(EXT_MASK)
     }
 }

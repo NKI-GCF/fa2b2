@@ -20,65 +20,65 @@ pub struct PastScope<'a> {
 }
 
 impl<'a> PastScope<'a> {
-    pub(crate) fn new(
-        ks: &mut KmerStore,
-        kc: &'a KmerConst,
-        p: ExtPosEtc,
-        idx: usize,
-    ) -> Result<Self> {
+    pub(crate) fn new(kc: &'a KmerConst) -> Self {
+        PastScope {
+            kc,
+            p: ExtPosEtc::zero(),
+            i: 0,
+            mod_i: 0,
+            plim: (Position::zero(), Position::zero()),
+            period: Position::zero(),
+            mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
+            d: vec![Xmer::new(kc.kmerlen as u32); kc.no_kmers],
+            z: (0..kc.no_kmers).collect(),
+        }
+    }
+    fn rebuild(&mut self, ks: &KmerStore, p: ExtPosEtc, idx: usize) -> Result<()> {
         let pos = Position::from(p);
         ensure!(pos != Position::zero());
-        let plim = ks.get_contig_start_end_for_p(pos);
-        let bound = kc.get_kmer_boundaries(pos, plim);
+        self.plim = ks.get_contig_start_end_for_p(pos);
+        let bound = self.kc.get_kmer_boundaries(pos, self.plim);
         dbg_print!("{:?}", bound);
         let extension = Extension::from(p);
 
-        let mut scp = PastScope {
-            kc,
-            p: ExtPosEtc::from((extension, bound.0)),
-            i: 0,
-            mod_i: 0,
-            plim,
-            period: Position::zero(),
-            mark: KmerLoc::new(usize::max_value(), ExtPosEtc::from(extension)),
-            d: vec![Xmer::new(kc.kmerlen as u32); kc.no_kmers],
-            z: (0..kc.no_kmers).collect(),
-        };
+        self.p = ExtPosEtc::from((extension, bound.0));
+        self.mark.p = ExtPosEtc::from(extension);
 
         loop {
-            if scp.update() {
+            if self.update() {
                 // we weten extension op voorhand.
-                let i = scp.pick_mark();
-                if scp.d[i].pos != scp.mark.p.pos() {
-                    scp.store_mark(ks, i)?;
-                    if p.same_pos_and_ext(scp.mark.p) {
+                let i = self.pick_mark();
+                if self.d[i].pos != self.mark.p.pos() {
+                    let (min_idx, min_p) = self.get_d(i).get_hash_and_p(self.mark.p.x());
+                    self.set_mark(min_idx, min_p);
+                    if p.same_pos_and_ext(self.mark.p) {
                         break;
                     }
-                    if scp.mark.get_idx() == idx {
+                    if self.mark.get_idx() == idx {
                         dbg_print!(
                             "idx {:x} observed but for {:?}, not {:?}",
                             idx,
-                            scp.mark.p,
+                            self.mark.p,
                             p
                         );
                     }
                     // XXX ik zou een assertion hier logischer vinden
                     /*assert!(
-                        scp.p.pos() < bound.1,
+                        self.p.pos() < bound.1,
                         "kmer {:x} not observed for {:x} !!",
                         idx,
                         p
                     );*/
-                    if scp.p.pos() >= bound.1 {
+                    if self.p.pos() >= bound.1 {
                         dbg_print!("kmer {:x} not observed for {:?} !!", idx, p);
-                        scp.p.clear();
+                        self.p.clear();
                         break;
                     }
                 }
             }
-            scp.increment(ks.b2_for_p(scp.p.pos(), false).unwrap());
+            self.increment(ks.b2_for_p(self.p.pos(), false).unwrap());
         }
-        Ok(scp)
+        Ok(())
     }
     fn is_on_contig(&self, pos: Position) -> bool {
         pos >= self.plim.0 && pos < self.plim.1
@@ -218,19 +218,20 @@ mod tests {
         let definition = fasta::record::Definition::new("test", None);
         let sequence = fasta::record::Sequence::from(seq_vec);
         kmi.markcontig(fasta::Record::new(definition, sequence))?;
+        let mut scp = PastScope::new(&kc);
         let mut seen = 0;
         for hash in 0..kmi.ks.kmp.len() {
             let p = kmi.ks.kmp[hash];
             if p.is_set() {
                 dbg_print!("---[ {:#x} p:{:?} ]---", hash, p);
-                let scp = PastScope::new(&mut kmi.ks, &kc, p, hash)?;
+                scp.rebuild(&mut kmi.ks, p, hash)?;
                 dbg_assert_eq!(scp.mark.p, p.rep_dup_masked(), "[{}]: {:x}", seen, hash);
                 seen += 1;
             }
         }
         dbg_assert_eq!(
             seen,
-            23,
+            42,
             "XXX: the number of seen kmers could change, though"
         );
         Ok(())
@@ -240,6 +241,7 @@ mod tests {
         // all mappable.
         let seqlen: usize = 8;
         let kc = KmerConst::new(seqlen);
+        let mut scp = PastScope::new(&kc);
 
         for gen in 0..=4_usize.pow(seqlen as u32) {
             let mut ks = KmerStore::new(kc.bitlen, 10_000);
@@ -265,7 +267,7 @@ mod tests {
                 let p = kmi.ks.kmp[hash];
                 if p.is_set() {
                     dbg_print!("hash: [{:#x}]: p: {:?}", hash, p);
-                    let scp = PastScope::new(&mut kmi.ks, &kc, p, hash)?;
+                    scp.rebuild(&mut kmi.ks, p, hash)?;
                     dbg_assert_eq!(
                         scp.mark.p,
                         p.rep_dup_masked(),

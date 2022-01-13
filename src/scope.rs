@@ -1,7 +1,11 @@
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::new_types::extended_position::ExtPosEtc;
-use crate::new_types::{position::Position, twobit::TwoBit, xmer::Xmer};
+use crate::new_types::{
+    position::Position,
+    twobit::{ThreeBit, TwoBit},
+    xmer::Xmer,
+};
 use crate::rdbg::STAT_DB;
 use anyhow::Result;
 
@@ -51,7 +55,7 @@ pub trait WritingScope: Scope {
                 dbg_print!("[{:x}] -> {:?} (?)", min_idx, old_stored_p);
                 ks.set_kmp(min_idx, min_p);
                 if old_stored_p.x() == min_p.x() {
-                    //same extension means same base sequence. this is a duplicate.
+                    // same extension means same base k-mer origin. this is a duplicate.
                     ks.kmp[min_idx].mark_more_recurs_upseq();
                 }
                 return Ok(Some((min_idx, old_stored_p)));
@@ -60,6 +64,8 @@ pub trait WritingScope: Scope {
             return Ok(None);
         }
         if old_stored_p.extension() == min_p.extension() {
+            // this must be the same k-mer origin, meaning identical k-mer sequence.
+
             // If a kmer occurs multiple times within an extending readlength (repetition),
             // only the first gets a position. During mapping this should be kept in mind.
             if let Some(dist) = self.dist_if_repetitive(ks, old_stored_p, min_p) {
@@ -84,6 +90,8 @@ pub trait WritingScope: Scope {
             if next.1.pos() == orig_pos {
                 min_p.extend();
                 (min_idx, min_p) = self.get_d(i).get_hash_and_p(min_p.x());
+                //
+                // dbg_assert!(min_idx == self.get_kc().get_next_xmer(next.0, next.1).unwrap().0);
                 self.set_mark(min_idx, min_p);
             } else if let Some((past_idx, past_p)) = self.get_kc().get_next_xmer(next.0, next.1) {
                 // extending some pase baseidx. TODO: if frequently the same recurs,

@@ -9,7 +9,8 @@ use std::clone::Clone;
 use std::mem::size_of;
 use std::{cmp, fmt};
 
-const EXT_BITS: usize = 6;
+// lowering this below 8 may cause some test failures
+const EXT_BITS: usize = 8;
 //TODO: const EXT_BITS: u32 = 16;
 
 pub const EXT_MAX: usize = 1 << EXT_BITS;
@@ -21,8 +22,8 @@ pub(crate) const REPETITIVE: u64 = 1 << REP_SHIFT;
 pub(super) const POS_SHIFT: u32 = 3;
 pub(super) const POS_MASK: u64 = (REPETITIVE - 1) ^ ((1 << POS_SHIFT) - 1);
 
-pub(crate) const DUPLICATE: u64 = 0x2;
 const ORI_MASK: u64 = 0x1;
+pub(crate) const DUPLICATE: u64 = 0x2;
 // TODO: indicate this position has annotation
 const _INFO_MASK: u64 = 0x4;
 
@@ -238,6 +239,29 @@ mod tests {
             self.p.set_ori(ori & 1 != 0);
         }
     }
+    #[test]
+    fn no_mask_overlaps() {
+        dbg_assert_eq!(EXT_MASK & POS_MASK, 0);
+        dbg_assert_eq!(EXT_MASK & ORI_MASK, 0);
+        dbg_assert_eq!(EXT_MASK & REPETITIVE, 0);
+        dbg_assert_eq!(EXT_MASK & DUPLICATE, 0);
+        dbg_assert_eq!(EXT_MASK & _INFO_MASK, 0);
+
+        dbg_assert_eq!(POS_MASK & ORI_MASK, 0);
+        dbg_assert_eq!(POS_MASK & REPETITIVE, 0);
+        dbg_assert_eq!(POS_MASK & DUPLICATE, 0);
+        dbg_assert_eq!(POS_MASK & _INFO_MASK, 0);
+
+        dbg_assert_eq!(ORI_MASK & REPETITIVE, 0);
+        dbg_assert_eq!(ORI_MASK & DUPLICATE, 0);
+        dbg_assert_eq!(ORI_MASK & _INFO_MASK, 0);
+
+        dbg_assert_eq!(REPETITIVE & DUPLICATE, 0);
+        dbg_assert_eq!(REPETITIVE & _INFO_MASK, 0);
+
+        dbg_assert_eq!(DUPLICATE & _INFO_MASK, 0);
+    }
+
     #[test]
     fn forward() {
         let mut rng = thread_rng();

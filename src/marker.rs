@@ -9,7 +9,7 @@ use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::new_types::{position::Position, twobit::ThreeBit};
 use crate::rdbg::STAT_DB;
-use crate::scope::WritingScope;
+use crate::scope::{Scope, WritingScope};
 use anyhow::Result;
 use noodles_fasta as fasta;
 
@@ -89,7 +89,7 @@ impl<'a> KmerIter<'a> {
         let mut coding = 0_u64;
         let mut seq = record.sequence().as_ref().iter();
 
-        while let Some(b3) = seq.next().map(ThreeBit::from) {
+        while let Some(b3) = seq.next().map(|b| self.scp.ascii_to_b3(b)) {
             let pos = self.scp.p.pos();
             if let Some(b2) = b3.as_twobit_if_not_n() {
                 // no third bit for A, C, T or G.

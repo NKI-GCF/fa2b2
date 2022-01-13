@@ -6,6 +6,7 @@ use crate::rdbg::STAT_DB;
 use anyhow::Result;
 
 pub trait Scope {
+    fn get_pos(&self) -> Position;
     fn get_kc(&self) -> &KmerConst;
     fn get_d(&self, i: usize) -> &Xmer;
     fn update(&mut self) -> bool;
@@ -18,6 +19,9 @@ pub trait Scope {
     ) -> Option<Position>;
     fn set_mark(&mut self, idx: usize, p: ExtPosEtc);
     fn increment(&mut self, b2: TwoBit);
+    fn ascii_to_b3(&self, b: &u8) -> ThreeBit {
+        ThreeBit::from((self.get_pos(), *b))
+    }
 }
 
 pub trait WritingScope: Scope {

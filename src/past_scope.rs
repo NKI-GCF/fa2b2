@@ -99,6 +99,9 @@ impl<'a> WritingScope for PastScope<'a> {
 }
 
 impl<'a> Scope for PastScope<'a> {
+    fn get_pos(&self) -> Position {
+        self.p.pos()
+    }
     fn get_kc(&self) -> &KmerConst {
         self.kc
     }

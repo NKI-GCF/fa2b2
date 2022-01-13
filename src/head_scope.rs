@@ -65,6 +65,9 @@ impl<'a> WritingScope for HeadScope<'a> {
 }
 
 impl<'a> Scope for HeadScope<'a> {
+    fn get_pos(&self) -> Position {
+        self.p.pos()
+    }
     fn get_kc(&self) -> &KmerConst {
         self.kc
     }

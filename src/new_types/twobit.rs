@@ -96,10 +96,10 @@ impl TwoBitRcDna {
 impl fmt::Debug for TwoBit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
-            0 => write!(f, "0 (A)"),
-            1 => write!(f, "1 (C)"),
-            2 => write!(f, "2 (T)"),
-            3 => write!(f, "3 (G)"),
+            0 => write!(f, "A (0)"),
+            1 => write!(f, "C (1)"),
+            2 => write!(f, "T (2)"),
+            3 => write!(f, "G (3)"),
             _ => unreachable!(),
         }
     }
@@ -111,10 +111,15 @@ impl From<&u8> for TwoBitx4 {
     }
 }
 
-impl From<&u8> for ThreeBit {
-    fn from(val: &u8) -> ThreeBit {
-        let b2 = (*val >> 1) & 0x7;
-        dbg_print!("{}: {:x}", *val as char, b2);
+impl From<(Position, u8)> for ThreeBit {
+    fn from(val: (Position, u8)) -> ThreeBit {
+        let b2 = (val.1 >> 1) & 0x7;
+        dbg_print!(
+            "{}: {} ({:x})",
+            BasePos::from(val.0).as_u64(),
+            val.1 as char,
+            b2
+        );
         ThreeBit(b2)
     }
 }

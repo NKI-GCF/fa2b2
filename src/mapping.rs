@@ -77,8 +77,8 @@ impl<'a> Mapper<'a> {
     }
 
     pub(crate) fn read_record(&mut self, record: fastq::Record) -> Result<()> {
-        for b3 in record.sequence().iter().map(ThreeBit::from) {
-            if let Some(b2) = b3.as_twobit_if_not_n() {
+        for b in record.sequence().iter() {
+            if let Some(b2) = self.ascii_to_b3(b).as_twobit_if_not_n() {
                 if self.update() {
                     // we weten extension op voorhand.
                     if let Some(i) = self.new_xmer_median() {
@@ -93,6 +93,9 @@ impl<'a> Mapper<'a> {
 }
 
 impl<'a> Scope for Mapper<'a> {
+    fn get_pos(&self) -> Position {
+        self.p.pos()
+    }
     fn get_kc(&self) -> &KmerConst {
         self.kc
     }

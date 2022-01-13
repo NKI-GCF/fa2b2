@@ -6,19 +6,25 @@ use crate::rdbg::STAT_DB;
 use derive_more::Sub;
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
+use std::mem::size_of;
 use std::{cmp, fmt};
 
-pub(super) const POS_SHIFT: u32 = 3;
-pub(super) const EXT_SHIFT: u32 = 48;
-pub(crate) const DUPLICATE: u64 = 0x0000_0000_0000_0002;
-pub(super) const POS_MASK: u64 = 0x0000_7FFF_FFFF_FFF8;
-pub(crate) const REPETITIVE: u64 = 0x0000_8000_0000_0004;
-pub(crate) const EXT_MASK: u64 = 0xFFFF_0000_0000_0000;
-const ORI_MASK: u64 = 0x0000_0000_0000_0001;
-// TODO: indicate this position has annotation
-const _INFO_MASK: u64 = 0x0000_0000_0000_0008;
+const EXT_BITS: usize = 6;
+//TODO: const EXT_BITS: u32 = 16;
 
-pub const EXT_MAX: usize = 0xFFFF;
+pub const EXT_MAX: usize = 1 << EXT_BITS;
+
+pub(super) const EXT_SHIFT: u32 = (size_of::<u64>() * 8 - EXT_BITS) as u32;
+pub(crate) const EXT_MASK: u64 = !0x0 ^ ((1 << EXT_SHIFT) - 1);
+const REP_SHIFT: u32 = EXT_SHIFT - 1;
+pub(crate) const REPETITIVE: u64 = 1 << REP_SHIFT;
+pub(super) const POS_SHIFT: u32 = 3;
+pub(super) const POS_MASK: u64 = (REPETITIVE - 1) ^ ((1 << POS_SHIFT) - 1);
+
+pub(crate) const DUPLICATE: u64 = 0x2;
+const ORI_MASK: u64 = 0x1;
+// TODO: indicate this position has annotation
+const _INFO_MASK: u64 = 0x4;
 
 #[derive(Sub, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct ExtPosEtc(u64);

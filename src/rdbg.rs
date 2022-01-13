@@ -15,12 +15,10 @@ macro_rules! filelinestr {
 }
 
 /// formatted debug, included in dump but not in stats.
-#[macro_export]
 macro_rules! dbgf {
     ($l:literal) => ({
         if cfg!(debug_assertions) {
             STAT_DB.lock().unwrap().add(false, filelinestr!(stringify!($l)), stringify!($l));
-            //eprintln!("[{}:{}] {}", file!(), line!(), stringify!($l));
         }
         $l
     });
@@ -30,7 +28,6 @@ macro_rules! dbgf {
                 if cfg!(debug_assertions) {
                     STAT_DB.lock().unwrap().add(false, filelinestr!(stringify!($expr), " = ", $fmt),
                         format!(concat!("[{}:{}] {} => ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*));
-                    //eprintln!(concat!("[{}:{}] {} => ", $fmt), file!(), line!(), stringify!($expr), &expr$(, $opt)*);
                 }
                 expr
             }
@@ -39,7 +36,6 @@ macro_rules! dbgf {
 }
 
 /// begin a new round for logging (may trigger dump if dump_next() occurred)
-#[macro_export]
 macro_rules! dbg_restart {
     ($fmt:literal$(, $arg:expr)*) => ({
         if cfg!(debug_assertions) {
@@ -49,7 +45,6 @@ macro_rules! dbg_restart {
 }
 
 /// line for dump, not in stats
-#[macro_export]
 macro_rules! dbg_print {
     ($fmt:literal$(, $arg:expr)*) => ({
         if cfg!(debug_assertions) {
@@ -59,7 +54,6 @@ macro_rules! dbg_print {
 }
 
 /// line for dump, not in stats
-#[macro_export]
 macro_rules! dbg_print_if {
     ($cond:expr, $fmt:literal$(, $arg:expr)*) => ({
         if cfg!(debug_assertions) && $cond {
@@ -69,7 +63,6 @@ macro_rules! dbg_print_if {
 }
 
 /// for dump and in stats, conditionally dump_next()
-#[macro_export]
 macro_rules! dbg_dump_if {
     ($expr:expr, $cond:expr) => {{
         if let Some(mut db) = STAT_DB.lock().ok().filter(|_| cfg!(debug_assertions)) {
@@ -105,7 +98,6 @@ macro_rules! dbg_dump_if {
 }
 
 /// for dump and in stats
-#[macro_export]
 macro_rules! dbgx {
     ($expr:expr) => {{
         match $expr {
@@ -128,7 +120,6 @@ macro_rules! dbgx {
                             &expr
                         ),
                     );
-                    //dbg!(&expr)
                 }
                 expr
             }
@@ -137,7 +128,6 @@ macro_rules! dbgx {
 }
 
 ///trigger dump directly.
-#[macro_export]
 macro_rules! dbg_dump {
     () => ({
         STAT_DB.lock().unwrap().dump(false);
@@ -149,7 +139,6 @@ macro_rules! dbg_dump {
     });
 }
 
-#[macro_export]
 macro_rules! dbg_assert {
     ($test:expr) => {{
         debug_assert!($test, "{}", dbg_dump!("Assert `{}' failed!", stringify!($test)));
@@ -159,7 +148,6 @@ macro_rules! dbg_assert {
     }};
 }
 
-#[macro_export]
 macro_rules! dbg_assert_eq {
     ($a:expr, $b:expr) => {{
         debug_assert_eq!($a, $b, "{}", dbg_dump!("Assert `{}' == `{}' failed!", stringify!($a), stringify!($b)));
@@ -169,7 +157,6 @@ macro_rules! dbg_assert_eq {
     }};
 }
 
-#[macro_export]
 macro_rules! dbg_assert_ne {
     ($a:expr, $b:expr) => {{
         debug_assert_ne!($a, $b, "{}", dbg_dump!("Assert `{}' != `{}' failed!", stringify!($a), stringify!($b)));
@@ -179,7 +166,6 @@ macro_rules! dbg_assert_ne {
     }};
 }
 
-#[macro_export]
 macro_rules! dbg_panic {
     () => {{
         panic!("{}", dbg_dump!());
@@ -200,7 +186,7 @@ pub struct StatDeq {
 
 impl StatDeq {
     /// provide a message buffer of 'ct' lines, clamped between 100 and 10_000.
-    pub fn new(ct: usize) -> Self {
+    pub(crate) fn new(ct: usize) -> Self {
         StatDeq {
             last: (String::new(), String::new(), false),
             ct: cmp::min(10000, cmp::max(ct, 100)),
@@ -210,7 +196,7 @@ impl StatDeq {
             dump_next: false,
         }
     }
-    pub fn restart(&mut self, fmt: String, msg: String) {
+    pub(crate) fn restart(&mut self, fmt: String, msg: String) {
         if self.dump_next {
             self.dump(false);
             self.dump_next = false;
@@ -218,7 +204,7 @@ impl StatDeq {
         self.d.clear();
         self.add(false, fmt, msg);
     }
-    pub fn add(&mut self, new_do_log: bool, fmt: String, msg: String) {
+    pub(crate) fn add(&mut self, new_do_log: bool, fmt: String, msg: String) {
         let last_fmt = self.last.0.to_owned();
         let mut last_msg = self.last.1.to_owned();
         let do_log = self.last.2.to_owned();
@@ -239,10 +225,10 @@ impl StatDeq {
             self.last = (fmt, msg, new_do_log);
         }
     }
-    pub fn dump_next(&mut self) {
+    pub(crate) fn dump_next(&mut self) {
         self.dump_next = true;
     }
-    pub fn dump(&mut self, show_msg_counts: bool) {
+    pub(crate) fn dump(&mut self, show_msg_counts: bool) {
         self.add(false, String::new(), String::new()); // to flush last message
         if show_msg_counts {
             eprintln!("--- Total file:line:message & counts: ---");

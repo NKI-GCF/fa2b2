@@ -58,6 +58,7 @@ impl ExtPosEtc {
     pub(crate) fn is_set(&self) -> bool {
         self.pos() != Position::zero()
     }
+    #[inline(always)]
     pub(crate) fn is_zero(&self) -> bool {
         self.0 == 0
     }

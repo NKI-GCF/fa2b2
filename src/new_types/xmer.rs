@@ -18,6 +18,7 @@ pub struct Xmer {
     topb2_shift: u32,
 } //^-^\\
 
+#[inline(always)]
 pub(crate) fn xmer_hash(idx: usize, x: usize, k: u32) -> usize {
     let t = 1 << k;
     dbg_assert!(x < t);
@@ -39,6 +40,7 @@ impl Xmer {
     }
 
     /// true if the kmer is from the template. Palindromes are special.
+    #[inline(always)]
     pub(crate) fn is_template(&self) -> bool {
         self.dna.lt_strand(self.rc)
     }

@@ -46,6 +46,10 @@ pub trait WritingScope: Scope {
                 // collision with a different baseindex, it had lesser extension.
                 dbg_print!("[{:x}] -> {:?} (?)", min_idx, old_stored_p);
                 ks.set_kmp(min_idx, min_p);
+                if old_stored_p.x() == min_p.x() {
+                    //same extension means same base sequence. this is a duplicate.
+                    ks.kmp[min_idx].mark_more_recurs_upseq();
+                }
                 return Ok(Some((min_idx, old_stored_p)));
             }
             // .. else set and already min_p. Then leave bit states.
@@ -74,7 +78,8 @@ pub trait WritingScope: Scope {
         let orig_pos = min_p.pos();
         while let Some(next) = self.try_store_mark(ks, min_idx, min_p)? {
             if next.1.pos() == orig_pos {
-                (min_idx, min_p) = self.get_d(i).get_hash_and_p(min_p.x() + 1);
+                min_p.extend();
+                (min_idx, min_p) = self.get_d(i).get_hash_and_p(min_p.x());
                 self.set_mark(min_idx, min_p);
             } else if let Some((past_idx, past_p)) = self.get_kc().get_next_xmer(next.0, next.1) {
                 // extending some pase baseidx. TODO: if frequently the same recurs,

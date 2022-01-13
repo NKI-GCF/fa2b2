@@ -143,18 +143,18 @@ impl<'a> fmt::Display for HeadScope<'a> {
         let p = self.p.unshift_pos() as usize;
         let mp = self.mark.p.unshift_pos() as usize;
         let n = self.kc.kmerlen + self.p.x();
-        let o = " ".repeat((p - self.kc.venster) * 5);
+        let o = " ".repeat((p - self.kc.read_len) * 5);
         let r = p - mp;
         if r == 0 {
-            let x = self.kc.venster - n;
+            let x = self.kc.read_len - n;
             let s = if x != 0 {
                 " ".repeat(x << 2) + "|"
             } else {
                 String::from("")
             };
             write!(f, "{2}<{3}{: ^1$x}>", self.mark.get_idx(), n << 2, o, s)
-        } else if r + self.kc.kmerlen == self.kc.venster {
-            let x = self.kc.venster - n;
+        } else if r + self.kc.kmerlen == self.kc.read_len {
+            let x = self.kc.read_len - n;
             let s = if x != 0 {
                 String::from("|") + &" ".repeat(x << 2)
             } else {
@@ -162,7 +162,7 @@ impl<'a> fmt::Display for HeadScope<'a> {
             };
             write!(f, "{2}<{: ^1$x}{3}>", self.mark.get_idx(), n << 2, o, s)
         } else {
-            //let l = self.kc.venster - r - n;
+            //let l = self.kc.read_len - r - n;
             //let ls = if o {" ".repeat(o) + "|"} else {String::from("")};
             //let rs = if l {String::from("|") + &" ".repeat(l << 2)} else {String::from("")};
             //write!(f, "{2}<{3}|{: ^1$x}|{4}>", self.mark.idx, n << 2, o, ls, rs)

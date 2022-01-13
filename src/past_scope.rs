@@ -169,18 +169,18 @@ impl<'a> fmt::Display for PastScope<'a> {
         let p = self.p.unshift_pos() as usize;
         let mp = self.mark.p.unshift_pos() as usize;
         let n = self.kc.kmerlen + self.p.x();
-        let o = " ".repeat((p - self.kc.venster) * 5);
+        let o = " ".repeat((p - self.kc.read_len) * 5);
         let r = p - mp;
         if r == 0 {
-            let x = self.kc.venster - n;
+            let x = self.kc.read_len - n;
             let s = if x != 0 {
                 " ".repeat(x << 2) + "|"
             } else {
                 String::from("")
             };
             write!(f, "{2}<{3}{: ^1$x}>", self.mark.get_idx(), n << 2, o, s)
-        } else if r + self.kc.kmerlen == self.kc.venster {
-            let x = self.kc.venster - n;
+        } else if r + self.kc.kmerlen == self.kc.read_len {
+            let x = self.kc.read_len - n;
             let s = if x != 0 {
                 String::from("|") + &" ".repeat(x << 2)
             } else {
@@ -188,7 +188,7 @@ impl<'a> fmt::Display for PastScope<'a> {
             };
             write!(f, "{2}<{: ^1$x}{3}>", self.mark.get_idx(), n << 2, o, s)
         } else {
-            //let l = self.kc.venster - r - n;
+            //let l = self.kc.read_len - r - n;
             //let ls = if o {" ".repeat(o) + "|"} else {String::from("")};
             //let rs = if l {String::from("|") + &" ".repeat(l << 2)} else {String::from("")};
             //write!(f, "{2}<{3}|{: ^1$x}|{4}>", self.mark.idx, n << 2, o, ls, rs)
@@ -206,10 +206,11 @@ mod tests {
     use anyhow::Result;
     use noodles_fasta as fasta;
     const SEQLEN: usize = 250;
+    const READLEN: usize = 6;
 
     #[test]
     fn test_reconstruct1() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN);
+        let kc = KmerConst::new(SEQLEN, READLEN);
         let mut ks = KmerStore::new(kc.bitlen, 10_000);
         let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
@@ -240,7 +241,7 @@ mod tests {
     fn test_reconstruct_gs4_all() -> Result<()> {
         // all mappable.
         let seqlen: usize = 8;
-        let kc = KmerConst::new(seqlen);
+        let kc = KmerConst::new(seqlen, 2);
         let mut scp = PastScope::new(&kc);
 
         for gen in 0..=4_usize.pow(seqlen as u32) {
@@ -256,7 +257,7 @@ mod tests {
                     _ => unreachable!(),
                 })
                 .collect();
-            dbg_print!("-- k: {} rl: {} {:#x} seq:", kc.kmerlen, kc.venster, gen);
+            dbg_print!("-- k: {} rl: {} {:#x} seq:", kc.kmerlen, kc.read_len, gen);
             dbg_print!("{:?}", seq_vec);
 
             let vv: Vec<u8> = seq_vec.into_iter().map(|c| c as u8).collect();

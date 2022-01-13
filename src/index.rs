@@ -36,13 +36,19 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
         .transpose()?
         .unwrap();
 
-    let seqlen = matches
+    let read_len = matches
+        .value_of("read_length")
+        .map(|v| v.parse())
+        .transpose()?
+        .unwrap();
+
+    let seq_len = matches
         .value_of("sequence_length")
         .map(|v| v.parse())
         .transpose()?
         .unwrap();
 
-    let kc = KmerConst::new(seqlen);
+    let kc = KmerConst::new(seq_len, read_len);
     let mut ks = KmerStore::new(kc.bitlen, repetition_max_dist);
     let mut kmi = KmerIter::new(&mut ks, &kc);
     for record in fa.records() {

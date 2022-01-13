@@ -12,7 +12,7 @@ pub struct KmerConst {
     pub no_kmers: usize,
     pub kmerlen: usize,
     pub bitlen: usize,
-    pub venster: usize,
+    pub read_len: usize,
     pub extent: Vec<usize>,
 }
 
@@ -51,29 +51,37 @@ macro_rules! implement_revcmp { ($($ty:ty),*) => ($(
 implement_revcmp!(usize, u64);
 
 impl KmerConst {
-    pub(crate) fn from_bitlen(bitlen: usize) -> Self {
+    pub(crate) fn new(genomesize: usize, read_len: usize) -> Self {
+        // bit width, required to store all (cumulative) genomic positions, is used as len
+
+        let mut bitlen = genomesize.next_power_of_two().trailing_zeros() as usize;
+        if (bitlen & 1) == 1 {
+            // must be even.
+            bitlen += 1
+        }
+        KmerConst::from_bitlen(bitlen, read_len)
+    }
+
+    pub(crate) fn from_bitlen(bitlen: usize, read_len: usize) -> Self {
         let kmerlen = bitlen / 2;
 
-        // Een venster, groot genoeg voor de meeste unieke x-mers (wat arbitrair)
-        let venster = kmerlen + kmerlen / 2;
-
         // e.g. with a RL 4 & KL 2: (0,1), (1,2), (2,3) => 3 kmers.
-        let no_kmers = venster - kmerlen + 1;
+        let no_kmers = read_len - kmerlen + 1;
 
         // generate all combinations of 2 kmer positions for extension, high and low bits.
         // overlap and combination duplicates are allowed, those will result respectively
         // in no xor-hash and a complemented xor-hash with the max for index.
         let extent: Vec<usize> = (0..kmerlen).collect();
 
-        dbg_restart!("venster: {}, kmerlen: {}\n--", venster, kmerlen);
+        dbg_restart!("read_len: {}, kmerlen: {}\n--", read_len, kmerlen);
         if !cfg!(debug_assertions) {
-            eprintln!("venster: {}, kmerlen: {}", venster, kmerlen);
+            eprintln!("read_len: {}, kmerlen: {}", read_len, kmerlen);
         }
         KmerConst {
             no_kmers,
             kmerlen,
             bitlen,
-            venster,
+            read_len,
             extent,
         }
     }
@@ -113,25 +121,14 @@ impl KmerConst {
         }
     }
 
-    pub(crate) fn new(genomesize: usize) -> Self {
-        // bit width, required to store all (cumulative) genomic positions, is used as len
-
-        let mut bitlen = genomesize.next_power_of_two().trailing_zeros() as usize;
-        if (bitlen & 1) == 1 {
-            // must be even.
-            bitlen += 1
-        }
-        KmerConst::from_bitlen(bitlen)
-    }
-
     pub(crate) fn get_kmer_boundaries(
         &self,
         pos: Position,
         contig: (Position, Position),
     ) -> (Position, Position) {
-        let venster = Position::from(BasePos::from(self.venster));
-        let lower = if pos > venster {
-            pos - venster
+        let read_len = Position::from(BasePos::from(self.read_len));
+        let lower = if pos > read_len {
+            pos - read_len
         } else {
             Position::zero()
         };

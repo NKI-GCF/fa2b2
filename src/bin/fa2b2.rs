@@ -50,8 +50,17 @@ fn main() -> Result<()> {
                         .takes_value(true),
                 )
                 .arg(
-                    Arg::with_name("sequence_length")
+                    Arg::with_name("read_length")
                         .short("l")
+                        .long("seqlen")
+                        .required(true)
+                        .value_name("read_length")
+                        .help("length of sequence reads")
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("sequence_length")
+                        .short("L")
                         .long("seqlen")
                         .value_name("sequence_length")
                         .default_value("3099750718")

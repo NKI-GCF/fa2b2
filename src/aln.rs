@@ -14,6 +14,12 @@ pub fn aln(matches: &ArgMatches) -> Result<()> {
         .map(io::BufReader::new)
         .map(fastq::Reader::new)?;
 
+    let read_len = matches
+        .value_of("read_length")
+        .map(|v| v.parse())
+        .transpose()?
+        .unwrap();
+
     let ks_name = format!("{}.ks", fa_name);
     ensure!(
         path::Path::new(&ks_name).exists(),
@@ -24,7 +30,7 @@ pub fn aln(matches: &ArgMatches) -> Result<()> {
     let ks: KmerStore = deserialize_from(ks_file)?;
     let bitlen: usize = ks.get_bitlen();
 
-    let kc = KmerConst::from_bitlen(bitlen);
+    let kc = KmerConst::from_bitlen(bitlen, read_len);
 
     let mut n = 0;
     let mut mapper = Mapper::new(&ks, &kc);

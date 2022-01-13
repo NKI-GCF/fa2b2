@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn xmer_with_flip() {
-        let kc = KmerConst::from_bitlen(64);
+        let kc = KmerConst::from_bitlen(64, 32);
         let mut kmer: Xmer = Xmer::new(kc.kmerlen.try_into().unwrap());
         assert_eq!(kmer.kmerlen as usize, kc.kmerlen);
         assert_eq!(kmer.kmerlen, 32);

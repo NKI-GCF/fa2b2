@@ -126,7 +126,7 @@ impl<'a> Scope for HeadScope<'a> {
     }
 
     fn set_mark(&mut self, idx: usize, p: ExtPosEtc) {
-        format!("[{:x}] = {:?}", idx, p);
+        dbg_print!("[{:x}] = {:?}", idx, p);
         self.mark.set(idx, p);
     }
 

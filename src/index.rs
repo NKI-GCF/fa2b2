@@ -47,8 +47,17 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
         .transpose()?
         .unwrap();
 
-    let kc = KmerConst::new(seq_len, read_len);
-    let mut ks = KmerStore::new(kc.bitlen, repetition_max_dist);
+    if matches.occurrences_of("seed") != 0 {
+        eprintln!("Warning, changing the seed for indexing and alignment makes your alignment not portable.");
+    }
+    let seed = matches
+        .value_of("seed")
+        .map(|v| v.parse())
+        .transpose()?
+        .unwrap();
+
+    let kc = KmerConst::new(seq_len, read_len, seed);
+    let mut ks = KmerStore::new(kc.bitlen, repetition_max_dist, seed);
     let mut kmi = KmerIter::new(&mut ks, &kc);
     for record in fa.records() {
         kmi.markcontig(record?)?;

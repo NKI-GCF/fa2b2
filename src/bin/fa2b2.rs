@@ -66,6 +66,15 @@ fn main() -> Result<()> {
                         .default_value("3099750718")
                         .help("total length of genome sequence")
                         .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("seed")
+                        .short("X")
+                        .long("seed")
+                        .value_name("seed")
+                        .default_value("40164")
+                        .help("Seed for indexing (affects x-mer choice)")
+                        .takes_value(true),
                 ),
         )
         .subcommand(

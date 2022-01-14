@@ -28,9 +28,9 @@ pub fn aln(matches: &ArgMatches) -> Result<()> {
     );
     let ks_file = io::BufReader::new(fs::File::create(ks_name)?);
     let ks: KmerStore = deserialize_from(ks_file)?;
-    let bitlen: usize = ks.get_bitlen();
+    let bitlen = ks.get_bitlen();
 
-    let kc = KmerConst::from_bitlen(bitlen, read_len);
+    let kc = KmerConst::from_bitlen(bitlen, read_len, ks.seed);
 
     let mut n = 0;
     let mut mapper = Mapper::new(&ks, &kc);

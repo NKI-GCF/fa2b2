@@ -20,17 +20,18 @@ pub type Repeat = (u32, u32);
 
 #[derive(Serialize, Deserialize)]
 pub struct KmerStore {
-    pub pos_max: Position,
-    pub opt: u64,
-    pub rep_max_dist: Position,
-    pub b2: Vec<u8>,
-    pub kmp: Vec<ExtPosEtc>, // position + strand per k-mer.
-    pub contig: Vec<Contig>,
-    pub repeat: AHashMap<Position, Repeat>,
+    pub(crate) pos_max: Position,
+    pub(crate) opt: u64,
+    pub(crate) rep_max_dist: Position,
+    pub(crate) b2: Vec<u8>,
+    pub(crate) kmp: Vec<ExtPosEtc>, // position + strand per k-mer.
+    pub(crate) contig: Vec<Contig>,
+    pub(crate) repeat: AHashMap<Position, Repeat>,
+    pub(crate) seed: u16,
 }
 
 impl KmerStore {
-    pub(crate) fn new(bitlen: usize, rep_max_dist: u64) -> Self {
+    pub(crate) fn new(bitlen: usize, rep_max_dist: u64, seed: u16) -> Self {
         let shift = bitlen - 2;
         KmerStore {
             pos_max: Position::zero(),
@@ -41,6 +42,7 @@ impl KmerStore {
             //kmp,
             contig: Vec::new(), // contig info
             repeat: AHashMap::new(),
+            seed: seed,
         }
     }
     /*pub(crate) fn store_twobit(&mut self, pos: Position, b2: TwoBit) {
@@ -62,8 +64,8 @@ impl KmerStore {
         dbg_print!("[{:x}] <- {:?}", min_idx, min_p);
         self.kmp[min_idx].set(min_p);
     }
-    pub(crate) fn get_bitlen(&self) -> usize {
-        self.b2.len().trailing_zeros() as usize + 2
+    pub(crate) fn get_bitlen(&self) -> u8 {
+        self.b2.len().trailing_zeros() as u8 + 2
     }
 
     /// binary search contig lower boundary

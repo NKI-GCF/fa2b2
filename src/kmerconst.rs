@@ -58,18 +58,22 @@ macro_rules! implement_revcmp { ($($ty:ty),*) => ($(
 implement_revcmp!(usize, u64);
 
 impl KmerConst {
-    pub(crate) fn new(genomesize: usize, read_len: usize) -> Self {
+    pub(crate) fn new(genomesize: usize, read_len: u16, seed: u16) -> Self {
         // bit width, required to store all (cumulative) genomic positions, is used as len
 
-        let mut bitlen = genomesize.next_power_of_two().trailing_zeros() as usize;
+        let mut bitlen = genomesize.next_power_of_two().trailing_zeros() as u8;
         if (bitlen & 1) == 1 {
             // must be even.
             bitlen += 1
         }
-        KmerConst::from_bitlen(bitlen, read_len)
+        KmerConst::from_bitlen(bitlen, read_len, seed)
     }
 
-    pub(crate) fn from_bitlen(bitlen: usize, read_len: usize) -> Self {
+    pub(crate) fn from_bitlen(bitlen: u8, read_len: u16, seed: u16) -> Self {
+        let bitlen = usize::from(bitlen);
+        let read_len = usize::from(read_len);
+        let seed = usize::from(seed);
+
         let kmerlen = bitlen / 2;
         dbg_assert!(kmerlen > 0);
         dbg_assert!(read_len >= kmerlen);

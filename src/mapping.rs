@@ -32,7 +32,7 @@ impl<'a> Mapper<'a> {
             i: 0,
             mod_i: 0,
             mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
-            d: vec![Xmer::new(kc.kmerlen as u32); kc.no_kmers],
+            d: vec![Xmer::new(); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         }
     }
@@ -45,7 +45,7 @@ impl<'a> Mapper<'a> {
         // binary search for dupbit 0 status
         let mut last_pos = Position::zero();
         for x in 0..=EXT_MAX {
-            let hash = xmer.get_hash(x);
+            let hash = xmer.get_hash(self.kc, x);
             let test_p = self.ks.kmp[hash];
             if test_p.x() == x {
                 let pos = test_p.pos();
@@ -138,7 +138,7 @@ impl<'a> Scope for Mapper<'a> {
     }
     fn increment(&mut self, b2: TwoBit) {
         // first bit is strand orientation (ori), set according to k-mer.
-        self.p.set_ori(self.d[self.mod_i].update(b2));
+        self.p.set_ori(self.d[self.mod_i].update(self.kc, b2));
         self.p.incr_pos();
         self.i += 1;
     }

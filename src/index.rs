@@ -1,12 +1,11 @@
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::marker::KmerIter;
-
+use crate::new_types::extended_position::EXT_MAX;
 use anyhow::{anyhow, ensure, Result};
 use bincode::serialize_into;
 use clap::ArgMatches;
 use noodles_fasta as fasta;
-
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
@@ -54,7 +53,7 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
     for record in fa.records() {
         kmi.markcontig(record?)?;
     }
-    make_stats(&ks, kc.extent.len());
+    make_stats(&ks);
 
     if let Some(out_file) = opt_out {
         serialize_into(out_file, &ks)?;
@@ -62,7 +61,7 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn make_stats(ks: &KmerStore, extent_len: usize) {
+fn make_stats(ks: &KmerStore) {
     let mut stat = [[0; 0x100]; 2];
     for k in ks.kmp.iter() {
         stat[if k.is_set() { 1 } else { 0 }][k.x()] += 1;
@@ -73,7 +72,7 @@ fn make_stats(ks: &KmerStore, extent_len: usize) {
         ks.kmp.len(),
         100.0 * stat[0][0] as f64 / ks.kmp.len() as f64
     );
-    for j in 1..extent_len {
+    for j in 1..EXT_MAX {
         if stat[0][j] != 0 {
             println!(
                 "Blacklisted for extension {}: {}\t{:.2}%",
@@ -84,7 +83,7 @@ fn make_stats(ks: &KmerStore, extent_len: usize) {
         }
     }
     let tot_set = ks.kmp.len() - stat[0][0];
-    for j in 0..extent_len {
+    for j in 0..EXT_MAX {
         if stat[1][j] != 0 {
             println!(
                 "Set for extension {}: {}\t{:.2}% (of set)",

@@ -31,13 +31,10 @@ impl ThreeBit {
 /// No N, 2 bits for code, same as above.
 impl TwoBit {
     pub(crate) fn pos_shift(&self, pos: Position) -> TwoBitx4 {
-        let ob2 = self.0.checked_shl(pos.b2_shift());
-        TwoBitx4(ob2.expect("bug shifting from b2"))
+        TwoBitx4(self.0 << pos.b2_shift())
     }
     pub(crate) fn as_kmer_top(&self, shift: u32) -> u64 {
-        (self.0 as u64)
-            .checked_shl(shift)
-            .expect("bug shifting to u64 top")
+        (self.0 as u64) << shift
     }
     pub(crate) fn as_kmer_bottom_rc(&self) -> u64 {
         2 ^ self.0 as u64
@@ -48,8 +45,7 @@ impl TwoBit {
 impl TwoBitx4 {
     pub(crate) fn to_b2(&self, pos: Position, for_repeat: bool) -> TwoBit {
         // the third bit (for N) is actually never set, because we don't store those in TwoBitx4
-        let ob2 = self.0.checked_shr(pos.b2_shift());
-        let b2 = TwoBit(ob2.expect("bug shifting to b2") & 3);
+        let b2 = TwoBit((self.0 >> pos.b2_shift()) & 3);
         if !for_repeat {
             dbg_print!("{}: {:?}", BasePos::from(pos).as_u64(), b2);
         }
@@ -62,8 +58,8 @@ impl TwoBitx4 {
 
 impl TwoBitDna {
     /// adds twobit to kmer dna sequences, in the top two bits.
-    pub(super) fn add(&mut self, b2: TwoBit, topb2_shift: u32) {
-        self.0 = (self.0 >> 2) | b2.as_kmer_top(topb2_shift);
+    pub(super) fn add(&mut self, b2: TwoBit, shift: u32) {
+        self.0 = (self.0 >> 2) | b2.as_kmer_top(shift);
     }
     /*pub(crate) fn as_u64(&self) -> u64 {
         self.0
@@ -82,8 +78,8 @@ impl TwoBitDna {
 
 impl TwoBitRcDna {
     /// adds reverse complement of twobit to reverse complement in the bottom.
-    pub(super) fn add(&mut self, b2: TwoBit, topb2_shift: u32) {
-        self.0 = ((self.0 & ((1 << topb2_shift) - 1)) << 2) | b2.as_kmer_bottom_rc();
+    pub(super) fn add(&mut self, b2: TwoBit, mask: u64) {
+        self.0 = ((self.0 & mask) << 2) | b2.as_kmer_bottom_rc();
     }
     pub(crate) fn to_usize(self) -> usize {
         usize::try_from(self.0).unwrap()
@@ -129,7 +125,6 @@ impl From<(Position, u8)> for ThreeBit {
 mod tests {
     use super::*;
     use crate::kmerconst::{KmerConst, RevCmp};
-    use crate::new_types::xmer::xmer_hash;
     use crate::new_types::xmer::Xmer;
     use rand::{thread_rng, Rng};
     use std::cmp;
@@ -145,30 +140,31 @@ mod tests {
             rc ^= overmask;
         }
         let (dna, rc) = if ori { (dna, rc) } else { (rc, dna) };
-        let mut kmer = Xmer::new(kmerlen);
+        let mut kmer = Xmer::new();
         kmer.dna = TwoBitDna(dna);
         kmer.rc = TwoBitRcDna(rc);
         kmer
     }
     #[test]
     fn xmer_no_flip() {
-        let mut kmer: Xmer = Xmer::new(32);
-        assert_eq!(kmer.kmerlen, 32);
+        let kc = KmerConst::from_bitlen(64, 32);
+        let mut kmer: Xmer = Xmer::new();
+        assert_eq!(kc.kmerlen, 32);
 
         for i in 0..32 {
-            kmer.update(TwoBit::new(i & 3));
+            kmer.update(&kc, TwoBit::new(i & 3));
         }
         let dna = 0xE4E4_E4E4_E4E4_E4E4; // GTCA.. => 3210.. (in 2bits)
-        let rc = dna.revcmp(kmer.kmerlen); // xor 0xaaaaaaaa and reverse per 2bit
+        let rc = dna.revcmp(kc.kmerlen.try_into().unwrap()); // xor 0xaaaaaaaa and reverse per 2bit
         assert_eq!(0xB1B1_B1B1_B1B1_B1B1_u64, rc); // TGAC.. 2301.. (in 2bits)
 
         assert_eq!(kmer.dna.0, dna);
         assert_eq!(kmer.rc.0, rc);
 
-        let mark = kmer.get_hash_and_p(0x55);
+        let mark = kmer.get_hash_and_p(&kc, 0x55);
 
         // lowest is rc, so that will be hashed by above function.
-        let test = xmer_hash(rc as usize, 0x55, kmer.kmerlen) as u64;
+        let test = kc.xmer_hash(rc as usize, 0x55) as u64;
         assert_eq!(test, 0x11B1B1B1A0_u64, "{:#X}", test);
 
         assert_eq!(test & 0x8000_0000_0000_0000, 0);
@@ -188,31 +184,31 @@ mod tests {
         assert_eq!(mark.0 as u64, 0x11B1B1B1A0);
         assert_eq!(mark.1.x(), 0x55);
 
-        let undo = xmer_hash(mark.0, 0x55, kmer.kmerlen) as u64;
+        let undo = kc.xmer_hash(mark.0, 0x55) as u64;
         assert_eq!(undo, rc, "undo: {:#x} {:#x}", undo, rc);
     }
 
     #[test]
     fn xmer_with_flip() {
         let kc = KmerConst::from_bitlen(64, 32);
-        let mut kmer: Xmer = Xmer::new(kc.kmerlen.try_into().unwrap());
-        assert_eq!(kmer.kmerlen as usize, kc.kmerlen);
-        assert_eq!(kmer.kmerlen, 32);
+        let mut kmer: Xmer = Xmer::new();
+        assert_eq!(kc.kmerlen as usize, kc.kmerlen);
+        assert_eq!(kc.kmerlen, 32);
 
         let dna = 0x0147_3840_FABC_025F_u64;
         for i in 0..32 {
-            kmer.update(TwoBit::new(((dna >> (i << 1)) as u8) & 3));
+            kmer.update(&kc, TwoBit::new(((dna >> (i << 1)) as u8) & 3));
         }
-        let rc = dna.revcmp(kmer.kmerlen); // xor 0xaaaaaaaa and reverse per 2bit
+        let rc = dna.revcmp(kc.kmerlen.try_into().unwrap()); // xor 0xaaaaaaaa and reverse per 2bit
         assert_eq!(0x5F2A_9405_AB86_7BEA, rc, "{:#X}", rc); // TGAC.. 2301.. (in 2bits)
 
         assert_eq!(kmer.dna.0, dna); // GTCAGTCAGTCAGTCA => 3210321032103210 (in 2bits)
         assert_eq!(kmer.rc.0, rc); // xor 0xaaaaaaaa and reverse per 2bit
 
-        let mark = kmer.get_hash_and_p(0x55);
+        let mark = kmer.get_hash_and_p(&kc, 0x55);
 
         // lowest is dna, so that will be hashed by above function.
-        let mut test = xmer_hash(dna as usize, 0x55, kmer.kmerlen) as u64;
+        let mut test = kc.xmer_hash(dna as usize, 0x55) as u64;
         assert_eq!(test, 0xFBFB_3A4A_FABC_021F, "{:#X}", test);
 
         // its highest 'overbit' is set, so bitwise complementing occurs.
@@ -235,62 +231,66 @@ mod tests {
 
         let mut undo = mark.0 as u64;
         undo ^= 0xFFFF_FFFFFFFF_FFFF;
-        undo = xmer_hash(undo as usize, 0x55, kmer.kmerlen) as u64;
+        undo = kc.xmer_hash(undo as usize, 0x55) as u64;
         assert_eq!(undo, dna, "undo: {:#x} {:#x}", undo, dna);
 
         let mut next = kc.get_next_xmer(mark.0, mark.1).unwrap();
         assert_eq!(next.1.x(), 0x56);
 
-        let same = kmer.get_hash_and_p(0x56);
+        let same = kmer.get_hash_and_p(&kc, 0x56);
         assert_eq!(next.0, same.0, "undo: {:#x} {:#x}", next.0, same.0);
 
         for _ in 0..100 {
             next = kc.get_next_xmer(next.0, next.1).unwrap();
-            let same = kmer.get_hash_and_p(next.1.x());
+            let same = kmer.get_hash_and_p(&kc, next.1.x());
             assert_eq!(next.0, same.0, "undo: {:#x} {:#x}", next.0, same.0);
         }
     }
 
     #[test]
     fn test_u64() {
-        let mut kmer: Xmer = Xmer::new(32);
+        let kc = KmerConst::from_bitlen(64, 32);
+        let mut kmer: Xmer = Xmer::new();
         for i in 0..32 {
-            kmer.update(TwoBit::new(i & 3));
+            kmer.update(&kc, TwoBit::new(i & 3));
         }
         assert_eq!(kmer.dna.0, 0xE4E4E4E4E4E4E4E4); // GTCAGTCAGTCAGTCA => 3210321032103210 (in 2bits)
         assert_eq!(kmer.rc.0, 0xB1B1B1B1B1B1B1B1); // xor 0xaaaaaaaa and reverse per 2bit
     }
     #[test]
     fn test_u32() {
-        let mut kmer: Xmer = Xmer::new(16);
+        let kc = KmerConst::from_bitlen(32, 16);
+        let mut kmer: Xmer = Xmer::new();
         for i in 0..16 {
-            kmer.update(TwoBit::new(i & 3));
+            kmer.update(&kc, TwoBit::new(i & 3));
         }
         assert_eq!(kmer.dna.0, 0xE4E4E4E4);
         assert_eq!(kmer.rc.0, 0xB1B1B1B1);
-        let idx: usize = kmer.get_baseidx().into();
+        let idx: usize = kmer.get_baseidx(&kc).into();
         assert_eq!(idx, 0x4E4E4E4E);
     }
     #[test]
     fn test_u8() {
-        let mut kmer: Xmer = Xmer::new(4);
+        let kc = KmerConst::from_bitlen(8, 4);
+        let mut kmer: Xmer = Xmer::new();
         for i in 0..4 {
-            kmer.update(TwoBit::new(i & 3));
+            kmer.update(&kc, TwoBit::new(i & 3));
         }
         assert_eq!(kmer.dna.0, 0xE4);
         assert_eq!(kmer.rc.0, 0xB1);
-        let idx: usize = kmer.get_baseidx().into();
+        let idx: usize = kmer.get_baseidx(&kc).into();
         assert_eq!(idx, 0x4E);
     }
     #[test]
     fn unique() {
+        let kc = KmerConst::from_bitlen(8, 4);
         let mut seen = vec![false; 256];
-        let mut kmer: Xmer = Xmer::new(4);
+        let mut kmer: Xmer = Xmer::new();
         for i in 0..=255 {
             for j in 0..4 {
-                kmer.update(TwoBit::new((i >> (j << 1)) & 3));
+                kmer.update(&kc, TwoBit::new((i >> (j << 1)) & 3));
             }
-            let idx: usize = kmer.get_baseidx().into();
+            let idx: usize = kmer.get_baseidx(&kc).into();
             let x = (if kmer.is_template() { 1 } else { 0 }) | idx << 1;
             assert!(!seen[x], "0x{:x} already seen!", x);
             seen[x] = true;
@@ -301,9 +301,11 @@ mod tests {
     fn test_revcmp() {
         let mut rng = thread_rng();
         let kmerlen = rng.gen_range(2..32);
-        let mut kmer: Xmer = Xmer::new(kmerlen);
+        let kc = KmerConst::from_bitlen(kmerlen * 2, kmerlen);
+        let kmerlen = kmerlen as u32;
+        let mut kmer: Xmer = Xmer::new();
         for _ in 0..32 {
-            kmer.update(TwoBit::new(rng.gen_range(0..4)));
+            kmer.update(&kc, TwoBit::new(rng.gen_range(0..4)));
         }
         assert_eq!(kmer.dna.revcmp(kmerlen), kmer.rc.0);
     }
@@ -311,6 +313,8 @@ mod tests {
     fn test_from_idx() {
         let mut rng = thread_rng();
         let kmerlen = rng.gen_range(12..32);
+        let kc = KmerConst::from_bitlen(kmerlen * 2, kmerlen);
+        let kmerlen = kmerlen as u32;
         let mut test_dna = 0;
         let mut test_rc = 0;
         let mut test_ori = false;
@@ -318,13 +322,13 @@ mod tests {
         let last = rng.gen_range((kmerlen + 1)..102);
         let pick = rng.gen_range(kmerlen..cmp::max(last - 1, kmerlen + 1));
 
-        let mut kmer: Xmer = Xmer::new(kmerlen);
+        let mut kmer: Xmer = Xmer::new();
         for i in 0..last {
-            kmer.update(TwoBit::new(rng.gen_range(0..4)));
+            kmer.update(&kc, TwoBit::new(rng.gen_range(0..4)));
             if i == pick {
                 test_dna = kmer.dna.0;
                 test_rc = kmer.rc.0;
-                test_idx = kmer.get_baseidx().into();
+                test_idx = kmer.get_baseidx(&kc).into();
                 test_ori = kmer.dna.lt_strand(kmer.rc);
             }
         }
@@ -341,9 +345,10 @@ mod tests {
     }
     #[test]
     fn extra() {
-        let mut kmer: Xmer = Xmer::new(4);
+        let kc = KmerConst::from_bitlen(8, 4);
+        let mut kmer: Xmer = Xmer::new();
         for _ in 0..16 {
-            kmer.update(TwoBit::new(1));
+            kmer.update(&kc, TwoBit::new(1));
         }
         assert_eq!(kmer.dna.0, 0x55);
         assert_eq!(kmer.rc.0, 0xff);

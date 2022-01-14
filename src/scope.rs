@@ -82,7 +82,7 @@ pub trait WritingScope: Scope {
     }
 
     fn store_mark(&mut self, ks: &mut KmerStore, i: usize) -> Result<()> {
-        let (mut min_idx, mut min_p) = self.get_d(i).get_hash_and_p(0);
+        let (mut min_idx, mut min_p) = self.get_d(i).get_hash_and_p(self.get_kc(), 0);
         self.set_mark(min_idx, min_p);
         let orig_pos = min_p.pos();
         // this seems to be hotlooping
@@ -91,7 +91,7 @@ pub trait WritingScope: Scope {
                 if next.1.extend().is_err() {
                     break;
                 }
-                (min_idx, min_p) = self.get_d(i).get_hash_and_p(next.1.x());
+                (min_idx, min_p) = self.get_d(i).get_hash_and_p(self.get_kc(), next.1.x());
                 self.set_mark(min_idx, min_p);
             } else if let Ok((past_idx, past_p)) = self.get_kc().get_next_xmer(next.0, next.1) {
                 // extending some pase baseidx. TODO: if frequently the same recurs,

@@ -25,7 +25,7 @@ impl<'a> HeadScope<'a> {
         HeadScope {
             kc,
             p: ExtPosEtc::zero(),
-            d: smallvec![Xmer::new(kc.kmerlen as u32); kc.no_kmers],
+            d: smallvec![Xmer::new(); kc.no_kmers],
             z: (0..kc.no_kmers).into_iter().collect::<SmallVec<_>>(),
             mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
             i: 0,
@@ -134,7 +134,7 @@ impl<'a> Scope for HeadScope<'a> {
 
     fn increment(&mut self, b2: TwoBit) {
         // first bit is strand bit, set according to kmer orientation bit.
-        self.p.set_ori(self.d[self.mod_i].update(b2));
+        self.p.set_ori(self.d[self.mod_i].update(self.kc, b2));
         self.p.incr_pos();
         self.i += 1;
     }

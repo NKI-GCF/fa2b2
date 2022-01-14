@@ -29,7 +29,7 @@ impl<'a> PastScope<'a> {
             plim: (Position::zero(), Position::zero()),
             period: Position::zero(),
             mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
-            d: vec![Xmer::new(kc.kmerlen as u32); kc.no_kmers],
+            d: vec![Xmer::new(); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         }
     }
@@ -49,7 +49,7 @@ impl<'a> PastScope<'a> {
                 // we weten extension op voorhand.
                 let i = self.pick_mark();
                 if self.d[i].pos != self.mark.p.pos() {
-                    let (min_idx, min_p) = self.get_d(i).get_hash_and_p(self.mark.p.x());
+                    let (min_idx, min_p) = self.get_d(i).get_hash_and_p(self.kc, self.mark.p.x());
                     self.set_mark(min_idx, min_p);
                     if p.same_pos_and_ext(self.mark.p) {
                         break;
@@ -154,7 +154,7 @@ impl<'a> Scope for PastScope<'a> {
     }
     fn increment(&mut self, b2: TwoBit) {
         // first bit is strand bit, set according to kmer orientation bit.
-        self.p.set_ori(self.d[self.mod_i].update(b2));
+        self.p.set_ori(self.d[self.mod_i].update(self.kc, b2));
         self.p.incr_pos();
         self.i += 1;
     }

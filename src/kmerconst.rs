@@ -1,8 +1,5 @@
 use crate::new_types::extended_position::ExtPosEtc;
-use crate::new_types::{
-    position::{BasePos, Position},
-    xmer::xmer_hash,
-};
+use crate::new_types::position::{BasePos, Position};
 use crate::rdbg::STAT_DB;
 use anyhow::Result;
 use num::{FromPrimitive, PrimInt};
@@ -10,11 +7,20 @@ use std::cmp;
 use std::mem::size_of;
 
 pub struct KmerConst {
-    pub no_kmers: usize,
-    pub kmerlen: usize,
-    pub bitlen: usize,
-    pub read_len: usize,
-    pub extent: Vec<usize>,
+    pub(crate) no_kmers: usize,
+    pub(crate) kmerlen: usize,
+    pub(crate) bitlen: usize,
+    pub(crate) read_len: usize,
+    pub(crate) dna_topb2_shift: u32,
+    pub(crate) rc_mask: u64,
+    // put these in kc:
+    pub(crate) half_mask: usize,
+    pub(crate) overbit: usize,
+    pub(crate) xmer_mask: usize,
+    pub(crate) over_mask: usize,
+    // XXX!seed influences order of selection, a good seed may improve indexing / mapping.
+    // XXX!HOWEVER!XXX indexing and mapping should use the same seed !!
+    pub(crate) seed: usize,
 }
 
 pub trait RevCmp<T: PrimInt + FromPrimitive> {
@@ -65,26 +71,41 @@ impl KmerConst {
 
     pub(crate) fn from_bitlen(bitlen: usize, read_len: usize) -> Self {
         let kmerlen = bitlen / 2;
+        dbg_assert!(kmerlen > 0);
+        dbg_assert!(read_len >= kmerlen);
 
         // e.g. with a RL 4 & KL 2: (0,1), (1,2), (2,3) => 3 kmers.
-        let no_kmers = read_len - kmerlen + 1;
-
-        // generate all combinations of 2 kmer positions for extension, high and low bits.
-        // overlap and combination duplicates are allowed, those will result respectively
-        // in no xor-hash and a complemented xor-hash with the max for index.
-        let extent: Vec<usize> = (0..kmerlen).collect();
+        let no_kmers = read_len + 1 - kmerlen;
 
         dbg_restart!("read_len: {}, kmerlen: {}\n--", read_len, kmerlen);
         if !cfg!(debug_assertions) {
             eprintln!("read_len: {}, kmerlen: {}", read_len, kmerlen);
         }
+        let dna_topb2_shift = (u32::try_from(kmerlen).expect("kmer too large") << 1) - 2;
+        let overbit = 1_usize
+            .checked_shl(dna_topb2_shift + 1)
+            .expect("k-mer shift");
+        let xmer_mask = overbit - 1;
         KmerConst {
             no_kmers,
             kmerlen,
             bitlen,
             read_len,
-            extent,
+            dna_topb2_shift,
+            rc_mask: (1 << dna_topb2_shift) - 1,
+            half_mask: (1 << kmerlen) - 1,
+            overbit,
+            xmer_mask,
+            over_mask: overbit | xmer_mask,
+            seed: 0x5EED,
         }
+    }
+    #[inline(always)]
+    pub(crate) fn xmer_hash(&self, idx: usize, seed: usize) -> usize {
+        idx ^ (((idx & !seed & self.half_mask) << self.kmerlen) | ((idx >> self.kmerlen) & seed))
+    }
+    pub(crate) fn hash_and_compress(&self, seq: usize, x: usize) -> usize {
+        self.compress_xmer(self.xmer_hash(seq, x))
     }
 
     // same hash function, from Xmer.
@@ -96,26 +117,31 @@ impl KmerConst {
         let old_x = p.x();
         p.extend()?;
 
-        let k = self.kmerlen as u32;
-        let overbit = 1 << (k * 2 - 1);
-
         // in get_hash_and_p() bits are flipped if the highest bit was set.
-        let half_mask = (1 << self.kmerlen) - 1;
-        let mut hash = xmer_hash(orig_hash, old_x, half_mask, k);
+        let mut hash = self.xmer_hash(orig_hash, old_x);
 
-        if hash < hash.revcmp(k) {
+        if hash < hash.revcmp(self.kmerlen as u32) {
             // XXX: why is this not the inverse ??
 
             //then flipped, yes: orig_hash here !!
-            hash = xmer_hash(!orig_hash & (overbit | (overbit - 1)), old_x, half_mask, k);
+            hash = self.xmer_hash(self.over_mask & !orig_hash, old_x);
         }
 
         // set to idx for next extension; x is incremented:
-        hash = xmer_hash(hash, p.x(), half_mask, k);
-        if (hash & overbit) == 0 {
+        hash = self.xmer_hash(hash, p.x());
+        if (hash & self.overbit) == 0 {
             Ok((hash, p))
         } else {
-            Ok(((overbit - 1) & !hash, p))
+            Ok((self.xmer_mask & !hash, p))
+        }
+    }
+    /// compress base_seq or xmer_hash from xmer module
+    pub(crate) fn compress_xmer(&self, v: usize) -> usize {
+        dbg_assert!(v & self.over_mask == v);
+        if v & self.overbit == 0 {
+            v
+        } else {
+            self.xmer_mask & !v
         }
     }
 

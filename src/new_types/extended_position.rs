@@ -3,6 +3,7 @@ use crate::new_types::{
     position::{BasePos, Position},
 };
 use crate::rdbg::STAT_DB;
+use anyhow::{anyhow, Result};
 use derive_more::Sub;
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
@@ -90,15 +91,16 @@ impl ExtPosEtc {
             self.extend();
         }
     }
-    pub(crate) fn extend(&mut self) {
+    pub(crate) fn extend(&mut self) -> Result<()> {
         dbg_assert!(self.is_set());
-        self.0 += 1_u64.checked_shl(EXT_SHIFT).expect("extend shft");
+        self.0 = self
+            .0
+            .checked_add(1_u64.checked_shl(EXT_SHIFT).expect("extend shft"))
+            .ok_or_else(|| anyhow!("at max extension"))?;
+        Ok(())
     }
     pub(crate) fn clear_extension(&mut self) {
         self.0 &= !EXT_MASK;
-    }
-    pub(crate) fn is_same(&self, other: ExtPosEtc) -> bool {
-        *self == other
     }
     pub(crate) fn mark_more_recurs_upseq(&mut self) {
         dbg_assert!(self.is_set());
@@ -127,7 +129,7 @@ impl ExtPosEtc {
             || (new_entry.extension() == self.extension() && new_entry.pos() <= self.pos())
     }
     pub(crate) fn is_set_and_not(&self, other: ExtPosEtc) -> bool {
-        self.is_set() && !self.is_same(other)
+        self.is_set() && self.pos() != other.pos()
     }
     pub(crate) fn same_pos_and_ext(&self, new_entry: ExtPosEtc) -> bool {
         (self.0 ^ new_entry.0) & (EXT_MASK | POS_MASK) == 0

@@ -4,6 +4,7 @@ use crate::new_types::{
     xmer::xmer_hash,
 };
 use crate::rdbg::STAT_DB;
+use anyhow::Result;
 use num::{FromPrimitive, PrimInt};
 use std::cmp;
 use std::mem::size_of;
@@ -91,33 +92,30 @@ impl KmerConst {
         &self,
         orig_hash: usize,
         mut p: ExtPosEtc,
-    ) -> Option<(usize, ExtPosEtc)> {
-        if p.x() + 1 < 0x1_0000_0000 {
-            /*was < self.get_ext_max()*/
-            let k = self.kmerlen as u32;
-            let overbit = 1 << (k * 2 - 1);
+    ) -> Result<(usize, ExtPosEtc)> {
+        let old_x = p.x();
+        p.extend()?;
 
-            // in get_hash_and_p() bits are flipped if the highest bit was set.
-            //
-            let mut hash = xmer_hash(orig_hash, p.x(), k);
+        let k = self.kmerlen as u32;
+        let overbit = 1 << (k * 2 - 1);
 
-            if hash < hash.revcmp(k) {
-                // XXX: why is this not the inverse ??
+        // in get_hash_and_p() bits are flipped if the highest bit was set.
+        //
+        let mut hash = xmer_hash(orig_hash, old_x, k);
 
-                //then flipped, yes: orig_hash here !!
-                hash = xmer_hash(!orig_hash & (overbit | (overbit - 1)), p.x(), k);
-            }
+        if hash < hash.revcmp(k) {
+            // XXX: why is this not the inverse ??
 
-            p.extend();
-            // set to idx for next extension; x is incremented:
-            hash = xmer_hash(hash, p.x(), k);
-            if (hash & overbit) == 0 {
-                Some((hash, p))
-            } else {
-                Some(((overbit - 1) & !hash, p))
-            }
+            //then flipped, yes: orig_hash here !!
+            hash = xmer_hash(!orig_hash & (overbit | (overbit - 1)), old_x, k);
+        }
+
+        // set to idx for next extension; x is incremented:
+        hash = xmer_hash(hash, p.x(), k);
+        if (hash & overbit) == 0 {
+            Ok((hash, p))
         } else {
-            None
+            Ok(((overbit - 1) & !hash, p))
         }
     }
 

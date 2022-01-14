@@ -45,19 +45,18 @@ pub trait WritingScope: Scope {
         }
         let old_stored_p = ks.kmp[min_idx];
 
-        if ks.kmp[min_idx].is_zero() {
+        if old_stored_p.is_zero() {
             ks.set_kmp(min_idx, min_p);
             return Ok(None);
         }
         if old_stored_p.is_replaceable_by(min_p) {
-            if old_stored_p.is_set_and_not(min_p) {
-                // collision with a different baseindex, it had lesser extension.
+            if old_stored_p.pos() != min_p.pos() {
                 dbg_print!("[{:x}] -> {:?} (?)", min_idx, old_stored_p);
-                ks.set_kmp(min_idx, min_p);
                 if old_stored_p.x() == min_p.x() {
                     // same extension means same base k-mer origin. this is a duplicate.
                     ks.kmp[min_idx].mark_more_recurs_upseq();
                 }
+                ks.set_kmp(min_idx, min_p);
                 return Ok(Some((min_idx, old_stored_p)));
             }
             // .. else set and already min_p. Then leave bit states.
@@ -86,14 +85,17 @@ pub trait WritingScope: Scope {
         let (mut min_idx, mut min_p) = self.get_d(i).get_hash_and_p(0);
         self.set_mark(min_idx, min_p);
         let orig_pos = min_p.pos();
-        while let Some(next) = self.try_store_mark(ks, min_idx, min_p)? {
+        // this seems to be hotlooping
+        while let Some(mut next) = self.try_store_mark(ks, min_idx, min_p)? {
             if next.1.pos() == orig_pos {
-                min_p.extend();
-                (min_idx, min_p) = self.get_d(i).get_hash_and_p(min_p.x());
+                if next.1.extend().is_err() {
+                    break;
+                }
+                (min_idx, min_p) = self.get_d(i).get_hash_and_p(next.1.x());
                 //
                 // dbg_assert!(min_idx == self.get_kc().get_next_xmer(next.0, next.1).unwrap().0);
                 self.set_mark(min_idx, min_p);
-            } else if let Some((past_idx, past_p)) = self.get_kc().get_next_xmer(next.0, next.1) {
+            } else if let Ok((past_idx, past_p)) = self.get_kc().get_next_xmer(next.0, next.1) {
                 // extending some pase baseidx. TODO: if frequently the same recurs,
                 // it might be worthwhile to store the reverse complement in a temp
                 min_idx = past_idx;

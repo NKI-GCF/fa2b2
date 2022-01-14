@@ -7,7 +7,10 @@ extern crate num_traits;
 use crate::head_scope::HeadScope;
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
-use crate::new_types::{position::Position, twobit::ThreeBit};
+use crate::new_types::{
+    position::{BasePos, Position},
+    twobit::ThreeBit,
+};
 use crate::rdbg::STAT_DB;
 use crate::scope::{Scope, WritingScope};
 use anyhow::Result;

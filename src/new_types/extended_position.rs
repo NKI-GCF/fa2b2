@@ -11,8 +11,8 @@ use std::mem::size_of;
 use std::{cmp, fmt};
 
 // lowering this below 8 may cause some test failures
-const EXT_BITS: usize = 8;
-//TODO: const EXT_BITS: u32 = 16;
+//const EXT_BITS: usize = 8;
+const EXT_BITS: usize = 16;
 
 pub const EXT_MAX: usize = 1 << EXT_BITS;
 

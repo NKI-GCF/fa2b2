@@ -14,8 +14,8 @@ pub struct Xmer {
     pub(super) dna: TwoBitDna,
     pub(super) rc: TwoBitRcDna,
     pub pos: Position,
+    overbit: usize,
     pub kmerlen: u32,
-    topb2_shift: u32,
 } //^-^\\
 
 #[inline(always)]
@@ -28,14 +28,12 @@ pub(crate) fn xmer_hash(idx: usize, x: usize, k: u32) -> usize {
 impl Xmer {
     /// get a kmer for this length
     pub(crate) fn new(kmerlen: u32) -> Self {
-        let bitlen = kmerlen * 2;
-        let topb2_shift = bitlen - 2;
         Xmer {
             dna: TwoBitDna::new(0),
             rc: TwoBitRcDna::new(0),
             pos: Position::zero(),
+            overbit: 1_usize << (kmerlen * 2 - 1),
             kmerlen,
-            topb2_shift,
         }
     }
 
@@ -48,8 +46,8 @@ impl Xmer {
     /// adds twobit to k-mer sequences, to dna in the top two bits. Returns orientation.
     pub(crate) fn update(&mut self, b2: TwoBit) -> bool {
         // XXX function is hot
-        self.dna.add(b2, self.topb2_shift);
-        self.rc.add(b2, self.topb2_shift);
+        self.dna.add(b2, self.kmerlen * 2 - 2);
+        self.rc.add(b2, self.kmerlen * 2 - 2);
         self.pos.incr();
         self.dna.lt_strand(self.rc)
     }
@@ -66,12 +64,11 @@ impl Xmer {
         let seq = self.get_base_seq();
 
         let idx = xmer_hash(seq, x, self.kmerlen);
-        let overbit = 1_usize << (self.topb2_shift + 1);
 
-        if idx & overbit == 0 {
+        if idx & self.overbit == 0 {
             idx
         } else {
-            (overbit - 1) & !idx
+            (self.overbit - 1) & !idx
         }
     }
     pub(crate) fn get_hash_and_p(&self, x: usize) -> (usize, ExtPosEtc) {
@@ -86,11 +83,10 @@ impl Xmer {
         let seq = self.get_base_seq();
 
         // flipped if the top bit is set, to reduce size.
-        let overbit = 1 << (self.topb2_shift + 1);
-        if (seq & overbit) == 0 {
+        if (seq & self.overbit) == 0 {
             BaseIdx(seq)
         } else {
-            BaseIdx((overbit - 1) & !seq)
+            BaseIdx((self.overbit - 1) & !seq)
         }
     }
 }

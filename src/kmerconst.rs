@@ -100,18 +100,18 @@ impl KmerConst {
         let overbit = 1 << (k * 2 - 1);
 
         // in get_hash_and_p() bits are flipped if the highest bit was set.
-        //
-        let mut hash = xmer_hash(orig_hash, old_x, k);
+        let half_mask = (1 << self.kmerlen) - 1;
+        let mut hash = xmer_hash(orig_hash, old_x, half_mask, k);
 
         if hash < hash.revcmp(k) {
             // XXX: why is this not the inverse ??
 
             //then flipped, yes: orig_hash here !!
-            hash = xmer_hash(!orig_hash & (overbit | (overbit - 1)), old_x, k);
+            hash = xmer_hash(!orig_hash & (overbit | (overbit - 1)), old_x, half_mask, k);
         }
 
         // set to idx for next extension; x is incremented:
-        hash = xmer_hash(hash, p.x(), k);
+        hash = xmer_hash(hash, p.x(), half_mask, k);
         if (hash & overbit) == 0 {
             Ok((hash, p))
         } else {

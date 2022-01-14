@@ -92,8 +92,6 @@ pub trait WritingScope: Scope {
                     break;
                 }
                 (min_idx, min_p) = self.get_d(i).get_hash_and_p(next.1.x());
-                //
-                // dbg_assert!(min_idx == self.get_kc().get_next_xmer(next.0, next.1).unwrap().0);
                 self.set_mark(min_idx, min_p);
             } else if let Ok((past_idx, past_p)) = self.get_kc().get_next_xmer(next.0, next.1) {
                 // extending some pase baseidx. TODO: if frequently the same recurs,

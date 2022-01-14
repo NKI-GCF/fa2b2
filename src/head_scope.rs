@@ -5,13 +5,15 @@ use crate::new_types::{position::Position, twobit::TwoBit, xmer::Xmer};
 use crate::rdbg::STAT_DB;
 use crate::scope::{Scope, WritingScope};
 use anyhow::Result;
+use smallvec::{smallvec, SmallVec};
 use std::fmt;
+const SCOPE_WIDTH_MAX: usize = 128;
 
 pub struct HeadScope<'a> {
     kc: &'a KmerConst,
     pub p: ExtPosEtc,
-    d: Vec<Xmer>,
-    z: Vec<usize>,
+    d: SmallVec<[Xmer; SCOPE_WIDTH_MAX]>,
+    z: SmallVec<[usize; SCOPE_WIDTH_MAX]>,
     pub mark: KmerLoc,
     pub i: usize,
     pub mod_i: usize,
@@ -23,8 +25,8 @@ impl<'a> HeadScope<'a> {
         HeadScope {
             kc,
             p: ExtPosEtc::zero(),
-            d: vec![Xmer::new(kc.kmerlen as u32); kc.no_kmers],
-            z: (0..kc.no_kmers).into_iter().collect(),
+            d: smallvec![Xmer::new(kc.kmerlen as u32); kc.no_kmers],
+            z: (0..kc.no_kmers).into_iter().collect::<SmallVec<_>>(),
             mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
             i: 0,
             mod_i: 0,

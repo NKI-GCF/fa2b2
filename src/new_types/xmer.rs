@@ -14,25 +14,28 @@ pub struct Xmer {
     pub(super) dna: TwoBitDna,
     pub(super) rc: TwoBitRcDna,
     pub pos: Position,
+    half_mask: usize,
     overbit: usize,
+    xmer_mask: usize,
     pub kmerlen: u32,
 } //^-^\\
 
 #[inline(always)]
-pub(crate) fn xmer_hash(idx: usize, x: usize, k: u32) -> usize {
-    let t = 1 << k;
-    dbg_assert!(x < t);
-    idx ^ (((idx & !x & (t - 1)) << k) | ((idx >> k) & x))
+pub(crate) fn xmer_hash(idx: usize, x: usize, half_mask: usize, k: u32) -> usize {
+    idx ^ (((idx & !x & half_mask) << k) | ((idx >> k) & x))
 }
 
 impl Xmer {
     /// get a kmer for this length
     pub(crate) fn new(kmerlen: u32) -> Self {
+        let overbit = 1_usize << (kmerlen * 2 - 1);
         Xmer {
             dna: TwoBitDna::new(0),
             rc: TwoBitRcDna::new(0),
             pos: Position::zero(),
-            overbit: 1_usize << (kmerlen * 2 - 1),
+            half_mask: (1 << kmerlen) - 1,
+            overbit,
+            xmer_mask: overbit - 1,
             kmerlen,
         }
     }
@@ -52,8 +55,9 @@ impl Xmer {
         self.dna.lt_strand(self.rc)
     }
     //TODO: remove use_min
+    #[inline(always)]
     fn get_base_seq(&self) -> usize {
-        if self.dna.lt_strand(self.rc) {
+        if self.is_template() {
             self.dna.to_usize()
         } else {
             self.rc.to_usize()
@@ -63,12 +67,12 @@ impl Xmer {
     pub(crate) fn get_hash(&self, x: usize) -> usize {
         let seq = self.get_base_seq();
 
-        let idx = xmer_hash(seq, x, self.kmerlen);
+        let idx = xmer_hash(seq, x, self.half_mask, self.kmerlen);
 
         if idx & self.overbit == 0 {
             idx
         } else {
-            (self.overbit - 1) & !idx
+            self.xmer_mask & !idx
         }
     }
     pub(crate) fn get_hash_and_p(&self, x: usize) -> (usize, ExtPosEtc) {
@@ -86,7 +90,7 @@ impl Xmer {
         if (seq & self.overbit) == 0 {
             BaseIdx(seq)
         } else {
-            BaseIdx((self.overbit - 1) & !seq)
+            BaseIdx(self.xmer_mask & !seq)
         }
     }
 }

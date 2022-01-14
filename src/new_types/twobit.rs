@@ -68,6 +68,7 @@ impl TwoBitDna {
     /*pub(crate) fn as_u64(&self) -> u64 {
         self.0
     }*/
+    #[inline(always)]
     pub(crate) fn lt_strand(&self, rc: TwoBitRcDna) -> bool {
         self.0 < rc.0 || (self.0 == rc.0 && (self.0 & 1) != 0)
     }

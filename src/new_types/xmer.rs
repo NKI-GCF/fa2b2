@@ -19,13 +19,13 @@ pub struct Xmer {
 } //^-^\\
 
 impl Xmer {
-    /// get an xmer for this length
+    /// get an xmer with no bits set and position 0
     pub(crate) fn new() -> Self {
         Xmer {
             dna: TwoBitDna::new(0),
             rc: TwoBitRcDna::new(0),
             pos: Position::zero(),
-            base_index: 0,
+            base_index: usize::MAX,
         }
     }
 
@@ -57,7 +57,7 @@ impl Xmer {
         orientation
     }
     #[inline(always)]
-    fn get_base_seq(&self) -> usize {
+    pub(super) fn get_base_seq(&self) -> usize {
         if self.is_template() {
             self.dna.to_usize()
         } else {
@@ -71,11 +71,6 @@ impl Xmer {
     pub(crate) fn get_hash_and_p(&self, kc: &KmerConst, x: usize) -> XmerLoc {
         let p = ExtPosEtc::from((Extension::from(x), self.pos));
         XmerLoc::new(self.get_hash(kc, x), p)
-    }
-
-    /// a sequence specific index, the same when read in other orientation
-    pub(super) fn get_baseidx(&self, kc: &KmerConst) -> usize {
-        kc.compress_xmer(self.get_base_seq())
     }
 }
 
@@ -96,6 +91,23 @@ mod tests {
     use crate::kmerconst::RevCmp;
     use crate::new_types::twobit::TwoBit;
     use crate::new_types::xmer::Xmer;
+
+    #[test]
+    fn unique() {
+        let kc = KmerConst::from_bitlen(8, 4, 0);
+        let mut seen = vec![false; 256];
+        let mut xmer: Xmer = Xmer::new();
+        for i in 0..=255 {
+            for j in 0..4 {
+                xmer.update(&kc, TwoBit::new((i >> (j << 1)) & 3));
+            }
+            let idx = kc.compress_xmer(xmer.get_base_seq());
+            let x = (if xmer.is_template() { 1 } else { 0 }) | idx << 1;
+            assert!(!seen[x], "0x{:x} already seen!", x);
+            seen[x] = true;
+        }
+        assert_eq!(vec![true; 256], seen);
+    }
     #[test]
     fn xmer_reversebility_in_xmer_wo_flip() {
         let kc = KmerConst::from_bitlen(64, 32, 0);

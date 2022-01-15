@@ -121,7 +121,6 @@ mod tests {
     use crate::new_types::xmer::Xmer;
     use rand::{thread_rng, Rng};
     use std::cmp;
-
     /// return a new kmer for given index, length and orientation.
     fn kmer_from_idx(index: usize, kmerlen: u32, ori: bool) -> Xmer {
         let mut dna = index as u64;
@@ -146,8 +145,10 @@ mod tests {
         for i in 0..32 {
             xmer.update(&kc, TwoBit::new(i & 3));
         }
-        assert_eq!(xmer.dna.0, 0xE4E4E4E4E4E4E4E4); // GTCAGTCAGTCAGTCA => 3210321032103210 (in 2bits)
-        assert_eq!(xmer.rc.0, 0xB1B1B1B1B1B1B1B1); // xor 0xaaaaaaaa and reverse per 2bit
+        assert_eq!(xmer.dna.to_usize(), 0xE4E4E4E4E4E4E4E4); // GTCAGTCAGTCAGTCA => 3210321032103210 (in 2bits)
+        assert_eq!(xmer.rc.to_usize(), 0xB1B1B1B1B1B1B1B1); // xor 0xaaaaaaaa and reverse per 2bit
+        let idx = kc.compress_xmer(xmer.get_base_seq());
+        assert_eq!(idx, 0x4E4E4E4E4E4E4E4E);
     }
     #[test]
     fn test_u32() {
@@ -156,9 +157,9 @@ mod tests {
         for i in 0..16 {
             xmer.update(&kc, TwoBit::new(i & 3));
         }
-        assert_eq!(xmer.dna.0, 0xE4E4E4E4);
-        assert_eq!(xmer.rc.0, 0xB1B1B1B1);
-        let idx: usize = xmer.get_baseidx(&kc).into();
+        assert_eq!(xmer.dna.to_usize(), 0xE4E4E4E4);
+        assert_eq!(xmer.rc.to_usize(), 0xB1B1B1B1);
+        let idx = kc.compress_xmer(xmer.get_base_seq());
         assert_eq!(idx, 0x4E4E4E4E);
     }
     #[test]
@@ -168,26 +169,10 @@ mod tests {
         for i in 0..4 {
             xmer.update(&kc, TwoBit::new(i & 3));
         }
-        assert_eq!(xmer.dna.0, 0xE4);
-        assert_eq!(xmer.rc.0, 0xB1);
-        let idx: usize = xmer.get_baseidx(&kc).into();
+        assert_eq!(xmer.dna.to_usize(), 0xE4);
+        assert_eq!(xmer.rc.to_usize(), 0xB1);
+        let idx = kc.compress_xmer(xmer.get_base_seq());
         assert_eq!(idx, 0x4E);
-    }
-    #[test]
-    fn unique() {
-        let kc = KmerConst::from_bitlen(8, 4, 0);
-        let mut seen = vec![false; 256];
-        let mut xmer: Xmer = Xmer::new();
-        for i in 0..=255 {
-            for j in 0..4 {
-                xmer.update(&kc, TwoBit::new((i >> (j << 1)) & 3));
-            }
-            let idx: usize = xmer.get_baseidx(&kc).into();
-            let x = (if xmer.is_template() { 1 } else { 0 }) | idx << 1;
-            assert!(!seen[x], "0x{:x} already seen!", x);
-            seen[x] = true;
-        }
-        assert_eq!(vec![true; 256], seen);
     }
     #[test]
     fn test_revcmp() {
@@ -218,22 +203,22 @@ mod tests {
         for i in 0..last {
             xmer.update(&kc, TwoBit::new(rng.gen_range(0..4)));
             if i == pick {
-                test_dna = xmer.dna.0;
-                test_rc = xmer.rc.0;
-                test_idx = xmer.get_baseidx(&kc).into();
+                test_dna = xmer.dna.to_usize();
+                test_rc = xmer.rc.to_usize();
+                test_idx = kc.compress_xmer(xmer.get_base_seq()).into();
                 test_ori = xmer.dna.lt_strand(xmer.rc);
             }
         }
         assert_ne!(test_idx, 0xffffffffffffffff);
         let xmer2 = kmer_from_idx(test_idx, kmerlen.into(), test_ori);
 
-        assert_eq!(test_dna, xmer2.dna.0);
-        assert_eq!(test_rc, xmer2.rc.0);
+        assert_eq!(test_dna, xmer2.dna.to_usize());
+        assert_eq!(test_rc, xmer2.rc.to_usize());
 
         let xmer3 = kmer_from_idx(test_idx, kmerlen.into(), !test_ori);
 
-        assert_eq!(test_dna, xmer3.rc.0);
-        assert_eq!(test_rc, xmer3.dna.0);
+        assert_eq!(test_dna, xmer3.rc.to_usize());
+        assert_eq!(test_rc, xmer3.dna.to_usize());
     }
     #[test]
     fn extra() {
@@ -242,7 +227,7 @@ mod tests {
         for _ in 0..16 {
             xmer.update(&kc, TwoBit::new(1));
         }
-        assert_eq!(xmer.dna.0, 0x55);
-        assert_eq!(xmer.rc.0, 0xff);
+        assert_eq!(xmer.dna.to_usize(), 0x55);
+        assert_eq!(xmer.rc.to_usize(), 0xff);
     }
 }

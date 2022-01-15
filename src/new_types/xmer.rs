@@ -10,7 +10,7 @@ use crate::xmer_location::XmerLoc;
 use std::cmp;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
-/// A kmer that dissociates index and strand orientation
+/// An xmer is a kmer that dissociates strand orientation.
 pub struct Xmer {
     pub(super) dna: TwoBitDna,
     pub(super) rc: TwoBitRcDna,
@@ -19,7 +19,7 @@ pub struct Xmer {
 } //^-^\\
 
 impl Xmer {
-    /// get a kmer for this length
+    /// get an xmer for this length
     pub(crate) fn new() -> Self {
         Xmer {
             dna: TwoBitDna::new(0),
@@ -29,7 +29,7 @@ impl Xmer {
         }
     }
 
-    /// true if the kmer is from the template. Palindromes are special.
+    /// true if the xmer is from the template. Palindromes are special.
     #[inline(always)]
     pub(crate) fn is_template(&self) -> bool {
         self.dna.lt_strand(self.rc)
@@ -37,7 +37,6 @@ impl Xmer {
 
     /// adds twobit to k-mer sequences, to dna in the top two bits. Returns orientation.
     pub(crate) fn update(&mut self, kc: &KmerConst, b2: TwoBit) -> bool {
-        // XXX function is hot
         self.dna.add(b2, kc.dna_topb2_shift);
         self.rc.add(b2, kc.rc_mask);
         self.pos.incr();
@@ -57,7 +56,6 @@ impl Xmer {
         }
         orientation
     }
-    //TODO: remove use_min
     #[inline(always)]
     fn get_base_seq(&self) -> usize {
         if self.is_template() {
@@ -90,5 +88,113 @@ impl PartialOrd for Xmer {
 impl Ord for Xmer {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         self.base_index.cmp(&other.base_index)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kmerconst::RevCmp;
+    use crate::new_types::twobit::TwoBit;
+    use crate::new_types::xmer::Xmer;
+    #[test]
+    fn xmer_reversebility_in_xmer_wo_flip() {
+        let kc = KmerConst::from_bitlen(64, 32, 0);
+        let mut xmer: Xmer = Xmer::new();
+        assert_eq!(kc.kmerlen, 32);
+
+        for i in 0..32 {
+            xmer.update(&kc, TwoBit::new(i & 3));
+        }
+        let dna = 0xE4E4_E4E4_E4E4_E4E4; // GTCA.. => 3210.. (in 2bits)
+        let rc = dna.revcmp(kc.kmerlen.try_into().unwrap()); // xor 0xaaaaaaaa and reverse per 2bit
+        assert_eq!(0xB1B1_B1B1_B1B1_B1B1, rc); // TGAC.. 2301.. (in 2bits)
+
+        assert_eq!(xmer.dna.to_usize(), dna);
+        assert_eq!(xmer.rc.to_usize(), rc);
+
+        let mark = xmer.get_hash_and_p(&kc, 0x55);
+
+        // lowest is rc, so that will be hashed by above function.
+        let test = kc.xmer_hash(rc, 0x55);
+        assert_eq!(test, 0x11B1B1B1A0, "{:#X}", test);
+
+        assert_eq!(test & 0x8000_0000_0000_0000, 0);
+        // its highest 'overbit' is not set, so no bitwise complementing occurs.
+
+        assert_eq!(mark.idx, test, "test: {:#x} {:#x}", mark.idx, test);
+
+        let top = (rc & !0x55 & 0xFFFF_FFFF) << 32;
+        let bottom = (rc >> 32) & 0x55;
+        assert_eq!(
+            mark.idx,
+            rc ^ (top | bottom),
+            "top|bottom: {:#x} {:#x}",
+            mark.idx,
+            rc ^ (top | bottom)
+        );
+        assert_eq!(mark.idx, 0x11B1B1B1A0);
+        assert_eq!(mark.p.x(), 0x55);
+
+        let undo = kc.xmer_hash(mark.idx, 0x55);
+        assert_eq!(undo, rc, "undo: {:#x} {:#x}", undo, rc);
+    }
+
+    #[test]
+    fn xmer_reversebility_in_xmer_with_flip() {
+        let kc = KmerConst::from_bitlen(64, 32, 0);
+        let mut xmer: Xmer = Xmer::new();
+        assert_eq!(kc.kmerlen, kc.kmerlen);
+        assert_eq!(kc.kmerlen, 32);
+
+        let dna = 0x0147_3840_FABC_025F;
+        for i in 0..32 {
+            xmer.update(&kc, TwoBit::new(((dna >> (i << 1)) as u8) & 3));
+        }
+        let rc = dna.revcmp(kc.kmerlen.try_into().unwrap()); // xor 0xaaaaaaaa and reverse per 2bit
+        assert_eq!(0x5F2A_9405_AB86_7BEA, rc, "{:#X}", rc); // TGAC.. 2301.. (in 2bits)
+
+        assert_eq!(xmer.dna.to_usize(), dna); // GTCAGTCAGTCAGTCA => 3210321032103210 (in 2bits)
+        assert_eq!(xmer.rc.to_usize(), rc); // xor 0xaaaaaaaa and reverse per 2bit
+
+        let mut mark = xmer.get_hash_and_p(&kc, 0x55);
+
+        // lowest is dna, so that will be hashed by above function.
+        let mut test = kc.xmer_hash(dna, 0x55);
+        assert_eq!(test, 0xFBFB_3A4A_FABC_021F, "{:#X}", test);
+
+        // its highest 'overbit' is set, so bitwise complementing occurs.
+        assert_ne!(test & 0x8000_0000_0000_0000, 0, "{:#x}", test);
+        test = !test & 0x7FFF_FFFFFFFF_FFFF;
+
+        assert_eq!(mark.idx, test, "test: {:#x} {:#x}", mark.idx, test);
+
+        let top = (dna & !0x55 & 0xFFFF_FFFF) << 32;
+        let bottom = (dna >> 32) & 0x55;
+        assert_eq!(
+            mark.idx,
+            (!dna ^ (top | bottom)) & 0x7FFF_FFFFFFFF_FFFF,
+            "top|bottom: {:#x} {:#x}",
+            mark.idx,
+            (!dna ^ (top | bottom)) & 0x7FFF_FFFFFFFF_FFFF
+        );
+        assert_eq!(mark.idx, 0x404c5b50543fde0, "{:#x}", mark.idx);
+        assert_eq!(mark.p.x(), 0x55);
+
+        let mut undo = mark.idx;
+        undo ^= 0xFFFF_FFFFFFFF_FFFF;
+        undo = kc.xmer_hash(undo, 0x55);
+        assert_eq!(undo, dna, "undo: {:#x} {:#x}", undo, dna);
+
+        kc.extend_xmer(&mut mark).unwrap();
+        assert_eq!(mark.p.x(), 0x56);
+
+        let same = xmer.get_hash_and_p(&kc, 0x56);
+        assert_eq!(mark.idx, same.idx, "undo: {:#x} {:#x}", mark.idx, same.idx);
+
+        for _ in 0..100 {
+            kc.extend_xmer(&mut mark).unwrap();
+            let same = xmer.get_hash_and_p(&kc, mark.p.x());
+            assert_eq!(mark.idx, same.idx, "undo: {:#x} {:#x}", mark.idx, same.idx);
+        }
     }
 }

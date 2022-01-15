@@ -57,7 +57,7 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
         .unwrap();
 
     let kc = KmerConst::new(seq_len, read_len, seed);
-    let mut ks = KmerStore::new(kc.bitlen, repetition_max_dist, seed);
+    let mut ks = KmerStore::new(kc.bitlen, repetition_max_dist, seed)?;
     let mut kmi = KmerIter::new(&mut ks, &kc);
     for record in fa.records() {
         kmi.markcontig(record?)?;

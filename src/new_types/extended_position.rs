@@ -28,7 +28,22 @@ pub(crate) const DUPLICATE: u64 = 0x2;
 // TODO: indicate this position has annotation
 const _INFO_MASK: u64 = 0x4;
 
-#[derive(Sub, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(
+    Display,
+    Debug,
+    Sub,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    Hash,
+    Default,
+)]
+#[display(fmt = "{:#x}", _0)]
 pub struct ExtPosEtc(u64);
 
 /// The stored information per xmer: in u64 position, extension and flags:
@@ -43,21 +58,27 @@ impl ExtPosEtc {
     pub(crate) fn unshift_pos(&self) -> u64 {
         BasePos::from(self.pos()).as_u64()
     }
+    /// a position is shifted, but has no other thant the POS_MASK bits set
     pub(crate) fn pos(&self) -> Position {
-        // until we have from::ExtPosEtc for
-        Position::from(self.as_basepos())
+        Position::from(*self)
+    }
+    pub(crate) fn from_basepos<T>(value: T) -> ExtPosEtc
+    where
+        T: Into<u64>,
+    {
+        ExtPosEtc::from((Extension::default(), Position::from_basepos(value)))
+    }
+    pub(crate) fn basepos(&self) -> BasePos {
+        BasePos::from(self.pos())
     }
     pub(crate) fn as_basepos(&self) -> BasePos {
         BasePos::from(*self)
     }
-    pub(crate) fn zero() -> Self {
-        ExtPosEtc(0x0)
-    }
     pub(crate) fn clear(&mut self) {
-        *self = ExtPosEtc::zero();
+        *self = ExtPosEtc::default();
     }
     pub(crate) fn is_set(&self) -> bool {
-        self.pos() != Position::zero()
+        self.pos() != Position::default()
     }
     #[inline(always)]
     pub(crate) fn is_zero(&self) -> bool {
@@ -157,12 +178,6 @@ impl From<BasePos> for ExtPosEtc {
 impl From<(Extension, Position)> for ExtPosEtc {
     fn from(ep: (Extension, Position)) -> ExtPosEtc {
         ExtPosEtc(ep.0.as_u64() | ep.1.as_u64())
-    }
-}
-
-impl fmt::Debug for ExtPosEtc {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:#x}", self.0)
     }
 }
 

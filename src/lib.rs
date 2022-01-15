@@ -27,8 +27,10 @@ extern crate flate2;
 extern crate serde;
 
 //extended_position
+extern crate to_default;
 #[macro_use]
 extern crate derive_new;
+#[macro_use]
 extern crate derive_more;
 
 //kmer

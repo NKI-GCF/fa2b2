@@ -24,10 +24,10 @@ impl<'a> Mapper<'a> {
         Mapper {
             ks,
             kc,
-            p: ExtPosEtc::zero(),
+            p: ExtPosEtc::default(),
             i: 0,
             mod_i: 0,
-            mark: XmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
+            mark: XmerLoc::new(usize::max_value(), ExtPosEtc::default()),
             d: vec![Xmer::new(); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         }
@@ -39,7 +39,7 @@ impl<'a> Mapper<'a> {
     fn se_mapping(&mut self, i: usize) -> Result<()> {
         let xmer = &self.d[i];
         // binary search for dupbit 0 status
-        let mut last_pos = Position::zero();
+        let mut last_pos = Position::default();
         for x in 0..=EXT_MAX {
             let hash = xmer.get_hash(self.kc, x);
             let test_p = self.ks.kmp[hash];
@@ -139,7 +139,7 @@ impl<'a> Scope for Mapper<'a> {
         self.i += 1;
     }
     fn set_mark(&mut self, mark: &XmerLoc) {
-        dbg_print!("{:?} (mapping mark)", mark);
+        dbg_print!("{} (mapping mark)", mark);
         self.mark = *mark;
     }
 }

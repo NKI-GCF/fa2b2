@@ -24,7 +24,7 @@ impl Xmer {
         Xmer {
             dna: TwoBitDna::new(0),
             rc: TwoBitRcDna::new(0),
-            pos: Position::zero(),
+            pos: Position::default(),
             base_index: usize::MAX,
         }
     }

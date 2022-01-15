@@ -1,9 +1,12 @@
 use crate::new_types::extended_position::{ExtPosEtc, POS_MASK, POS_SHIFT};
 use crate::num::ToPrimitive;
 use crate::rdbg::STAT_DB;
-use derive_more::{Add, Rem, Sub};
+use anyhow::Error as AnyhowError;
+use anyhow::{anyhow, Result};
+use derive_more::{Add, AddAssign, Rem, Sub};
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
+use std::convert::TryFrom;
 use std::fmt;
 
 // 4 twobits per byte, so unshifted pos is shifted another 2.
@@ -12,27 +15,87 @@ const BYTE_SHIFT: u32 = POS_SHIFT + 2;
 // twobit shifts are bit positions 0, 2, 4 and 6 in a byte.
 const TWOBIT_SHIFT: u32 = POS_SHIFT - 1;
 
+const BASEPOS_MASK: u64 = POS_MASK >> POS_SHIFT;
 // Two types are defined here.
 //
-// u64 with only bits set for genomic position, shifted with POS_SHIFT
+/// a Position is an u64 with only bits in POS_MASK set. Upper and lower bits are 0.
+/// The position is a contig-cumulative genmic offset, currected for any stretches of Ns.
 #[derive(
-    Add, Sub, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash, Rem,
+    Add,
+    Sub,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    Hash,
+    Rem,
+    Display,
+    Debug,
+    Default,
 )]
+#[display(fmt = "{:#x}", _0)]
 pub struct Position(u64);
 
 // only bits set for postion, but not shifted yet
-#[derive(Add, Sub, Serialize, Deserialize)]
+/// a BasePos is a [`Position`] shifted right with POS_SHIFT. High bits are unset.
+#[derive(
+    Add, Sub, Clone, Copy, Serialize, Deserialize, AddAssign, Debug, Display, Default, PartialEq, Eq,
+)]
 pub struct BasePos(u64);
 
-/////////////// Position \\\\\\\\\\\\\\\\\\
+#[derive(Clone, Copy, Default)]
+pub(crate) struct PosRange((Position, Position));
+
+impl PosRange {
+    pub(crate) fn lower(&self) -> Position {
+        self.0 .0
+    }
+    pub(crate) fn upper(&self) -> Position {
+        self.0 .1
+    }
+    pub(crate) fn has_in_range(&self, pos: Position) -> bool {
+        pos >= self.0 .0 && pos < self.0 .1
+    }
+    pub(crate) fn bound_lower(&mut self, value: Position) {
+        let inner = &mut self.0;
+        if value > inner.0 {
+            dbg_assert!(value < inner.1);
+            inner.0 = value;
+        }
+    }
+    pub(crate) fn bound_upper(&mut self, value: Position) {
+        let inner = &mut self.0;
+        if value < inner.1 {
+            dbg_assert!(value > inner.0);
+            inner.1 = value;
+        }
+    }
+}
+
+impl From<(Position, Position)> for PosRange {
+    fn from(rng: (Position, Position)) -> PosRange {
+        PosRange(rng)
+    }
+}
+
+impl fmt::Display for PosRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}-{}",
+            BasePos::from(self.0 .0),
+            BasePos::from(self.0 .1)
+        )
+    }
+}
 
 impl Position {
     pub(crate) fn as_u64(&self) -> u64 {
         self.0
-    }
-    // used both for position0 and 'unset'. The context should make the distinction.
-    pub(crate) fn zero() -> Self {
-        Position(0x0)
     }
     pub(crate) fn is_set(&self) -> bool {
         self.0 != 0
@@ -50,7 +113,11 @@ impl Position {
     }
 
     // for a repetitive mark, return if on period for the distance between current pos (self) and stored
-    pub(crate) fn get_if_mark_on_period(&self, stored_pos: Position, pd: Position) -> Option<BasePos> {
+    pub(crate) fn get_if_mark_on_period(
+        &self,
+        stored_pos: Position,
+        pd: Position,
+    ) -> Option<BasePos> {
         let dist = if self.0 >= stored_pos.0 {
             self.0 - stored_pos.0
         } else {
@@ -72,13 +139,17 @@ impl Position {
         dbg_assert_ne!(self.0, 0);
         self.0 -= 1_u64.checked_shl(POS_SHIFT).expect("pos.incr shft");
     }
+    pub(crate) fn from_basepos<T>(value: T) -> Position
+    where
+        T: Into<u64>,
+    {
+        Position::from(BasePos::from(value.into()))
+    }
 }
 
 impl From<BasePos> for Position {
     fn from(base_pos: BasePos) -> Position {
-        let shl = u64::from(base_pos).checked_shl(POS_SHIFT).unwrap();
-        dbg_assert_eq!(shl, shl & POS_MASK, "basepos bleeds into extension!");
-        Position(shl)
+        Position(u64::from(base_pos) << POS_SHIFT)
     }
 }
 
@@ -88,20 +159,32 @@ impl From<ExtPosEtc> for Position {
     }
 }
 
-impl fmt::Debug for Position {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:x}", self.0)
-    }
-}
-
 /////////////// BasePos \\\\\\\\\\\\\\\\\\
 
 impl BasePos {
     pub(crate) fn as_u64(&self) -> u64 {
         self.0
     }
+    pub(crate) fn is_set(&self) -> bool {
+        self.0 != 0
+    }
     pub(crate) fn as_usize(&self) -> usize {
         usize::try_from(self.0).unwrap()
+    }
+    #[must_use = "this value should be used"]
+    pub(crate) fn add<T>(&mut self, add: T) -> BasePos
+    where
+        T: Into<u64>,
+    {
+        let add = add.into();
+        dbg_assert!(self.0 + add <= BASEPOS_MASK);
+        BasePos(self.0 + add)
+    }
+    pub(crate) fn add_assign<T>(&mut self, add: T)
+    where
+        T: Into<u64>,
+    {
+        *self = self.add(add);
     }
 }
 
@@ -119,19 +202,24 @@ impl From<ExtPosEtc> for BasePos {
     }
 }
 
-impl From<usize> for BasePos {
-    fn from(base_pos: usize) -> BasePos {
-        BasePos::from(u64::try_from(base_pos).expect("doesn't fit in u64"))
-    }
-}
-
 impl From<u64> for BasePos {
     fn from(base_pos: u64) -> BasePos {
-        let masked = base_pos & (POS_MASK >> POS_SHIFT);
-        dbg_assert_eq!(base_pos, masked, "bleeds beyond position!");
+        dbg_assert!(base_pos <= BASEPOS_MASK, "bleeds beyond position!");
         BasePos(base_pos)
     }
 }
+
+macro_rules! implement_try_froms_for_basepos { ($($ty:ty),*) => ($(
+    impl TryFrom<$ty> for BasePos
+    where $ty: TryFrom<u64> {
+        type Error = AnyhowError;
+        fn try_from(base_pos: $ty) -> Result<BasePos> {
+            u64::try_from(base_pos).map(BasePos::from).map_err(|e| anyhow!("{}", e))
+        }
+    }
+    )*)
+}
+implement_try_froms_for_basepos!(usize, i64, u32);
 
 impl From<BasePos> for u64 {
     fn from(base_pos: BasePos) -> u64 {

@@ -1,9 +1,8 @@
-use crate::new_types::position::{BasePos, Position};
+use crate::new_types::position::{BasePos, PosRange, Position};
 use crate::rdbg::STAT_DB;
 use crate::xmer_location::XmerLoc;
 use anyhow::Result;
 use num::{FromPrimitive, PrimInt};
-use std::cmp;
 use std::mem::size_of;
 
 pub struct KmerConst {
@@ -34,7 +33,6 @@ fn dvm<T: PrimInt + FromPrimitive>(numerator: u32, divisor: u32) -> T {
     T::from_u32(numerator).unwrap() * base
 }
 
-#[macro_export]
 macro_rules! implement_revcmp { ($($ty:ty),*) => ($(
     /// give twobit reverse complent for given kmerlen
     impl RevCmp<$ty> for $ty {
@@ -70,6 +68,7 @@ impl KmerConst {
     }
 
     pub(crate) fn from_bitlen(bitlen: u8, read_len: u16, seed: u16) -> Self {
+        // TODO: Do some sanity checks on sizes here
         let bitlen = usize::from(bitlen);
         let read_len = usize::from(read_len);
         let seed = usize::from(seed);
@@ -85,7 +84,7 @@ impl KmerConst {
         if !cfg!(debug_assertions) {
             eprintln!("read_len: {}, kmerlen: {}", read_len, kmerlen);
         }
-        let dna_topb2_shift = (u32::try_from(kmerlen).expect("kmer too large") << 1) - 2;
+        let dna_topb2_shift = (u32::try_from(kmerlen).unwrap() << 1) - 2;
         let overbit = 1_usize
             .checked_shl(dna_topb2_shift + 1)
             .expect("k-mer shift");
@@ -144,20 +143,13 @@ impl KmerConst {
         }
     }
 
-    pub(crate) fn get_kmer_boundaries(
-        &self,
-        pos: Position,
-        contig: (Position, Position),
-    ) -> (Position, Position) {
-        let read_len = Position::from(BasePos::from(self.read_len));
-        let lower = if pos > read_len {
-            pos - read_len
-        } else {
-            Position::zero()
-        };
-        (
-            cmp::max(lower, contig.0),
-            cmp::min(pos + Position::from(BasePos::from(self.no_kmers)), contig.1),
-        )
+    pub(crate) fn get_kmer_boundaries(&self, pos: Position, mut contig: PosRange) -> PosRange {
+        let read_len = Position::from(BasePos::from(self.read_len as u64));
+
+        if pos > read_len {
+            contig.bound_lower(pos - read_len)
+        }
+        contig.bound_upper(pos + Position::from_basepos(self.no_kmers as u64));
+        contig
     }
 }

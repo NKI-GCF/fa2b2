@@ -2,7 +2,7 @@ use crate::new_types::extended_position::{ExtPosEtc, EXT_MASK, EXT_SHIFT};
 use crate::num::ToPrimitive;
 use crate::rdbg::STAT_DB;
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Extension(u64);
 
 impl Extension {

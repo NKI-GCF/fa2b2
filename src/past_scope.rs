@@ -1,9 +1,14 @@
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::new_types::extended_position::ExtPosEtc;
-use crate::new_types::{extension::Extension, position::Position, twobit::TwoBit, xmer::Xmer};
+use crate::new_types::{
+    extension::Extension,
+    position::{BasePos, PosRange, Position},
+    twobit::TwoBit,
+    xmer::Xmer,
+};
 use crate::rdbg::STAT_DB;
-use crate::scope::{Scope, WritingScope};
+use crate::scope::Scope;
 use crate::xmer_location::XmerLoc;
 use anyhow::{ensure, Result};
 use std::fmt;
@@ -13,7 +18,7 @@ pub struct PastScope<'a> {
     p: ExtPosEtc,
     i: usize,
     mod_i: usize,
-    plim: (Position, Position),
+    plim: PosRange,
     period: Position,
     mark: XmerLoc,
     d: Vec<Xmer>, // misschien is deze on the fly uit ks te bepalen?
@@ -24,25 +29,25 @@ impl<'a> PastScope<'a> {
     pub(crate) fn new(kc: &'a KmerConst) -> Self {
         PastScope {
             kc,
-            p: ExtPosEtc::zero(),
+            p: ExtPosEtc::default(),
             i: 0,
             mod_i: 0,
-            plim: (Position::zero(), Position::zero()),
-            period: Position::zero(),
-            mark: XmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
+            plim: PosRange::default(),
+            period: Position::default(),
+            mark: XmerLoc::default(),
             d: vec![Xmer::new(); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         }
     }
     fn rebuild(&mut self, ks: &KmerStore, p: ExtPosEtc, idx: usize) -> Result<()> {
         let pos = Position::from(p);
-        ensure!(pos != Position::zero());
-        self.plim = ks.get_contig_start_end_for_p(pos);
+        ensure!(pos != Position::default());
+        self.plim = ks.get_contig_start_end_for_pos(pos);
         let bound = self.kc.get_kmer_boundaries(pos, self.plim);
-        dbg_print!("{:?}", bound);
+        dbg_print!("{}", bound);
         let extension = Extension::from(p);
 
-        self.p = ExtPosEtc::from((extension, bound.0));
+        self.p = ExtPosEtc::from((extension, bound.lower()));
         self.mark.p = ExtPosEtc::from(extension);
 
         loop {
@@ -50,28 +55,23 @@ impl<'a> PastScope<'a> {
                 // we weten extension op voorhand.
                 let i = self.pick_mark();
                 if self.d[i].pos != self.mark.p.pos() {
-                    let mark = self.get_d(i).get_hash_and_p(self.kc, self.mark.p.x());
+                    let mark = self.d[i].get_hash_and_p(self.kc, self.mark.p.x());
                     self.set_mark(&mark);
                     if p.same_pos_and_ext(self.mark.p) {
                         break;
                     }
                     if self.mark.get_idx() == idx {
-                        dbg_print!(
-                            "idx {:x} observed but for {:?}, not {:?}",
-                            idx,
-                            self.mark.p,
-                            p
-                        );
+                        dbg_print!("idx {:x} observed but for {}, not {}", idx, self.mark.p, p);
                     }
                     // XXX ik zou een assertion hier logischer vinden
                     /*assert!(
-                        self.p.pos() < bound.1,
+                        self.p.pos() < bound.ipper(),
                         "kmer {:x} not observed for {:x} !!",
                         idx,
                         p
                     );*/
-                    if self.p.pos() >= bound.1 {
-                        dbg_print!("kmer {:x} not observed for {:?} !!", idx, p);
+                    if self.p.pos() >= bound.upper() {
+                        dbg_print!("kmer {:x} not observed for {} !!", idx, p);
                         self.p.clear();
                         break;
                     }
@@ -82,20 +82,7 @@ impl<'a> PastScope<'a> {
         Ok(())
     }
     fn is_on_contig(&self, pos: Position) -> bool {
-        pos >= self.plim.0 && pos < self.plim.1
-    }
-}
-
-impl<'a> WritingScope for PastScope<'a> {
-    fn set_period(&mut self, period: Position) {
-        dbg_assert!(period < self.p.pos());
-        self.period = period;
-    }
-    fn unset_period(&mut self) {
-        self.set_period(Position::zero());
-    }
-    fn is_repetitive(&self) -> bool {
-        self.period.is_set()
+        self.plim.has_in_range(pos)
     }
 }
 
@@ -160,7 +147,7 @@ impl<'a> Scope for PastScope<'a> {
         self.i += 1;
     }
     fn set_mark(&mut self, mark: &XmerLoc) {
-        dbg_print!("{:?} (mark)", mark);
+        dbg_print!("{} (mark)", mark);
         self.mark = *mark;
     }
 }
@@ -212,11 +199,11 @@ mod tests {
     #[test]
     fn test_reconstruct1() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
-        kmi.ks.pos_max = Position::from(BasePos::from(seq_vec.len()));
+        kmi.ks.pos_max = Position::from_basepos(seq_vec.len() as u64);
         let definition = fasta::record::Definition::new("test", None);
         let sequence = fasta::record::Sequence::from(seq_vec);
         kmi.markcontig(fasta::Record::new(definition, sequence))?;
@@ -246,9 +233,9 @@ mod tests {
         let mut scp = PastScope::new(&kc);
 
         for gen in 0..=4_usize.pow(seqlen as u32) {
-            let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
+            let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
             let mut kmi = KmerIter::new(&mut ks, &kc);
-            kmi.ks.pos_max = Position::from(BasePos::from(seqlen));
+            kmi.ks.pos_max = Position::from_basepos(seqlen as u64);
             let seq_vec: Vec<_> = (0..seqlen)
                 .map(|i| match (gen >> (i << 1)) & 3 {
                     0 => 'A',

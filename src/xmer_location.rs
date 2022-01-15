@@ -19,11 +19,6 @@ impl XmerLoc {
     pub(crate) fn get_idx(&self) -> usize {
         self.idx
     }
-    pub(crate) fn reset(&mut self) {
-        self.idx = usize::max_value();
-        self.p.clear();
-    }
-
     pub(crate) fn is_set(&self) -> bool {
         self.idx != usize::max_value()
     }
@@ -63,10 +58,15 @@ impl Ord for XmerLoc {
         }
     }
 }
+impl Default for XmerLoc {
+    fn default() -> Self {
+        XmerLoc::new(usize::max_value(), ExtPosEtc::default())
+    }
+}
 
-impl fmt::Debug for XmerLoc {
+impl fmt::Display for XmerLoc {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{:x}] {:?}", self.idx, self.p)
+        write!(f, "[{:x}] {}", self.idx, self.p)
     }
 }
 

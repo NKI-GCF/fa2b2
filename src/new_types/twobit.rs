@@ -4,6 +4,7 @@ use crate::rdbg::STAT_DB;
 use derive_more::{From, Into};
 use std::fmt;
 
+#[derive(Debug)]
 pub struct ThreeBit(u8);
 
 #[derive(Copy, Clone, PartialEq, new)]

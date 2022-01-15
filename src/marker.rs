@@ -7,15 +7,13 @@ extern crate num_traits;
 use crate::head_scope::HeadScope;
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
-use crate::new_types::position::Position;
+use crate::new_types::position::{BasePos, Position};
 use crate::rdbg::STAT_DB;
-use crate::scope::{Scope, WritingScope};
+use crate::scope::Scope;
 use anyhow::Result;
 use noodles_fasta as fasta;
 
 pub struct KmerIter<'a> {
-    n_stretch: u64,
-    goffs: u64,
     pub(super) scp: HeadScope<'a>,
     pub(super) ks: &'a mut KmerStore,
 } //^-^\\
@@ -23,69 +21,20 @@ pub struct KmerIter<'a> {
 impl<'a> KmerIter<'a> {
     pub(crate) fn new(ks: &'a mut KmerStore, kc: &'a KmerConst) -> Self {
         let scp = HeadScope::new(kc);
-        KmerIter {
-            n_stretch: 0,
-            goffs: 0,
-            scp,
-            ks,
-        }
+        KmerIter { scp, ks }
+    }
+    fn init_contig(&mut self) -> Position {
+        // we start with no offset on contig, if starting with N's, the stored goffs gets updated
+        self.scp.reset_for_new_contig();
+        let pos = self.scp.p.pos();
+        self.ks.push_contig(pos, BasePos::default());
+        pos
     }
 
-    /// sluit een n-stretch af, die we aan het verlengen waren.
-    fn finalize_n_stretch(&mut self) {
-        dbg_print!("added new contig. Ns:{}", self.n_stretch);
-        self.ks.offset_contig(self.n_stretch);
-        self.goffs += self.n_stretch;
-        self.n_stretch = 0;
-        // clear all except orientation and position to rebuild at the start of a new contig.
-        if self.scp.p.is_set() {
-            // clearing extension on first position fails assert on is_set()
-            self.scp.p.clear_extension();
-        }
-        self.scp.mod_i = 0;
-        // If a repetition ends in an N-stretch, thereafter offset to period
-        // may differ or the repetition could be different or entirely gone.
-        // TODO: allow repetition to include N-stretch - if both sides of N-stretch show the same repetition.
-        self.scp.unset_period();
-    }
-
-    fn update_repetitive(&mut self, pd: Position) {
-        let idx = self.scp.mark.get_idx();
-        let stored = self.ks.kmp[idx];
-        if stored.is_set() {
-            let mark_pos = self.scp.mark.p.pos();
-            let stored_pos = stored.pos();
-            if mark_pos != stored_pos {
-                if let Some(dist) = mark_pos.get_if_mark_on_period(stored_pos, pd) {
-                    if mark_pos > stored_pos {
-                        self.ks.extend_repetitive(mark_pos, dist);
-                    } else {
-                        dbg_print!(
-                            "repetitive occurs before already stored [{:x}] p {:?} <=> stored {:?}",
-                            idx,
-                            self.scp.mark.p,
-                            stored
-                        );
-                        let _x = self.scp.p.x();
-                        dbg_assert!(_x > 0);
-                        self.ks.replace_repetitive(stored_pos, mark_pos, dist);
-                        // FIXME: moet positie nu niet gezet worden, bij less?
-                    }
-                }
-            }
-        } else {
-            // XXX this occurs, is it an edge case or a bug?
-            dbg_print!("repeat with unset mark.idx (b2 corresponds) ??");
-        }
-    }
-
+    // Dit kan beter, met tasks spawning per stretch of non-ambiguous sequence.
     pub(crate) fn markcontig(&mut self, record: fasta::Record) -> Result<()> {
-        self.goffs = 0;
-        self.ks.push_contig(self.scp.p.pos(), self.goffs);
+        let coding_offset = self.init_contig();
 
-        let mut repetitive = 0_u64;
-        let mut n_count = 0_u64;
-        let mut coding = 0_u64;
         let mut seq = record.sequence().as_ref().iter();
 
         while let Some(b3) = seq.next().map(|b| self.scp.ascii_to_b3(b)) {
@@ -96,54 +45,31 @@ impl<'a> KmerIter<'a> {
                 if let Some(qb) = self.ks.b2.get_mut(pos.byte_pos()) {
                     *qb |= b2.pos_shift(pos).as_u8();
                 }
-                if self.n_stretch > 0 {
-                    n_count += self.n_stretch;
-                    self.finalize_n_stretch();
-                } else if self.scp.period.is_set() {
-                    let pd = self.scp.period;
-                    let pos = self.scp.p.pos();
-                    dbg_assert!(pd <= pos, "{:?} {:?}", pd, self.scp.p);
-                    if self.ks.b2_for_p(pos - pd, true)? == b2 {
-                        repetitive += 1;
-                        self.update_repetitive(pd);
-                    } else {
-                        self.scp.unset_period();
-                    }
-                }
                 self.scp.complete_and_update_mark(b2, self.ks)?;
             } else {
-                if self.scp.i != 0 {
-                    coding += self.scp.i as u64;
-                    dbg_print!("started N-stretch at {:?}.", pos);
-                    self.goffs += self.scp.i as u64;
-                    self.ks.push_contig(pos, self.goffs);
-
-                    self.n_stretch = 0;
-                    self.scp.i = 0;
-                }
-                self.n_stretch += 1;
+                self.scp.elongate_n_stretch(self.ks, pos);
             }
         }
-        if self.n_stretch > 0 {
-            n_count += self.n_stretch;
-            dbgx!(self.finalize_n_stretch());
-        } else {
-            coding += self.scp.i as u64;
-        }
+        self.scp.finalize_n_stretch(self.ks);
+
         if record.name() != "test" {
-            let complex = coding - repetitive;
-            let tot = coding + n_count;
-            println!(
+            if let Some(contig) = self.ks.contig.last() {
+                let coding: u64 = BasePos::from(contig.twobit - coding_offset).into();
+                let n_count = u64::try_from(contig.genomic)?;
+                let complex: u64 = coding - self.scp.repetitive as u64;
+                let tot: u64 = coding + n_count;
+                println!(
                 "chromosome {}\tcomplex dna:{} of {}({:.2}%)\trepetitive:{}({:.2}%)\tN-count:{}({:.2}%)\t",
                 record.name(),
                 complex,
                 tot,
                 100.0 * complex as f64 / tot as f64,
-                repetitive,
-                100.0 * repetitive as f64 / tot as f64,
+                self.scp.repetitive,
+                100.0 * self.scp.repetitive as f64 / tot as f64,
                 n_count,
                 100.0 * n_count as f64 / tot as f64,
             );
+            }
         }
         Ok(())
     }
@@ -169,45 +95,45 @@ mod tests {
     #[test]
     fn test_16n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         process(&mut ks, &kc, b"NNNNNNNNNNNNNNNN"[..].to_owned())?;
 
         dbg_assert_eq!(ks.contig.len(), 1);
-        dbg_assert_eq!(ks.contig[0].twobit, Position::zero());
-        dbg_assert_eq!(ks.contig[0].genomic, 16);
+        dbg_assert_eq!(ks.contig[0].twobit, Position::default());
+        dbg_assert_eq!(ks.contig[0].genomic, 16.into());
         Ok(())
     }
     #[test]
     fn test_1n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         process(&mut ks, &kc, b"N"[..].to_owned())?;
 
         dbg_assert_eq!(ks.contig.len(), 1);
-        dbg_assert_eq!(ks.contig[0].twobit, Position::zero());
-        dbg_assert_eq!(ks.contig[0].genomic, 1);
+        dbg_assert_eq!(ks.contig[0].twobit, Position::default());
+        dbg_assert_eq!(ks.contig[0].genomic, 1.into());
         Ok(())
     }
     #[test]
     fn test_1n1c1n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         process(&mut ks, &kc, b"NCN"[..].to_owned())?;
 
         dbg_assert_eq!(ks.contig.len(), 2);
-        dbg_assert_eq!(ks.contig[0].twobit, Position::zero());
-        dbg_assert_eq!(ks.contig[0].genomic, 1);
-        dbg_assert_eq!(ks.contig[1].twobit, Position::from(BasePos::from(1_u64)));
-        dbg_assert_eq!(ks.contig[1].genomic, 3);
+        dbg_assert_eq!(ks.contig[0].twobit, Position::default());
+        dbg_assert_eq!(ks.contig[0].genomic, 1.into());
+        dbg_assert_eq!(ks.contig[1].twobit, Position::from_basepos(1_u64));
+        dbg_assert_eq!(ks.contig[1].genomic, 3.into());
         Ok(())
     }
     #[test]
     fn test_17c() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
         dbg_assert_eq!(ks.kmp.len(), 128);
-        let mut first_pos = ExtPosEtc::from(BasePos::from(kc.kmerlen));
+        let mut first_pos = ExtPosEtc::from_basepos(kc.kmerlen as u64);
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 1..ks.kmp.len() {
@@ -222,11 +148,11 @@ mod tests {
     #[test]
     fn test_1n18c1n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
         }
-        let mut first_pos = ExtPosEtc::from(BasePos::from(kc.kmerlen));
+        let mut first_pos = ExtPosEtc::from_basepos(kc.kmerlen as u64);
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 0..ks.kmp.len() {
@@ -241,12 +167,12 @@ mod tests {
     #[test]
     fn test_1n16c() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
         let mut seen = 0;
-        let mut first_pos = ExtPosEtc::from(BasePos::from(kc.kmerlen));
+        let mut first_pos = ExtPosEtc::from_basepos(kc.kmerlen as u64);
         first_pos.set_repetitive();
         for i in 0..ks.kmp.len() {
             if ks.kmp[i].is_set() {
@@ -260,7 +186,7 @@ mod tests {
     #[test]
     fn test_18at() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         {
             process(&mut ks, &kc, b"ATATATATATATATATAT"[..].to_owned())?;
         }

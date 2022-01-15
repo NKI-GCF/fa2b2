@@ -1,6 +1,6 @@
 use crate::new_types::extended_position::ExtPosEtc;
 use crate::new_types::{
-    position::{BasePos, Position},
+    position::{BasePos, PosRange, Position},
     twobit::{TwoBit, TwoBitx4},
 };
 use crate::rdbg::STAT_DB;
@@ -9,60 +9,63 @@ use ahash::AHashMap;
 use anyhow::{anyhow, ensure, Result};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering::{Equal, Greater, Less};
+use to_default::ToDefault;
 
 #[derive(Serialize, Deserialize)]
 pub struct Contig {
     pub twobit: Position, // position required for binary search
-    pub genomic: u64,     // if 0: next contig
+    pub genomic: BasePos, // if 0: next contig
 }
 
-type ContigRng = (Position, Position);
 pub type Repeat = (u32, u32);
 
 #[derive(Serialize, Deserialize)]
 pub struct KmerStore {
     pub(crate) pos_max: Position,
     pub(crate) opt: u64,
-    pub(crate) rep_max_dist: Position,
     pub(crate) b2: Vec<u8>,
     pub(crate) kmp: Vec<ExtPosEtc>, // position + strand per k-mer.
     pub(crate) contig: Vec<Contig>,
     pub(crate) repeat: AHashMap<Position, Repeat>,
+    pub(crate) rep_max_dist: Position,
     pub(crate) seed: u16,
 }
 
 impl KmerStore {
-    pub(crate) fn new(bitlen: usize, rep_max_dist: u64, seed: u16) -> Self {
+    pub(crate) fn new(bitlen: usize, rep_max_dist: u32, seed: u16) -> Result<Self> {
         let shift = bitlen - 2;
-        KmerStore {
-            pos_max: Position::zero(),
+        Ok(KmerStore {
+            pos_max: Position::default(),
             opt: 0,
-            rep_max_dist: Position::from(BasePos::from(rep_max_dist)),
+            rep_max_dist: Position::from_basepos(rep_max_dist),
             b2: vec![0; 1 << shift], // sequence (4 per u8).
-            kmp: vec![ExtPosEtc::zero(); 1 << (shift + 1)], // kmer positions
+            kmp: vec![ExtPosEtc::default(); 1 << (shift + 1)], // kmer positions
             //kmp,
             contig: Vec::new(), // contig info
             repeat: AHashMap::new(),
             seed: seed,
-        }
+        })
     }
     /*pub(crate) fn store_twobit(&mut self, pos: Position, b2: TwoBit) {
         self.b2[pos.byte_pos()] |= b2.pos_shift(pos).as_u8();
     }*/
-    pub(crate) fn push_contig(&mut self, pos: Position, goffs: u64) {
+    pub(crate) fn push_contig(&mut self, pos: Position, goffs: BasePos) {
         self.contig.push(Contig {
             twobit: pos,
             genomic: goffs,
         });
     }
     /// Adjust offset for contig.
-    pub(crate) fn offset_contig(&mut self, offset: u64) {
+    pub(crate) fn offset_contig(&mut self, offset: &mut BasePos) -> BasePos {
+        let stretch = *offset;
         if let Some(ctg) = self.contig.last_mut() {
-            ctg.genomic += offset;
+            ctg.genomic += stretch;
         }
+        offset.to_default();
+        stretch
     }
     pub(crate) fn set_kmp(&mut self, mark: &XmerLoc) {
-        dbg_print!("{:?} (stored)", mark);
+        dbg_print!("{} (stored)", mark);
         self.kmp[mark.idx].set(mark.p);
     }
     pub(crate) fn get_bitlen(&self) -> u8 {
@@ -83,26 +86,23 @@ impl KmerStore {
         }
         base
     }
-    pub(crate) fn get_contig_start_end_for_p(&self, pos: Position) -> ContigRng {
+    pub(crate) fn get_contig_start_end_for_pos(&self, pos: Position) -> PosRange {
         let i = self.get_contig(pos);
 
         dbg_assert!(i < self.contig.len());
         dbg_assert!(self.contig[i].twobit <= pos);
-        (
+        PosRange::from((
             self.get_twobit_before(i)
-                .unwrap_or_else(|_| Position::zero()),
+                .unwrap_or_else(|_| Position::default()),
             self.get_twobit_after(i).unwrap_or(self.pos_max),
-        )
+        ))
     }
     fn get_twobit_after(&self, i: usize) -> Result<Position> {
-        ensure!(
-            i + 1 < self.contig.len(),
-            "get_twobit_after(): End of contig"
-        );
+        ensure!(i + 1 < self.contig.len()); // End of contig
         Ok(self.contig[i + 1].twobit)
     }
     fn get_twobit_before(&self, i: usize) -> Result<Position> {
-        ensure!(i != 0, "get_twobit_before(): Start of contig");
+        ensure!(i != 0); // Start of contig
         Ok(self.contig[i - 1].twobit)
     }
     pub(crate) fn b2_for_p(&self, pos: Position, is_repeat: bool) -> Result<TwoBit> {
@@ -142,23 +142,29 @@ mod tests {
     use super::*;
     use crate::rdbg::STAT_DB;
     #[test]
-    fn it_works() {
+    fn it_works() -> Result<()> {
         //let mut ks = KmerStore::new(32); // allocates 16 gig of data
-        let mut ks = KmerStore::new(2, 10_000, 0);
-        let mut p = ExtPosEtc::zero();
+        let mut ks = KmerStore::new(2, 10_000, 0)?;
+        let mut p = ExtPosEtc::default();
         let goffs = 0;
 
-        ks.push_contig(p.pos(), goffs);
-        ks.offset_contig(10_000); // simulate N-stretch of 10000
-        p = ExtPosEtc::from(p.pos() + Position::from(BasePos::from(64_u64))); // one readlength
-        ks.push_contig(p.pos(), goffs);
-        ks.offset_contig(64);
+        ks.push_contig(p.pos(), BasePos::from(goffs));
+        let mut stretch = BasePos::from(10_000);
+        dbg_assert!(ks.offset_contig(&mut stretch) == BasePos::from(10_000)); // simulate N-stretch of 10000
+        dbg_assert!(!stretch.is_set());
 
-        ks.push_contig(p.pos(), goffs);
-        ks.offset_contig(10_000); // another N-stretch of 10000
-        ks.push_contig(p.pos(), goffs);
+        stretch = BasePos::from(64_u64);
+        p = ExtPosEtc::from(p.pos() + Position::from(stretch)); // one readlength
+        ks.push_contig(p.pos(), BasePos::from(goffs));
+        let _ = ks.offset_contig(&mut stretch);
+
+        ks.push_contig(p.pos(), BasePos::from(goffs));
+        stretch = BasePos::from(10_000);
+        let _ = ks.offset_contig(&mut stretch); // another N-stretch of 10000
+        ks.push_contig(p.pos(), BasePos::from(goffs));
 
         let i = ks.get_contig(Position::from(BasePos::from(5_508_u64)));
         dbg_assert_eq!(ks.contig[i].twobit, Position::from(BasePos::from(64_u64)));
+        Ok(())
     }
 }

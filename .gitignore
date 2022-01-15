@@ -1,20 +1,15 @@
 
 /target
-**/*.rs.bk
-callgrind*
 doc
 flamegraph.svg
-Linux perf Examples*
-perf.data*
-*svg
 GRCh38.bin
-rust-unmangle
-flamegraph.pl
-stackcollapse-perf.pl
 perf.out
 tags
 docs
-test_output_alt
+*.svg
 *.gpg
 *.zip
+*perf.data*
 *default_output*
+*test_output*
+scripts/

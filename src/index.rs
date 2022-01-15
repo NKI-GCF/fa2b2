@@ -71,7 +71,7 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
 }
 
 fn make_stats(ks: &KmerStore) {
-    let mut stat = [[0; 0x100]; 2];
+    let mut stat = [[0; EXT_MAX]; 2];
     for k in ks.kmp.iter() {
         stat[if k.is_set() { 1 } else { 0 }][k.x()] += 1;
     }

@@ -7,11 +7,10 @@
 //! Due to increased hashing, the same k-mer can be stored for multiple positions. However, two
 //! k-mers with distinct extension can also collide in the same hash. One has greater extension,
 //! that one gets priority. The less extensively hashed k-mer gets extended further, resulting
-//! in a different hash.
+//! in another different hash.
 //!
-//! Collisions cause more work, but extension is pretty cheap.
-//!
-//! [stap af van de orientation bit, dat maakt hash extension more expensive!]
+//! Collisions are more work, but extension is pretty cheap. Actually a lot of time is spent in
+//! selecting a median
 //!
 //! Differing k-mers cannot collide with the same extension in the same hash.
 //!

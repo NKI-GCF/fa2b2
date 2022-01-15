@@ -36,72 +36,72 @@ pub trait WritingScope: Scope {
     fn try_store_mark(
         &mut self,
         ks: &mut KmerStore,
-        min_idx: usize,
-        min_p: ExtPosEtc,
-    ) -> Result<Option<(usize, ExtPosEtc)>> {
-        if self.is_repetitive() && ks.kmp[min_idx].is_set() {
-            ks.kmp[min_idx].set_repetitive();
-            return Ok(None);
+        mark: &mut (usize, ExtPosEtc),
+    ) -> Result<bool> {
+        if self.is_repetitive() && ks.kmp[mark.0].is_set() {
+            ks.kmp[mark.0].set_repetitive();
+            return Ok(false);
         }
-        let old_stored_p = ks.kmp[min_idx];
+        let old_stored_p = ks.kmp[mark.0];
 
         if old_stored_p.is_zero() {
-            ks.set_kmp(min_idx, min_p);
-            return Ok(None);
+            ks.set_kmp(mark.0, mark.1);
+            return Ok(false);
         }
-        if old_stored_p.is_replaceable_by(min_p) {
-            if old_stored_p.pos() != min_p.pos() {
-                dbg_print!("[{:x}] -> {:?} (?)", min_idx, old_stored_p);
-                if old_stored_p.x() == min_p.x() {
+        if old_stored_p.is_replaceable_by(mark.1) {
+            if old_stored_p.pos() != mark.1.pos() {
+                dbg_print!("[{:x}] -> {:?} (?)", mark.0, old_stored_p);
+                if old_stored_p.x() == mark.1.x() {
                     // same extension means same base k-mer origin. this is a duplicate.
-                    ks.kmp[min_idx].mark_more_recurs_upseq();
+                    ks.kmp[mark.0].mark_more_recurs_upseq();
                 }
-                ks.set_kmp(min_idx, min_p);
-                return Ok(Some((min_idx, old_stored_p)));
+                ks.set_kmp(mark.0, mark.1);
+                mark.1 = old_stored_p;
+                return Ok(true);
             }
-            // .. else set and already min_p. Then leave bit states.
-            return Ok(None);
+            // .. else set and already mark.1. Then leave bit states.
+            return Ok(false);
         }
-        if old_stored_p.extension() == min_p.extension() {
+        if old_stored_p.extension() == mark.1.extension() {
             // this must be the same k-mer origin, meaning identical k-mer sequence.
 
             // If a kmer occurs multiple times within an extending readlength (repetition),
             // only the first gets a position. During mapping this should be kept in mind.
-            if let Some(dist) = self.dist_if_repetitive(ks, old_stored_p, min_p) {
+            if let Some(dist) = self.dist_if_repetitive(ks, old_stored_p, mark.1) {
                 self.set_period(dist);
                 // TODO: repetitive should be moved to higher extensions.
-                ks.kmp[min_idx].set_repetitive();
-                return Ok(None);
+                ks.kmp[mark.0].set_repetitive();
+                return Ok(false);
             }
-            ks.kmp[min_idx].mark_more_recurs_upseq();
+            ks.kmp[mark.0].mark_more_recurs_upseq();
         }
         // collision with a different baseindex, it had greater extension.
         // the current baseindex will be extended and tried again.
         dbg_print!("not replacable, extend..");
-        Ok(Some((min_idx, min_p)))
+        Ok(true)
     }
 
     fn store_mark(&mut self, ks: &mut KmerStore, i: usize) -> Result<()> {
-        let (mut min_idx, mut min_p) = self.get_d(i).get_hash_and_p(self.get_kc(), 0);
-        self.set_mark(min_idx, min_p);
-        let orig_pos = min_p.pos();
+        let mut mark = self.get_d(i).get_hash_and_p(self.get_kc(), 0);
+        self.set_mark(mark.0, mark.1);
+        let orig_pos = mark.1.pos();
         // this seems to be hotlooping
-        while let Some(mut next) = self.try_store_mark(ks, min_idx, min_p)? {
-            if next.1.pos() == orig_pos {
-                if next.1.extend().is_err() {
+        while self.try_store_mark(ks, &mut mark)? {
+            if mark.1.pos() != orig_pos {
+                if self.get_kc().extend_xmer(&mut mark).is_ok() {
+                    // extending some pase baseidx. TODO: if frequently the same recurs,
+                    // it might be worthwhile to store the reverse complement in a temp
+                    // we should not store a past index in self.mark.p !!
+                } else {
+                    dbg_print!("couldn't extend: [{}] {:?} ..?", mark.0, mark.1);
                     break;
                 }
-                (min_idx, min_p) = self.get_d(i).get_hash_and_p(self.get_kc(), next.1.x());
-                self.set_mark(min_idx, min_p);
-            } else if let Ok((past_idx, past_p)) = self.get_kc().get_next_xmer(next.0, next.1) {
-                // extending some pase baseidx. TODO: if frequently the same recurs,
-                // it might be worthwhile to store the reverse complement in a temp
-                min_idx = past_idx;
-                min_p = past_p;
-                // we should not store a past index in self.mark.p !!
             } else {
-                dbg_print!("couldn't extend: [{}] {:?} ..?", next.0, next.1);
-                break;
+                if mark.1.extend().is_err() {
+                    break;
+                }
+                mark = self.get_d(i).get_hash_and_p(self.get_kc(), mark.1.x());
+                self.set_mark(mark.0, mark.1);
             }
         }
         Ok(())

@@ -161,7 +161,7 @@ mod tests {
     use crate::new_types::position::BasePos;
     use anyhow::Result;
     const SEQLEN: usize = 250;
-    const READLEN: usize = 6;
+    const READLEN: u16 = 6;
 
     fn process<'a>(ks: &'a mut KmerStore, kc: &'a KmerConst, seq: Vec<u8>) -> Result<()> {
         let mut kmi = KmerIter::new(ks, kc);
@@ -172,8 +172,8 @@ mod tests {
 
     #[test]
     fn test_16n() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000);
+        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
         process(&mut ks, &kc, b"NNNNNNNNNNNNNNNN"[..].to_owned())?;
 
         dbg_assert_eq!(ks.contig.len(), 1);
@@ -183,8 +183,8 @@ mod tests {
     }
     #[test]
     fn test_1n() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000);
+        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
         process(&mut ks, &kc, b"N"[..].to_owned())?;
 
         dbg_assert_eq!(ks.contig.len(), 1);
@@ -194,8 +194,8 @@ mod tests {
     }
     #[test]
     fn test_1n1c1n() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000);
+        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
         process(&mut ks, &kc, b"NCN"[..].to_owned())?;
 
         dbg_assert_eq!(ks.contig.len(), 2);
@@ -207,8 +207,8 @@ mod tests {
     }
     #[test]
     fn test_17c() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000);
+        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
         process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
         dbg_assert_eq!(ks.kmp.len(), 128);
         let mut first_pos = ExtPosEtc::from(BasePos::from(kc.kmerlen));
@@ -225,8 +225,8 @@ mod tests {
     }
     #[test]
     fn test_1n18c1n() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000);
+        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
         }
@@ -244,8 +244,8 @@ mod tests {
     }
     #[test]
     fn test_1n16c() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000);
+        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
         {
             process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
         }
@@ -263,8 +263,8 @@ mod tests {
     }
     #[test]
     fn test_18at() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000);
+        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
         {
             process(&mut ks, &kc, b"ATATATATATATATATAT"[..].to_owned())?;
         }

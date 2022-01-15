@@ -206,12 +206,12 @@ mod tests {
     use anyhow::Result;
     use noodles_fasta as fasta;
     const SEQLEN: usize = 250;
-    const READLEN: usize = 6;
+    const READLEN: u16 = 6;
 
     #[test]
     fn test_reconstruct1() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN);
-        let mut ks = KmerStore::new(kc.bitlen, 10_000);
+        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
         let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
@@ -241,11 +241,11 @@ mod tests {
     fn test_reconstruct_gs4_all() -> Result<()> {
         // all mappable.
         let seqlen: usize = 8;
-        let kc = KmerConst::new(seqlen, 2);
+        let kc = KmerConst::new(seqlen, 2, 0);
         let mut scp = PastScope::new(&kc);
 
         for gen in 0..=4_usize.pow(seqlen as u32) {
-            let mut ks = KmerStore::new(kc.bitlen, 10_000);
+            let mut ks = KmerStore::new(kc.bitlen, 10_000, 0);
             let mut kmi = KmerIter::new(&mut ks, &kc);
             kmi.ks.pos_max = Position::from(BasePos::from(seqlen));
             let seq_vec: Vec<_> = (0..seqlen)

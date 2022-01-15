@@ -111,33 +111,28 @@ impl KmerConst {
     pub(crate) fn hash_and_compress(&self, seq: usize, x: usize) -> usize {
         self.compress_xmer(self.xmer_hash(seq, x))
     }
-
     // same hash function, from Xmer.
-    pub(crate) fn get_next_xmer(
-        &self,
-        orig_hash: usize,
-        mut p: ExtPosEtc,
-    ) -> Result<(usize, ExtPosEtc)> {
-        let old_x = p.x();
-        p.extend()?;
+    // zou de orientation bit achterwegen kunnen laten, dan zijn er in deze hot loop minder operaties..
+    pub(crate) fn extend_xmer(&self, mark: &mut (usize, ExtPosEtc)) -> Result<()> {
+        let old_x = mark.1.x();
+        mark.1.extend()?;
 
         // in get_hash_and_p() bits are flipped if the highest bit was set.
-        let mut hash = self.xmer_hash(orig_hash, old_x);
+        let mut hash = self.xmer_hash(mark.0, old_x);
 
         if hash < hash.revcmp(self.kmerlen as u32) {
             // XXX: why is this not the inverse ??
 
-            //then flipped, yes: orig_hash here !!
-            hash = self.xmer_hash(self.over_mask & !orig_hash, old_x);
+            //then flipped, yes: mark.0 here !!
+            hash = self.xmer_hash(self.over_mask & !mark.0, old_x);
         }
 
         // set to idx for next extension; x is incremented:
-        hash = self.xmer_hash(hash, p.x());
-        if (hash & self.overbit) == 0 {
-            Ok((hash, p))
-        } else {
-            Ok((self.xmer_mask & !hash, p))
+        mark.0 = self.xmer_hash(hash, mark.1.x());
+        if mark.0 & self.overbit != 0 {
+            mark.0 = self.over_mask & !mark.0;
         }
+        Ok(())
     }
     /// compress base_seq or xmer_hash from xmer module
     pub(crate) fn compress_xmer(&self, v: usize) -> usize {

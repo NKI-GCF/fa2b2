@@ -4,6 +4,7 @@ use crate::new_types::{
     twobit::{TwoBit, TwoBitx4},
 };
 use crate::rdbg::STAT_DB;
+use crate::xmer_location::XmerLoc;
 use ahash::AHashMap;
 use anyhow::{anyhow, ensure, Result};
 use serde::{Deserialize, Serialize};
@@ -60,9 +61,9 @@ impl KmerStore {
             ctg.genomic += offset;
         }
     }
-    pub(crate) fn set_kmp(&mut self, min_idx: usize, min_p: ExtPosEtc) {
-        dbg_print!("[{:x}] <- {:?}", min_idx, min_p);
-        self.kmp[min_idx].set(min_p);
+    pub(crate) fn set_kmp(&mut self, mark: &XmerLoc) {
+        dbg_print!("{:?} (stored)", mark);
+        self.kmp[mark.idx].set(mark.p);
     }
     pub(crate) fn get_bitlen(&self) -> u8 {
         self.b2.len().trailing_zeros() as u8 + 2

@@ -1,6 +1,6 @@
-use crate::new_types::extended_position::ExtPosEtc;
 use crate::new_types::position::{BasePos, Position};
 use crate::rdbg::STAT_DB;
+use crate::xmer_location::XmerLoc;
 use anyhow::Result;
 use num::{FromPrimitive, PrimInt};
 use std::cmp;
@@ -113,24 +113,24 @@ impl KmerConst {
     }
     // same hash function, from Xmer.
     // zou de orientation bit achterwegen kunnen laten, dan zijn er in deze hot loop minder operaties..
-    pub(crate) fn extend_xmer(&self, mark: &mut (usize, ExtPosEtc)) -> Result<()> {
-        let old_x = mark.1.x();
-        mark.1.extend()?;
+    pub(crate) fn extend_xmer(&self, mark: &mut XmerLoc) -> Result<()> {
+        let old_x = mark.p.x();
+        mark.p.extend()?;
 
         // in get_hash_and_p() bits are flipped if the highest bit was set.
-        let mut hash = self.xmer_hash(mark.0, old_x);
+        let mut hash = self.xmer_hash(mark.idx, old_x);
 
         if hash < hash.revcmp(self.kmerlen as u32) {
             // XXX: why is this not the inverse ??
 
-            //then flipped, yes: mark.0 here !!
-            hash = self.xmer_hash(self.over_mask & !mark.0, old_x);
+            //then flipped, yes: mark.idx here !!
+            hash = self.xmer_hash(self.over_mask & !mark.idx, old_x);
         }
 
         // set to idx for next extension; x is incremented:
-        mark.0 = self.xmer_hash(hash, mark.1.x());
-        if mark.0 & self.overbit != 0 {
-            mark.0 = self.over_mask & !mark.0;
+        mark.idx = self.xmer_hash(hash, mark.p.x());
+        if mark.idx & self.overbit != 0 {
+            mark.idx = self.over_mask & !mark.idx;
         }
         Ok(())
     }

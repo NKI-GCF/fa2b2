@@ -53,3 +53,4 @@ pub(crate) mod marker;
 pub(crate) mod new_types;
 pub(crate) mod past_scope;
 pub(crate) mod scope;
+pub(crate) mod xmer_location;

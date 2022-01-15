@@ -1,9 +1,10 @@
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
-use crate::new_types::extended_position::{ExtPosEtc, KmerLoc};
+use crate::new_types::extended_position::ExtPosEtc;
 use crate::new_types::{extension::Extension, position::Position, twobit::TwoBit, xmer::Xmer};
 use crate::rdbg::STAT_DB;
 use crate::scope::{Scope, WritingScope};
+use crate::xmer_location::XmerLoc;
 use anyhow::{ensure, Result};
 use std::fmt;
 
@@ -14,7 +15,7 @@ pub struct PastScope<'a> {
     mod_i: usize,
     plim: (Position, Position),
     period: Position,
-    mark: KmerLoc,
+    mark: XmerLoc,
     d: Vec<Xmer>, // misschien is deze on the fly uit ks te bepalen?
     z: Vec<usize>,
 }
@@ -28,7 +29,7 @@ impl<'a> PastScope<'a> {
             mod_i: 0,
             plim: (Position::zero(), Position::zero()),
             period: Position::zero(),
-            mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
+            mark: XmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
             d: vec![Xmer::new(); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         }
@@ -49,8 +50,8 @@ impl<'a> PastScope<'a> {
                 // we weten extension op voorhand.
                 let i = self.pick_mark();
                 if self.d[i].pos != self.mark.p.pos() {
-                    let (min_idx, min_p) = self.get_d(i).get_hash_and_p(self.kc, self.mark.p.x());
-                    self.set_mark(min_idx, min_p);
+                    let mark = self.get_d(i).get_hash_and_p(self.kc, self.mark.p.x());
+                    self.set_mark(&mark);
                     if p.same_pos_and_ext(self.mark.p) {
                         break;
                     }
@@ -158,9 +159,9 @@ impl<'a> Scope for PastScope<'a> {
         self.p.incr_pos();
         self.i += 1;
     }
-    fn set_mark(&mut self, idx: usize, p: ExtPosEtc) {
-        dbg_print!("[{:x}] = {:?}", idx, p);
-        self.mark.set(idx, p);
+    fn set_mark(&mut self, mark: &XmerLoc) {
+        dbg_print!("{:?} (mark)", mark);
+        self.mark = *mark;
     }
 }
 

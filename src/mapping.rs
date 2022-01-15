@@ -1,16 +1,12 @@
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
-use crate::new_types::extended_position::{ExtPosEtc, KmerLoc, EXT_MAX};
-use crate::new_types::{
-    position::Position,
-    twobit::{ThreeBit, TwoBit},
-    xmer::Xmer,
-};
+use crate::new_types::extended_position::{ExtPosEtc, EXT_MAX};
+use crate::new_types::{position::Position, twobit::TwoBit, xmer::Xmer};
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
+use crate::xmer_location::XmerLoc;
 use anyhow::{anyhow, Result};
 use noodles_fastq as fastq;
-use std::fmt;
 
 pub struct Mapper<'a> {
     ks: &'a KmerStore,
@@ -18,7 +14,7 @@ pub struct Mapper<'a> {
     p: ExtPosEtc,
     i: usize,
     mod_i: usize,
-    mark: KmerLoc,
+    mark: XmerLoc,
     d: Vec<Xmer>, // misschien is deze on the fly uit ks te bepalen?
     z: Vec<usize>,
 }
@@ -31,7 +27,7 @@ impl<'a> Mapper<'a> {
             p: ExtPosEtc::zero(),
             i: 0,
             mod_i: 0,
-            mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
+            mark: XmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
             d: vec![Xmer::new(); kc.no_kmers],
             z: (0..kc.no_kmers).collect(),
         }
@@ -142,8 +138,8 @@ impl<'a> Scope for Mapper<'a> {
         self.p.incr_pos();
         self.i += 1;
     }
-    fn set_mark(&mut self, idx: usize, p: ExtPosEtc) {
-        dbg_print!("[{:x}] = {:?}", idx, p);
-        self.mark.set(idx, p);
+    fn set_mark(&mut self, mark: &XmerLoc) {
+        dbg_print!("{:?} (mapping mark)", mark);
+        self.mark = *mark;
     }
 }

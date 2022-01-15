@@ -146,7 +146,7 @@ mod tests {
         kmer
     }
     #[test]
-    fn xmer_no_flip() {
+    fn xmer_reversebility_in_xmer_wo_flip() {
         let kc = KmerConst::from_bitlen(64, 32, 0);
         let mut kmer: Xmer = Xmer::new();
         assert_eq!(kc.kmerlen, 32);
@@ -170,26 +170,26 @@ mod tests {
         assert_eq!(test & 0x8000_0000_0000_0000, 0);
         // its highest 'overbit' is not set, so no bitwise complementing occurs.
 
-        assert_eq!(mark.0 as u64, test, "test: {:#x} {:#x}", mark.0, test);
+        assert_eq!(mark.idx as u64, test, "test: {:#x} {:#x}", mark.idx, test);
 
         let top = (rc & !0x55 & 0xFFFF_FFFF) << 32;
         let bottom = (rc >> 32) & 0x55;
         assert_eq!(
-            mark.0 as u64,
+            mark.idx as u64,
             rc ^ (top | bottom),
             "top|bottom: {:#x} {:#x}",
-            mark.0 as u64,
+            mark.idx as u64,
             rc ^ (top | bottom)
         );
-        assert_eq!(mark.0 as u64, 0x11B1B1B1A0);
-        assert_eq!(mark.1.x(), 0x55);
+        assert_eq!(mark.idx as u64, 0x11B1B1B1A0);
+        assert_eq!(mark.p.x(), 0x55);
 
-        let undo = kc.xmer_hash(mark.0, 0x55) as u64;
+        let undo = kc.xmer_hash(mark.idx, 0x55) as u64;
         assert_eq!(undo, rc, "undo: {:#x} {:#x}", undo, rc);
     }
 
     #[test]
-    fn xmer_with_flip() {
+    fn xmer_reversebility_in_xmer_with_flip() {
         let kc = KmerConst::from_bitlen(64, 32, 0);
         let mut kmer: Xmer = Xmer::new();
         assert_eq!(kc.kmerlen as usize, kc.kmerlen);
@@ -215,35 +215,35 @@ mod tests {
         assert_ne!(test & 0x8000_0000_0000_0000, 0, "{:#x}", test);
         test = !test & 0x7FFF_FFFFFFFF_FFFF;
 
-        assert_eq!(mark.0 as u64, test, "test: {:#x} {:#x}", mark.0, test);
+        assert_eq!(mark.idx as u64, test, "test: {:#x} {:#x}", mark.idx, test);
 
         let top = (dna & !0x55 & 0xFFFF_FFFF) << 32;
         let bottom = (dna >> 32) & 0x55;
         assert_eq!(
-            mark.0 as u64,
+            mark.idx as u64,
             (!dna ^ (top | bottom)) & 0x7FFF_FFFFFFFF_FFFF,
             "top|bottom: {:#x} {:#x}",
-            mark.0 as u64,
+            mark.idx as u64,
             (!dna ^ (top | bottom)) & 0x7FFF_FFFFFFFF_FFFF
         );
-        assert_eq!(mark.0 as u64, 0x404c5b50543fde0, "{:#x}", mark.0 as u64);
-        assert_eq!(mark.1.x(), 0x55);
+        assert_eq!(mark.idx as u64, 0x404c5b50543fde0, "{:#x}", mark.idx as u64);
+        assert_eq!(mark.p.x(), 0x55);
 
-        let mut undo = mark.0 as u64;
+        let mut undo = mark.idx as u64;
         undo ^= 0xFFFF_FFFFFFFF_FFFF;
         undo = kc.xmer_hash(undo as usize, 0x55) as u64;
         assert_eq!(undo, dna, "undo: {:#x} {:#x}", undo, dna);
 
         kc.extend_xmer(&mut mark).unwrap();
-        assert_eq!(mark.1.x(), 0x56);
+        assert_eq!(mark.p.x(), 0x56);
 
         let same = kmer.get_hash_and_p(&kc, 0x56);
-        assert_eq!(mark.0, same.0, "undo: {:#x} {:#x}", mark.0, same.0);
+        assert_eq!(mark.idx, same.idx, "undo: {:#x} {:#x}", mark.idx, same.idx);
 
         for _ in 0..100 {
             kc.extend_xmer(&mut mark).unwrap();
-            let same = kmer.get_hash_and_p(&kc, mark.1.x());
-            assert_eq!(mark.0, same.0, "undo: {:#x} {:#x}", mark.0, same.0);
+            let same = kmer.get_hash_and_p(&kc, mark.p.x());
+            assert_eq!(mark.idx, same.idx, "undo: {:#x} {:#x}", mark.idx, same.idx);
         }
     }
 

@@ -7,6 +7,7 @@ use crate::new_types::{
     xmer::Xmer,
 };
 use crate::rdbg::STAT_DB;
+use crate::xmer_location::XmerLoc;
 use anyhow::Result;
 
 pub trait Scope {
@@ -21,7 +22,7 @@ pub trait Scope {
         stored_p: ExtPosEtc,
         min_p: ExtPosEtc,
     ) -> Option<Position>;
-    fn set_mark(&mut self, idx: usize, p: ExtPosEtc);
+    fn set_mark(&mut self, mark: &XmerLoc);
     fn increment(&mut self, b2: TwoBit);
     fn ascii_to_b3(&self, b: &u8) -> ThreeBit {
         ThreeBit::from((self.get_pos(), *b))
@@ -33,47 +34,43 @@ pub trait WritingScope: Scope {
     fn set_period(&mut self, period: Position);
     fn unset_period(&mut self);
 
-    fn try_store_mark(
-        &mut self,
-        ks: &mut KmerStore,
-        mark: &mut (usize, ExtPosEtc),
-    ) -> Result<bool> {
-        if self.is_repetitive() && ks.kmp[mark.0].is_set() {
-            ks.kmp[mark.0].set_repetitive();
+    fn try_store_mark(&mut self, ks: &mut KmerStore, mark: &mut XmerLoc) -> Result<bool> {
+        if self.is_repetitive() && ks.kmp[mark.idx].is_set() {
+            ks.kmp[mark.idx].set_repetitive();
             return Ok(false);
         }
-        let old_stored_p = ks.kmp[mark.0];
+        let old_stored_p = ks.kmp[mark.idx];
 
         if old_stored_p.is_zero() {
-            ks.set_kmp(mark.0, mark.1);
+            ks.set_kmp(&mark);
             return Ok(false);
         }
-        if old_stored_p.is_replaceable_by(mark.1) {
-            if old_stored_p.pos() != mark.1.pos() {
-                dbg_print!("[{:x}] -> {:?} (?)", mark.0, old_stored_p);
-                if old_stored_p.x() == mark.1.x() {
+        if old_stored_p.is_replaceable_by(mark.p) {
+            if old_stored_p.pos() != mark.p.pos() {
+                ks.set_kmp(&mark);
+                if old_stored_p.x() == mark.p.x() {
                     // same extension means same base k-mer origin. this is a duplicate.
-                    ks.kmp[mark.0].mark_more_recurs_upseq();
+                    ks.kmp[mark.idx].mark_more_recurs_upseq();
                 }
-                ks.set_kmp(mark.0, mark.1);
-                mark.1 = old_stored_p;
+                mark.p = old_stored_p;
+                dbg_print!("[{:x}] -> {:?} (?)", mark.idx, mark.p);
                 return Ok(true);
             }
-            // .. else set and already mark.1. Then leave bit states.
+            // .. else set and already mark.p. Then leave bit states.
             return Ok(false);
         }
-        if old_stored_p.extension() == mark.1.extension() {
+        if old_stored_p.extension() == mark.p.extension() {
             // this must be the same k-mer origin, meaning identical k-mer sequence.
 
             // If a kmer occurs multiple times within an extending readlength (repetition),
             // only the first gets a position. During mapping this should be kept in mind.
-            if let Some(dist) = self.dist_if_repetitive(ks, old_stored_p, mark.1) {
+            if let Some(dist) = self.dist_if_repetitive(ks, old_stored_p, mark.p) {
                 self.set_period(dist);
                 // TODO: repetitive should be moved to higher extensions.
-                ks.kmp[mark.0].set_repetitive();
+                ks.kmp[mark.idx].set_repetitive();
                 return Ok(false);
             }
-            ks.kmp[mark.0].mark_more_recurs_upseq();
+            ks.kmp[mark.idx].mark_more_recurs_upseq();
         }
         // collision with a different baseindex, it had greater extension.
         // the current baseindex will be extended and tried again.
@@ -83,25 +80,25 @@ pub trait WritingScope: Scope {
 
     fn store_mark(&mut self, ks: &mut KmerStore, i: usize) -> Result<()> {
         let mut mark = self.get_d(i).get_hash_and_p(self.get_kc(), 0);
-        self.set_mark(mark.0, mark.1);
-        let orig_pos = mark.1.pos();
+        self.set_mark(&mark);
+        let orig_pos = mark.p.pos();
         // this seems to be hotlooping
         while self.try_store_mark(ks, &mut mark)? {
-            if mark.1.pos() != orig_pos {
+            if mark.p.pos() != orig_pos {
                 if self.get_kc().extend_xmer(&mut mark).is_ok() {
                     // extending some pase baseidx. TODO: if frequently the same recurs,
                     // it might be worthwhile to store the reverse complement in a temp
                     // we should not store a past index in self.mark.p !!
                 } else {
-                    dbg_print!("couldn't extend: [{}] {:?} ..?", mark.0, mark.1);
+                    dbg_print!("couldn't extend: [{}] {:?} ..?", mark.idx, mark.p);
                     break;
                 }
             } else {
-                if mark.1.extend().is_err() {
+                if mark.p.extend().is_err() {
                     break;
                 }
-                mark = self.get_d(i).get_hash_and_p(self.get_kc(), mark.1.x());
-                self.set_mark(mark.0, mark.1);
+                mark = self.get_d(i).get_hash_and_p(self.get_kc(), mark.p.x());
+                self.set_mark(&mark);
             }
         }
         Ok(())

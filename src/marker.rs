@@ -7,10 +7,7 @@ extern crate num_traits;
 use crate::head_scope::HeadScope;
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
-use crate::new_types::{
-    position::{BasePos, Position},
-    twobit::ThreeBit,
-};
+use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use crate::scope::{Scope, WritingScope};
 use anyhow::Result;
@@ -45,7 +42,6 @@ impl<'a> KmerIter<'a> {
             // clearing extension on first position fails assert on is_set()
             self.scp.p.clear_extension();
         }
-        self.scp.mark.reset();
         self.scp.mod_i = 0;
         // If a repetition ends in an N-stretch, thereafter offset to period
         // may differ or the repetition could be different or entirely gone.

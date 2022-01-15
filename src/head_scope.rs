@@ -1,9 +1,10 @@
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
-use crate::new_types::extended_position::{ExtPosEtc, KmerLoc};
+use crate::new_types::extended_position::ExtPosEtc;
 use crate::new_types::{position::Position, twobit::TwoBit, xmer::Xmer};
 use crate::rdbg::STAT_DB;
 use crate::scope::{Scope, WritingScope};
+use crate::xmer_location::XmerLoc;
 use anyhow::Result;
 use smallvec::{smallvec, SmallVec};
 use std::fmt;
@@ -14,7 +15,7 @@ pub struct HeadScope<'a> {
     pub p: ExtPosEtc,
     d: SmallVec<[Xmer; SCOPE_WIDTH_MAX]>,
     z: SmallVec<[usize; SCOPE_WIDTH_MAX]>,
-    pub mark: KmerLoc,
+    pub mark: XmerLoc,
     pub i: usize,
     pub mod_i: usize,
     pub period: Position,
@@ -27,7 +28,7 @@ impl<'a> HeadScope<'a> {
             p: ExtPosEtc::zero(),
             d: smallvec![Xmer::new(); kc.no_kmers],
             z: (0..kc.no_kmers).into_iter().collect::<SmallVec<_>>(),
-            mark: KmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
+            mark: XmerLoc::new(usize::max_value(), ExtPosEtc::zero()),
             i: 0,
             mod_i: 0,
             period: Position::zero(),
@@ -127,9 +128,9 @@ impl<'a> Scope for HeadScope<'a> {
         None
     }
 
-    fn set_mark(&mut self, idx: usize, p: ExtPosEtc) {
-        dbg_print!("[{:x}] = {:?}", idx, p);
-        self.mark.set(idx, p);
+    fn set_mark(&mut self, mark: &XmerLoc) {
+        dbg_print!("{:?} (mark, head)", mark);
+        self.mark = *mark;
     }
 
     fn increment(&mut self, b2: TwoBit) {

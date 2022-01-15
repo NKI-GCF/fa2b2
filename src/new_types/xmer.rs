@@ -5,6 +5,7 @@ use super::{
 };
 use crate::kmerconst::KmerConst;
 use crate::new_types::extended_position::ExtPosEtc;
+use crate::xmer_location::XmerLoc;
 //use crate::rdbg::STAT_DB;
 use std::cmp;
 
@@ -69,11 +70,9 @@ impl Xmer {
     pub(crate) fn get_hash(&self, kc: &KmerConst, x: usize) -> usize {
         kc.hash_and_compress(self.get_base_seq(), x)
     }
-    pub(crate) fn get_hash_and_p(&self, kc: &KmerConst, x: usize) -> (usize, ExtPosEtc) {
-        (
-            self.get_hash(kc, x),
-            ExtPosEtc::from((Extension::from(x), self.pos)),
-        )
+    pub(crate) fn get_hash_and_p(&self, kc: &KmerConst, x: usize) -> XmerLoc {
+        let p = ExtPosEtc::from((Extension::from(x), self.pos));
+        XmerLoc::new(self.get_hash(kc, x), p)
     }
 
     /// a sequence specific index, the same when read in other orientation

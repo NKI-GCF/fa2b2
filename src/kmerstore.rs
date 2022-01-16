@@ -19,9 +19,11 @@ pub struct Contig {
 
 pub type Repeat = (u32, u32);
 
+// XXX if repeats are regular and gt readlen, why store them in ks.b2?
+
 #[derive(Serialize, Deserialize)]
 pub struct KmerStore {
-    pub(crate) pos_max: Position,
+    b6pos: usize,
     pub(crate) opt: u64,
     pub(crate) b2: Vec<u8>,
     pub(crate) kmp: Vec<ExtPosEtc>, // position + strand per k-mer.
@@ -35,7 +37,7 @@ impl KmerStore {
     pub(crate) fn new(bitlen: usize, rep_max_dist: u32, seed: u16) -> Result<Self> {
         let shift = bitlen - 2;
         Ok(KmerStore {
-            pos_max: Position::default(),
+            b6pos: 0,
             opt: 0,
             rep_max_dist: Position::from_basepos(rep_max_dist),
             b2: vec![0; 1 << shift], // sequence (4 per u8).
@@ -56,13 +58,10 @@ impl KmerStore {
         });
     }
     /// Adjust offset for contig.
-    pub(crate) fn offset_contig(&mut self, offset: &mut BasePos) -> BasePos {
-        let stretch = *offset;
+    pub(crate) fn update_contig_genomic_offset(&mut self, goffs: BasePos) {
         if let Some(ctg) = self.contig.last_mut() {
-            ctg.genomic += stretch;
+            ctg.genomic = goffs;
         }
-        offset.to_default();
-        stretch
     }
     pub(crate) fn set_kmp(&mut self, mark: &XmerLoc) {
         dbg_print!("{} (stored)", mark);
@@ -73,6 +72,18 @@ impl KmerStore {
     }
     pub(crate) fn is_on_last_contig(&self, pos: Position) -> bool {
         pos >= self.contig.last().unwrap().twobit
+    }
+    pub(crate) fn store_b2(&mut self, b2: TwoBit) -> Result<()> {
+        if let Some(qb2) = self.b2.get_mut(self.b6pos >> 3) {
+            *qb2 |= b2.as_u8() << (self.b6pos & 6);
+            self.b6pos += 2;
+            Ok(())
+        } else {
+            bail!("out of bounds for ks.b2: {}", self.get_pos())
+        }
+    }
+    pub(crate) fn get_pos(&self) -> Position {
+        Position::from_basepos((self.b6pos >> 1) as u64)
     }
 
     /// binary search contig lower boundary
@@ -94,29 +105,26 @@ impl KmerStore {
 
         dbg_assert!(i < self.contig.len());
         dbg_assert!(self.contig[i].twobit <= pos);
-        PosRange::from((
-            self.get_twobit_before(i)
-                .unwrap_or_else(|_| Position::default()),
-            self.get_twobit_after(i).unwrap_or(self.pos_max),
-        ))
+        PosRange::from((self.get_twobit_before(i), self.get_twobit_after(i)))
     }
-    fn get_twobit_after(&self, i: usize) -> Result<Position> {
-        ensure!(i + 1 < self.contig.len()); // End of contig
-        Ok(self.contig[i + 1].twobit)
+    fn get_twobit_after(&self, i: usize) -> Position {
+        self.contig
+            .get(i + 1)
+            .map(|c| c.twobit)
+            .unwrap_or(self.get_pos())
     }
-    fn get_twobit_before(&self, i: usize) -> Result<Position> {
-        ensure!(i != 0); // Start of contig
-        Ok(self.contig[i - 1].twobit)
+    fn get_twobit_before(&self, i: usize) -> Position {
+        i.checked_sub(1)
+            .map(|t| self.contig[t].twobit)
+            .unwrap_or(Position::default())
     }
-    pub(crate) fn b2_for_p(&self, pos: Position, is_repeat: bool) -> Result<TwoBit> {
-        ensure!(
-            pos < self.pos_max || is_repeat,
+    pub(crate) fn b2_for_pos(&self, pos: Position, is_repeat: bool) -> TwoBit {
+        let byte_pos = pos.byte_pos();
+        dbg_assert!(
+            pos < self.get_pos() || is_repeat,
             "running into sequence head"
         );
-        self.b2
-            .get(pos.byte_pos())
-            .map(|b2x4| TwoBitx4::from(b2x4).to_b2(pos, is_repeat))
-            .ok_or_else(|| anyhow!("stored pos past contig?"))
+        TwoBitx4::from(&self.b2[byte_pos]).to_b2(pos, is_repeat)
     }
     pub(crate) fn extend_repetitive(&mut self, min_pos: Position, dist: BasePos) {
         let dist_u32 =
@@ -149,21 +157,23 @@ mod tests {
         //let mut ks = KmerStore::new(32); // allocates 16 gig of data
         let mut ks = KmerStore::new(2, 10_000, 0)?;
         let mut p = ExtPosEtc::default();
-        let goffs = 0;
+        let mut goffs = BasePos::default();
 
         ks.push_contig(p.pos(), BasePos::from(goffs));
         let mut stretch = BasePos::from(10_000);
-        dbg_assert!(ks.offset_contig(&mut stretch) == BasePos::from(10_000)); // simulate N-stretch of 10000
-        dbg_assert!(!stretch.is_set());
+        goffs += stretch;
+        ks.update_contig_genomic_offset(goffs); // simulate N-stretch of 10000
 
         stretch = BasePos::from(64_u64);
         p = ExtPosEtc::from(p.pos() + Position::from(stretch)); // one readlength
+        goffs += BasePos::from(p.pos());
         ks.push_contig(p.pos(), BasePos::from(goffs));
-        let _ = ks.offset_contig(&mut stretch);
+        ks.update_contig_genomic_offset(goffs);
 
         ks.push_contig(p.pos(), BasePos::from(goffs));
         stretch = BasePos::from(10_000);
-        let _ = ks.offset_contig(&mut stretch); // another N-stretch of 10000
+        goffs += stretch;
+        ks.update_contig_genomic_offset(goffs); // another N-stretch of 10000
         ks.push_contig(p.pos(), BasePos::from(goffs));
 
         let i = ks.get_contig(Position::from(BasePos::from(5_508_u64)));

@@ -17,43 +17,93 @@ use noodles_fasta as fasta;
 pub struct KmerIter<'a> {
     pub(super) scp: HeadScope<'a>,
     pub(super) ks: &'a mut KmerStore,
+    n_stretch: BasePos,
+    goffs: BasePos,
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
     pub(crate) fn new(ks: &'a mut KmerStore, kc: &'a KmerConst) -> Self {
         let scp = HeadScope::new(kc);
-        KmerIter { scp, ks }
+        KmerIter {
+            scp,
+            ks,
+            n_stretch: BasePos::default(),
+            goffs: BasePos::default(),
+        }
     }
-    fn init_contig(&mut self) -> Position {
+    fn init_chromosome_accounting(&mut self) -> Position {
         // we start with no offset on contig, if starting with N's, the stored goffs gets updated
         // we start with no offset on contig, if starting with N's, the stored goffs gets updated
-        let pos = self.scp.reset_for_new_contig();
-        self.ks.push_contig(pos, BasePos::default());
-        pos
+        self.goffs.to_default();
+        self.n_stretch.to_default();
+        self.scp.partial_reset_get_pos(true)
+    }
+
+    /// Finalize an N-stretch, update stored offsets and prepare to process sequence.
+    pub(crate) fn finalize_n_stretch(&mut self) {
+        if self.n_stretch.is_set() {
+            self.goffs += self.n_stretch;
+            dbg_print!("N-stretch of {} (goffs: {})", self.n_stretch, self.goffs);
+            self.ks.update_contig_genomic_offset(self.goffs);
+            self.n_stretch.to_default();
+        }
+    }
+
+    fn spawn_process_coding(&mut self) -> Result<()> {
+        let mut coding_pos = self.scp.partial_reset_get_pos(false);
+        let ahead_pos = self.ks.get_pos();
+        self.goffs += BasePos::from(ahead_pos - coding_pos);
+        dbg_print!(
+            "processing coding: {}-{} (goffs: {})",
+            BasePos::from(coding_pos),
+            BasePos::from(ahead_pos),
+            self.goffs
+        );
+
+        // if last spawn is still running, block, otherwise spawn task
+        // retrieving twobits from first_pos to pos, and processing them in
+        // complete_and_update_mark
+        while coding_pos != ahead_pos {
+            let b2 = self.ks.b2_for_pos(coding_pos, false);
+            self.scp.complete_and_update_mark(self.ks, b2)?;
+            coding_pos.incr();
+        }
+        // NB. if we push this before complete_and_update_mark, then the test for repeat
+        // is_on_last_contig() does not work. Maybe change this if repeat can be handled
+        // while storing sequence.
+        self.ks.push_contig(ahead_pos, self.goffs);
+        Ok(())
     }
 
     // TODO: spawn tasks per stretch of non-ambiguous sequence (not N).
     pub(crate) fn markcontig(&mut self, record: fasta::Record) -> Result<()> {
-        let chr_coding_start = self.init_contig();
+        let chr_coding_start = self.init_chromosome_accounting();
+        self.ks.push_contig(chr_coding_start, self.goffs);
 
         let mut seq = record.sequence().as_ref().iter();
 
         while let Some(b3) = seq.next().map(ThreeBit::from) {
             if let Ok(b2) = TwoBit::try_from(b3) {
-                // no third bit for A, C, T or G.
-                if let Some(qb) = self.ks.b2.get_mut(pos.byte_pos()) {
-                    *qb |= b2.pos_shift(pos).as_u8();
-                    // NB. position is incremented after store_b2()
+                // NB. test must occur before store_b2(), which updates position.
+                if !self.scp.is_coding_sequence_pending(&self.ks) {
+                    self.finalize_n_stretch();
                 }
                 // TODO: also skip repetitive !! then administration should go here!
-                self.scp.complete_and_update_mark(b2, self.ks)?;
+                self.ks.store_b2(b2)?;
             } else {
                 // past readlen - kmerlen, or we could overcome
-                self.scp.elongate_n_stretch(self.ks, pos);
+                if self.scp.is_coding_sequence_pending(&self.ks) {
+                    self.spawn_process_coding()?;
+                }
+                self.n_stretch.add_assign(1_u64);
             }
         }
         dbg_print!("At end, processing last:");
-        self.scp.finalize_n_stretch(self.ks);
+        if self.scp.is_coding_sequence_pending(&self.ks) {
+            self.spawn_process_coding()?;
+        } else {
+            self.finalize_n_stretch();
+        }
 
         if record.name() != "test" {
             if let Some(contig) = self.ks.contig.last() {
@@ -126,7 +176,7 @@ mod tests {
         dbg_assert_eq!(ks.contig.len(), 2);
         dbg_assert_eq!(ks.contig[0].twobit, Position::default());
         dbg_assert_eq!(ks.contig[0].genomic, 1.into());
-        dbg_assert_eq!(ks.contig[1].twobit, Position::from_basepos(1_u64));
+        dbg_assert_eq!(ks.contig[1].twobit, Position::from_basepos(1_u64)); //XXX
         dbg_assert_eq!(ks.contig[1].genomic, 3.into());
         Ok(())
     }

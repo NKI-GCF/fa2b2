@@ -25,8 +25,6 @@ pub struct HeadScope<'a> {
     i: usize, //TODO: increment this only per mod_i, then could be u32, could matter for padding
     mod_i: usize,
     pub(crate) repetitive: u32,
-    n_stretch: BasePos,
-    goffs: BasePos,
     period: Position,
 }
 
@@ -41,13 +39,30 @@ impl<'a> HeadScope<'a> {
             i: 0,
             mod_i: 0,
             repetitive: 0,
-            n_stretch: BasePos::default(),
-            goffs: BasePos::default(),
             period: Position::default(),
         }
     }
     pub(crate) fn get_pos(&self) -> Position {
         self.p.pos()
+    }
+
+    /// clear sequence accounting for the processing of more sequence.
+    pub(crate) fn partial_reset_get_pos(&mut self, is_chromosome_start: bool) -> Position {
+        if is_chromosome_start {
+            self.repetitive = 0;
+        }
+        // TODO: allow repetition to include N-stretch - if both sides of N-stretch show the same repetition.
+        // If a repetition ends in an N-stretch, thereafter offset to period
+        // may differ or the repetition could be different or entirely gone.
+        self.period.to_default();
+
+        self.i = 0;
+        self.mod_i = 0;
+        self.p.pos()
+    }
+
+    pub(crate) fn is_coding_sequence_pending(&self, ks: &KmerStore) -> bool {
+        ks.get_pos() != self.get_pos()
     }
 
     // .i & .p increments en kmer .d[] updates vinden plaats.
@@ -56,7 +71,16 @@ impl<'a> HeadScope<'a> {
         ks: &mut KmerStore,
         b2: TwoBit,
     ) -> Result<()> {
-        self.manage_former_ns_and_period(ks, b2)?;
+        if self.period.is_set() {
+            let pd = self.period;
+            let pos = self.p.pos();
+            dbg_assert!(pd <= pos, "{} {}", pd, self.p);
+            if ks.b2_for_pos(pos - pd, true) == b2 {
+                self.update_repetitive(ks, pd);
+            } else {
+                self.period.to_default();
+            }
+        }
         if self.update() {
             // one mark is added, and one leaving. both influence mark (and order).
             let i = self.pick_mark();
@@ -88,55 +112,6 @@ impl<'a> HeadScope<'a> {
         }
         self.increment(b2);
         Ok(())
-    }
-
-    fn manage_former_ns_and_period(&mut self, ks: &mut KmerStore, b2: TwoBit) -> Result<()> {
-        self.finalize_n_stretch(ks);
-        if self.period.is_set() {
-            let pd = self.period;
-            let pos = self.p.pos();
-            dbg_assert!(pd <= pos, "{} {}", pd, self.p);
-            if ks.b2_for_p(pos - pd, true)? == b2 {
-                self.update_repetitive(ks, pd);
-            } else {
-                self.period = Position::default();
-            }
-        }
-        Ok(())
-    }
-    /// Finalize an N-stretch, update stored offsets and prepare to process sequence.
-    pub(crate) fn finalize_n_stretch(&mut self, ks: &mut KmerStore) {
-        if self.n_stretch.is_set() {
-            dbg_print!("added new contig. Ns:{}", self.n_stretch);
-            self.goffs += ks.offset_contig(&mut self.n_stretch);
-
-            // clear all to rebuild at the start of a new contig.
-            self.p.clear_extension();
-            self.mod_i = 0;
-            // If a repetition ends in an N-stretch, thereafter offset to period
-            // may differ or the repetition could be different or entirely gone.
-            // TODO: allow repetition to include N-stretch - if both sides of N-stretch show the same repetition.
-            self.period = Position::default();
-        }
-    }
-
-    pub(crate) fn reset_for_new_contig(&mut self) -> Position {
-        // we start with no offset on contig, if starting with N's, the stored goffs gets updated
-        self.goffs = BasePos::default();
-        self.n_stretch.to_default();
-        self.repetitive = 0;
-        self.p.pos()
-    }
-    pub(crate) fn elongate_n_stretch(&mut self, ks: &mut KmerStore, pos: Position) {
-        if self.i != 0 {
-            dbg_print!("started N-stretch at {}.", self.p.basepos());
-            self.goffs.add_assign(self.i as u64);
-            ks.push_contig(pos, self.goffs);
-
-            self.n_stretch.to_default();
-            self.i = 0;
-        }
-        self.n_stretch.add_assign(1_u64);
     }
 
     fn update_repetitive(&mut self, ks: &mut KmerStore, pd: Position) {
@@ -216,19 +191,14 @@ impl<'a> Scope for HeadScope<'a> {
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
     /// true if we have at least one kmer.
     fn update(&mut self) -> bool {
-        // XXX: function is hot
-        if self.i >= self.kc.kmerlen {
-            let old_d = self.d[self.mod_i];
-            self.mod_i += 1;
-            if self.mod_i == self.kc.no_kmers {
-                self.mod_i = 0;
-            }
-            self.d[self.mod_i] = old_d;
-            self.d[self.mod_i].pos = self.p.pos();
-            true
-        } else {
-            false
+        let old_d = self.d[self.mod_i];
+        self.mod_i += 1;
+        if self.mod_i == self.kc.no_kmers {
+            self.mod_i = 0;
         }
+        self.d[self.mod_i] = old_d;
+        self.d[self.mod_i].pos = self.p.pos();
+        self.i >= self.kc.kmerlen
     }
     fn pick_mark(&mut self) -> usize {
         let med = self.kc.no_kmers >> 1;

@@ -193,7 +193,6 @@ mod tests {
         let mut kmi = KmerIter::new(&mut ks, &kc);
         let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
             .to_owned();
-        kmi.ks.pos_max = Position::from_basepos(seq_vec.len() as u64);
         let definition = fasta::record::Definition::new("test", None);
         let sequence = fasta::record::Sequence::from(seq_vec);
         kmi.markcontig(fasta::Record::new(definition, sequence))?;
@@ -225,7 +224,6 @@ mod tests {
         for gen in 0..=4_usize.pow(seqlen as u32) {
             let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
             let mut kmi = KmerIter::new(&mut ks, &kc);
-            kmi.ks.pos_max = Position::from_basepos(seqlen as u64);
             let seq_vec: Vec<_> = (0..seqlen)
                 .map(|i| match (gen >> (i << 1)) & 3 {
                     0 => 'A',

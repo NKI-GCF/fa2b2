@@ -71,6 +71,9 @@ impl KmerStore {
     pub(crate) fn get_bitlen(&self) -> u8 {
         self.b2.len().trailing_zeros() as u8 + 2
     }
+    pub(crate) fn is_on_last_contig(&self, pos: Position) -> bool {
+        pos >= self.contig.last().unwrap().twobit
+    }
 
     /// binary search contig lower boundary
     fn get_contig(&self, pos: Position) -> usize {

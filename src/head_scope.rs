@@ -116,9 +116,6 @@ impl<'a> HeadScope<'a> {
         }
     }
 
-    fn is_on_last_contig(&self, ks: &KmerStore, pos: Position) -> bool {
-        pos >= ks.contig.last().unwrap().twobit
-    }
     pub(crate) fn reset_for_new_contig(&mut self) -> Position {
         // we start with no offset on contig, if starting with N's, the stored goffs gets updated
         self.goffs = BasePos::default();
@@ -253,7 +250,7 @@ impl<'a> Scope for HeadScope<'a> {
         let stored_pos = stored_p.pos();
         let mark_pos = min_p.pos();
         dbg_assert!(mark_pos > stored_pos);
-        if self.is_on_last_contig(ks, stored_pos) {
+        if ks.is_on_last_contig(stored_pos) {
             let dist = mark_pos - stored_pos;
             if dist < ks.rep_max_dist {
                 return Some(dist);

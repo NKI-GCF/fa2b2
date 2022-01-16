@@ -7,10 +7,13 @@ use std::fmt;
 #[derive(Debug)]
 pub struct ThreeBit(u8);
 
+pub(crate) type PosB3 = (Position, ThreeBit);
+
+// can't leak crate-private type so pub
 #[derive(Copy, Clone, PartialEq, new)]
 pub struct TwoBit(u8);
 
-pub struct TwoBitx4(u8);
+pub(crate) struct TwoBitx4(u8);
 
 #[derive(new, Copy, Clone, PartialEq, Eq, PartialOrd, From, Into)]
 pub(super) struct TwoBitDna(u64);
@@ -26,6 +29,11 @@ impl ThreeBit {
         } else {
             None
         }
+    }
+    pub(crate) fn get_pos_b3(pos: Position, ascii: u8) -> PosB3 {
+        let b3 = (ascii >> 1) & 0x7;
+        dbg_print!("{}: {} ({:x})", BasePos::from(pos), ascii as char, b3);
+        (pos, ThreeBit(b3))
     }
 }
 
@@ -99,19 +107,6 @@ impl fmt::Debug for TwoBit {
 impl From<&u8> for TwoBitx4 {
     fn from(val: &u8) -> TwoBitx4 {
         TwoBitx4(*val)
-    }
-}
-
-impl From<(Position, u8)> for ThreeBit {
-    fn from(val: (Position, u8)) -> ThreeBit {
-        let b2 = (val.1 >> 1) & 0x7;
-        dbg_print!(
-            "{}: {} ({:x})",
-            BasePos::from(val.0).as_u64(),
-            val.1 as char,
-            b2
-        );
-        ThreeBit(b2)
     }
 }
 

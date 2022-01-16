@@ -25,8 +25,7 @@ impl<'a> KmerIter<'a> {
     }
     fn init_contig(&mut self) -> Position {
         // we start with no offset on contig, if starting with N's, the stored goffs gets updated
-        self.scp.reset_for_new_contig();
-        let pos = self.scp.p.pos();
+        let pos = self.scp.reset_for_new_contig();
         self.ks.push_contig(pos, BasePos::default());
         pos
     }
@@ -37,8 +36,7 @@ impl<'a> KmerIter<'a> {
 
         let mut seq = record.sequence().as_ref().iter();
 
-        while let Some(b3) = seq.next().map(|b| self.scp.ascii_to_b3(b)) {
-            let pos = self.scp.p.pos();
+        while let Some((pos, b3)) = seq.next().map(|b| self.scp.ascii_to_b3(b)) {
             if let Some(b2) = b3.as_twobit_if_not_n() {
                 // no third bit for A, C, T or G.
                 // new sequence is also stored, to enable lookup later.

@@ -17,16 +17,16 @@ const SCOPE_WIDTH_MAX: usize = 128;
 
 pub struct HeadScope<'a> {
     kc: &'a KmerConst,
-    pub(crate) p: ExtPosEtc,
+    p: ExtPosEtc,
     d: SmallVec<[Xmer; SCOPE_WIDTH_MAX]>,
     z: SmallVec<[usize; SCOPE_WIDTH_MAX]>,
-    pub(crate) mark: XmerLoc,
-    pub(crate) i: usize, //TODO: increment this only per mod_i, then could be u32, could matter for padding
+    mark: XmerLoc,
+    i: usize, //TODO: increment this only per mod_i, then could be u32, could matter for padding
     mod_i: usize,
     pub(crate) repetitive: u32,
     n_stretch: BasePos,
     goffs: BasePos,
-    pub(crate) period: Position,
+    period: Position,
 }
 
 impl<'a> HeadScope<'a> {
@@ -125,11 +125,12 @@ impl<'a> HeadScope<'a> {
     fn is_on_last_contig(&self, ks: &KmerStore, pos: Position) -> bool {
         pos >= ks.contig.last().unwrap().twobit
     }
-    pub(crate) fn reset_for_new_contig(&mut self) {
+    pub(crate) fn reset_for_new_contig(&mut self) -> Position {
         // we start with no offset on contig, if starting with N's, the stored goffs gets updated
         self.goffs = BasePos::default();
         self.n_stretch.to_default();
         self.repetitive = 0;
+        self.p.pos()
     }
     pub(crate) fn elongate_n_stretch(&mut self, ks: &mut KmerStore, pos: Position) {
         if self.i != 0 {

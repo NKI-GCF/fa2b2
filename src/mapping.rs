@@ -74,7 +74,7 @@ impl<'a> Mapper<'a> {
 
     pub(crate) fn read_record(&mut self, record: fastq::Record) -> Result<()> {
         for b in record.sequence().iter() {
-            if let Some(b2) = self.ascii_to_b3(b).as_twobit_if_not_n() {
+            if let Some(b2) = self.ascii_to_b3(b).1.as_twobit_if_not_n() {
                 if self.update() {
                     // we weten extension op voorhand.
                     if let Some(i) = self.new_xmer_median() {

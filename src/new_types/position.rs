@@ -34,10 +34,11 @@ const BASEPOS_MASK: u64 = POS_MASK >> POS_SHIFT;
     Hash,
     Rem,
     Display,
-    Debug,
+    DebugCustom,
     Default,
 )]
 #[display(fmt = "{:#x}", _0)]
+#[debug(fmt = "{:#x}", _0)]
 pub struct Position(u64);
 
 // only bits set for postion, but not shifted yet
@@ -170,6 +171,10 @@ impl BasePos {
     }
     pub(crate) fn as_usize(&self) -> usize {
         usize::try_from(self.0).unwrap()
+    }
+    pub(crate) fn byte_pos(&self) -> usize {
+        // 4 twobits per byte.
+        (self.0 >> (BYTE_SHIFT - POS_SHIFT)) as usize
     }
     #[must_use = "this value should be used"]
     pub(crate) fn add<T>(&mut self, add: T) -> BasePos

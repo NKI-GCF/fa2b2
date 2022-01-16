@@ -260,7 +260,7 @@ impl<'a> Scope for HeadScope<'a> {
     }
 
     fn set_mark(&mut self, mark: &XmerLoc) {
-        dbg_print!("{} (mark, head)", mark);
+        dbg_print!("{}", mark);
         self.mark = *mark;
     }
 

@@ -30,7 +30,7 @@ const _INFO_MASK: u64 = 0x4;
 
 #[derive(
     Display,
-    Debug,
+    DebugCustom,
     Sub,
     Clone,
     Copy,
@@ -44,6 +44,7 @@ const _INFO_MASK: u64 = 0x4;
     Default,
 )]
 #[display(fmt = "{:#x}", _0)]
+#[debug(fmt = "{:#x}", _0)]
 pub struct ExtPosEtc(u64);
 
 /// The stored information per xmer: in u64 position, extension and flags:

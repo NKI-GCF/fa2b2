@@ -56,7 +56,7 @@ impl TwoBitx4 {
         // the third bit (for N) is actually never set, because we don't store those in TwoBitx4
         let b2 = TwoBit((self.0 >> pos.b2_shift()) & 3);
         if !for_repeat {
-            dbg_print!("{}: {:?}", BasePos::from(pos).as_u64(), b2);
+            dbg_print!("{}: {}", BasePos::from(pos).as_u64(), b2);
         }
         b2
     }
@@ -92,7 +92,7 @@ impl TwoBitRcDna {
     }
 }
 
-impl fmt::Debug for TwoBit {
+impl fmt::Display for TwoBit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             0 => write!(f, "A (0)"),

@@ -1,46 +1,54 @@
 use crate::kmerconst::RevCmp;
 use crate::new_types::position::{BasePos, Position};
 use crate::rdbg::STAT_DB;
+use anyhow::{bail, Error as AnyhowError};
 use derive_more::{From, Into};
 use std::fmt;
 
+/// N: 0x7, otherwise bits as in [Twobit]
 #[derive(Debug)]
 pub struct ThreeBit(u8);
 
-pub(crate) type PosB3 = (Position, ThreeBit);
-
-// can't leak crate-private type so pub
+// can't leak crate-private type error, unless pub.
+/// Twobit: A: 0x0, C: 0x1, T: 0x2, G: 0x3
 #[derive(Copy, Clone, PartialEq, new)]
 pub struct TwoBit(u8);
 
+/// Four [Twobits] packed in one u8.
 pub(crate) struct TwoBitx4(u8);
 
+/// At most 32 [Twobits] packed in one u64, but sometimes not all 32.
 #[derive(new, Copy, Clone, PartialEq, Eq, PartialOrd, From, Into)]
 pub(super) struct TwoBitDna(u64);
 
+// TODO: maybe shifting to the reverse complement to the bottom is less performant?
+/// At most 32 [Twobits] packed in one u64 and reverse complemented.
+/// by convention the reverse complement of a [TwoBitDna].
 #[derive(new, Copy, Clone, PartialEq, Eq, From, Into)]
 pub(super) struct TwoBitRcDna(u64);
 
-/// Twobits may be unexpected: N: 0x7, A: 0x0, C: 0x1, T: 0x2, G: 0x3
-impl ThreeBit {
-    pub(crate) fn as_twobit_if_not_n(&self) -> Option<TwoBit> {
-        if self.0 < 4 {
-            Some(TwoBit(self.0))
+impl TryFrom<ThreeBit> for TwoBit {
+    type Error = AnyhowError;
+
+    fn try_from(value: ThreeBit) -> Result<Self, Self::Error> {
+        if value.0 < 4 {
+            Ok(TwoBit(value.0))
         } else {
-            None
+            bail!("Ambiguous sequence")
         }
     }
-    pub(crate) fn get_pos_b3(pos: Position, ascii: u8) -> PosB3 {
-        let b3 = (ascii >> 1) & 0x7;
-        dbg_print!("{}: {} ({:x})", BasePos::from(pos), ascii as char, b3);
-        (pos, ThreeBit(b3))
+}
+
+impl From<&u8> for ThreeBit {
+    fn from(val: &u8) -> ThreeBit {
+        ThreeBit((*val >> 1) & 0x7)
     }
 }
 
 /// No N, 2 bits for code, same as above.
 impl TwoBit {
-    pub(crate) fn pos_shift(&self, pos: Position) -> TwoBitx4 {
-        TwoBitx4(self.0 << pos.b2_shift())
+    pub(crate) fn as_u8(&self) -> u8 {
+        self.0
     }
     pub(crate) fn as_kmer_top(&self, shift: u32) -> u64 {
         (self.0 as u64) << shift

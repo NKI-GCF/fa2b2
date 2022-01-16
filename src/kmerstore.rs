@@ -6,7 +6,7 @@ use crate::new_types::{
 use crate::rdbg::STAT_DB;
 use crate::xmer_location::XmerLoc;
 use ahash::AHashMap;
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering::{Equal, Greater, Less};
 use to_default::ToDefault;

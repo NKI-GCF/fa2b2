@@ -8,8 +8,9 @@ use crate::head_scope::HeadScope;
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::new_types::position::{BasePos, Position};
+use crate::new_types::twobit::{ThreeBit, TwoBit};
 use crate::rdbg::STAT_DB;
-use crate::scope::Scope;
+use crate::to_default::ToDefault;
 use anyhow::Result;
 use noodles_fasta as fasta;
 
@@ -25,34 +26,38 @@ impl<'a> KmerIter<'a> {
     }
     fn init_contig(&mut self) -> Position {
         // we start with no offset on contig, if starting with N's, the stored goffs gets updated
+        // we start with no offset on contig, if starting with N's, the stored goffs gets updated
         let pos = self.scp.reset_for_new_contig();
         self.ks.push_contig(pos, BasePos::default());
         pos
     }
 
-    // Dit kan beter, met tasks spawning per stretch of non-ambiguous sequence.
+    // TODO: spawn tasks per stretch of non-ambiguous sequence (not N).
     pub(crate) fn markcontig(&mut self, record: fasta::Record) -> Result<()> {
-        let coding_offset = self.init_contig();
+        let chr_coding_start = self.init_contig();
 
         let mut seq = record.sequence().as_ref().iter();
 
-        while let Some((pos, b3)) = seq.next().map(|b| self.scp.ascii_to_b3(b)) {
-            if let Some(b2) = b3.as_twobit_if_not_n() {
+        while let Some(b3) = seq.next().map(ThreeBit::from) {
+            if let Ok(b2) = TwoBit::try_from(b3) {
                 // no third bit for A, C, T or G.
-                // new sequence is also stored, to enable lookup later.
                 if let Some(qb) = self.ks.b2.get_mut(pos.byte_pos()) {
                     *qb |= b2.pos_shift(pos).as_u8();
+                    // NB. position is incremented after store_b2()
                 }
+                // TODO: also skip repetitive !! then administration should go here!
                 self.scp.complete_and_update_mark(b2, self.ks)?;
             } else {
+                // past readlen - kmerlen, or we could overcome
                 self.scp.elongate_n_stretch(self.ks, pos);
             }
         }
+        dbg_print!("At end, processing last:");
         self.scp.finalize_n_stretch(self.ks);
 
         if record.name() != "test" {
             if let Some(contig) = self.ks.contig.last() {
-                let coding: u64 = BasePos::from(contig.twobit - coding_offset).into();
+                let coding: u64 = BasePos::from(contig.twobit - chr_coding_start).into();
                 let n_count = u64::try_from(contig.genomic)?;
                 let complex: u64 = coding - self.scp.repetitive as u64;
                 let tot: u64 = coding + n_count;

@@ -3,7 +3,7 @@ use crate::kmerstore::KmerStore;
 use crate::new_types::extended_position::ExtPosEtc;
 use crate::new_types::{
     extension::Extension,
-    position::{BasePos, PosRange, Position},
+    position::{PosRange, Position},
     twobit::TwoBit,
     xmer::Xmer,
 };
@@ -77,7 +77,7 @@ impl<'a> PastScope<'a> {
                     }
                 }
             }
-            self.increment(ks.b2_for_p(self.p.pos(), false).unwrap());
+            self.increment(ks.b2_for_pos(self.p.pos(), false));
         }
         Ok(())
     }
@@ -87,10 +87,6 @@ impl<'a> PastScope<'a> {
 }
 
 impl<'a> Scope for PastScope<'a> {
-    fn get_pos(&self) -> Position {
-        self.p.pos()
-    }
-
     fn dist_if_repetitive(
         &self,
         ks: &KmerStore,

@@ -8,11 +8,12 @@ use crate::new_types::{
 };
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
+use crate::to_default::ToDefault;
 use crate::xmer_location::XmerLoc;
 use anyhow::Result;
 use smallvec::{smallvec, SmallVec};
 use std::fmt;
-use to_default::ToDefault;
+
 const SCOPE_WIDTH_MAX: usize = 128;
 
 pub struct HeadScope<'a> {
@@ -36,7 +37,7 @@ impl<'a> HeadScope<'a> {
             p: ExtPosEtc::default(),
             d: smallvec![Xmer::new(); kc.no_kmers],
             z: (0..kc.no_kmers).into_iter().collect::<SmallVec<_>>(),
-            mark: XmerLoc::new(usize::max_value(), ExtPosEtc::default()),
+            mark: XmerLoc::default(),
             i: 0,
             mod_i: 0,
             repetitive: 0,
@@ -45,12 +46,15 @@ impl<'a> HeadScope<'a> {
             period: Position::default(),
         }
     }
+    pub(crate) fn get_pos(&self) -> Position {
+        self.p.pos()
+    }
 
     // .i & .p increments en kmer .d[] updates vinden plaats.
     pub(crate) fn complete_and_update_mark(
         &mut self,
-        b2: TwoBit,
         ks: &mut KmerStore,
+        b2: TwoBit,
     ) -> Result<()> {
         self.manage_former_ns_and_period(ks, b2)?;
         if self.update() {
@@ -209,10 +213,6 @@ impl<'a> HeadScope<'a> {
 }
 
 impl<'a> Scope for HeadScope<'a> {
-    fn get_pos(&self) -> Position {
-        self.p.pos()
-    }
-
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
     /// true if we have at least one kmer.
     fn update(&mut self) -> bool {

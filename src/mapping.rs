@@ -1,7 +1,11 @@
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::new_types::extended_position::{ExtPosEtc, EXT_MAX};
-use crate::new_types::{position::Position, twobit::TwoBit, xmer::Xmer};
+use crate::new_types::{
+    position::Position,
+    twobit::{ThreeBit, TwoBit},
+    xmer::Xmer,
+};
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
 use crate::xmer_location::XmerLoc;
@@ -74,7 +78,7 @@ impl<'a> Mapper<'a> {
 
     pub(crate) fn read_record(&mut self, record: fastq::Record) -> Result<()> {
         for b in record.sequence().iter() {
-            if let Some(b2) = self.ascii_to_b3(b).1.as_twobit_if_not_n() {
+            if let Ok(b2) = TwoBit::try_from(ThreeBit::from(b)) {
                 if self.update() {
                     // we weten extension op voorhand.
                     if let Some(i) = self.new_xmer_median() {
@@ -89,9 +93,6 @@ impl<'a> Mapper<'a> {
 }
 
 impl<'a> Scope for Mapper<'a> {
-    fn get_pos(&self) -> Position {
-        self.p.pos()
-    }
     fn pick_mark(&mut self) -> usize {
         let med = self.kc.no_kmers >> 1;
         let i = self

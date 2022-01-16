@@ -73,7 +73,7 @@ impl<'a> HeadScope<'a> {
             if ks.b2_for_p(pos - pd, true)? == b2 {
                 self.update_repetitive(ks, pd);
             } else {
-                self.unset_period();
+                self.period = Position::default();
             }
         }
         Ok(())
@@ -115,13 +115,10 @@ impl<'a> HeadScope<'a> {
             // If a repetition ends in an N-stretch, thereafter offset to period
             // may differ or the repetition could be different or entirely gone.
             // TODO: allow repetition to include N-stretch - if both sides of N-stretch show the same repetition.
-            self.unset_period();
+            self.period = Position::default();
         }
     }
 
-    fn unset_period(&mut self) {
-        self.set_period(Position::default());
-    }
     fn is_on_last_contig(&self, ks: &KmerStore, pos: Position) -> bool {
         pos >= ks.contig.last().unwrap().twobit
     }
@@ -142,14 +139,6 @@ impl<'a> HeadScope<'a> {
             self.i = 0;
         }
         self.n_stretch.add_assign(1_u64);
-    }
-
-    fn is_repetitive(&self) -> bool {
-        self.period.is_set()
-    }
-    fn set_period(&mut self, period: Position) {
-        dbg_assert!(self.p.is_zero() || period < self.p.pos());
-        self.period = period;
     }
 
     fn update_repetitive(&mut self, ks: &mut KmerStore, pd: Position) {
@@ -185,7 +174,7 @@ impl<'a> HeadScope<'a> {
     }
 
     fn try_store_mark(&mut self, ks: &mut KmerStore, mark: &mut XmerLoc) -> Result<bool> {
-        if self.is_repetitive() && ks.kmp[mark.idx].is_set() {
+        if self.period.is_set() && ks.kmp[mark.idx].is_set() {
             ks.kmp[mark.idx].set_repetitive();
             return Ok(false);
         }
@@ -213,7 +202,8 @@ impl<'a> HeadScope<'a> {
             // If a kmer occurs multiple times within an extending readlength (repetition),
             // only the first gets a position. During mapping this should be kept in mind.
             if let Some(dist) = self.dist_if_repetitive(ks, old_stored_p, mark.p) {
-                self.set_period(dist);
+                dbg_assert!(dist < self.p.pos() || self.p.is_zero());
+                self.period = dist;
                 ks.kmp[mark.idx].set_repetitive();
                 return Ok(false);
             }

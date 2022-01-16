@@ -90,12 +90,6 @@ impl<'a> Scope for PastScope<'a> {
     fn get_pos(&self) -> Position {
         self.p.pos()
     }
-    fn get_kc(&self) -> &KmerConst {
-        self.kc
-    }
-    fn get_d(&self, i: usize) -> &Xmer {
-        &self.d[i]
-    }
 
     fn dist_if_repetitive(
         &self,

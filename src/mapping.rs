@@ -92,12 +92,6 @@ impl<'a> Scope for Mapper<'a> {
     fn get_pos(&self) -> Position {
         self.p.pos()
     }
-    fn get_kc(&self) -> &KmerConst {
-        self.kc
-    }
-    fn get_d(&self, i: usize) -> &Xmer {
-        &self.d[i]
-    }
     fn pick_mark(&mut self) -> usize {
         let med = self.kc.no_kmers >> 1;
         let i = self

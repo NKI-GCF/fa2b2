@@ -1,17 +1,13 @@
-use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::new_types::extended_position::ExtPosEtc;
 use crate::new_types::{
     position::Position,
     twobit::{PosB3, ThreeBit, TwoBit},
-    xmer::Xmer,
 };
 use crate::xmer_location::XmerLoc;
 
 pub trait Scope {
     fn get_pos(&self) -> Position;
-    fn get_kc(&self) -> &KmerConst;
-    fn get_d(&self, i: usize) -> &Xmer;
     fn update(&mut self) -> bool;
     fn pick_mark(&mut self) -> usize;
     fn dist_if_repetitive(

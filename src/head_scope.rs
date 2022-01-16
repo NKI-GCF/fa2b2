@@ -56,8 +56,30 @@ impl<'a> HeadScope<'a> {
         if self.update() {
             // one mark is added, and one leaving. both influence mark (and order).
             let i = self.pick_mark();
-            if self.d[i].pos != self.mark.p.pos() {
-                self.store_mark(ks, i)?;
+            if self.d[i].pos == self.mark.p.pos() {
+                return Ok(());
+            }
+            let mut mark = self.d[i].get_hash_and_p(self.kc, 0);
+            self.set_mark(&mark);
+            let orig_pos = mark.p.pos();
+            // this seems to be hotlooping
+            while self.try_store_mark(ks, &mut mark)? {
+                if mark.p.pos() != orig_pos {
+                    if self.kc.extend_xmer(&mut mark).is_ok() {
+                        // extending some pase baseidx. TODO: if frequently the same recurs,
+                        // it might be worthwhile to store the reverse complement in a temp
+                        // we should not store a past index in self.mark.p !!
+                    } else {
+                        dbg_print!("couldn't extend: {} ..?", mark);
+                        break;
+                    }
+                } else {
+                    if mark.p.extend().is_err() {
+                        break;
+                    }
+                    mark = self.d[i].get_hash_and_p(self.kc, mark.p.x());
+                    self.set_mark(&mark);
+                }
             }
         }
         self.increment(b2);
@@ -74,31 +96,6 @@ impl<'a> HeadScope<'a> {
                 self.update_repetitive(ks, pd);
             } else {
                 self.period = Position::default();
-            }
-        }
-        Ok(())
-    }
-    fn store_mark(&mut self, ks: &mut KmerStore, i: usize) -> Result<()> {
-        let mut mark = self.d[i].get_hash_and_p(self.get_kc(), 0);
-        self.set_mark(&mark);
-        let orig_pos = mark.p.pos();
-        // this seems to be hotlooping
-        while self.try_store_mark(ks, &mut mark)? {
-            if mark.p.pos() != orig_pos {
-                if self.get_kc().extend_xmer(&mut mark).is_ok() {
-                    // extending some pase baseidx. TODO: if frequently the same recurs,
-                    // it might be worthwhile to store the reverse complement in a temp
-                    // we should not store a past index in self.mark.p !!
-                } else {
-                    dbg_print!("couldn't extend: {} ..?", mark);
-                    break;
-                }
-            } else {
-                if mark.p.extend().is_err() {
-                    break;
-                }
-                mark = self.d[i].get_hash_and_p(self.get_kc(), mark.p.x());
-                self.set_mark(&mark);
             }
         }
         Ok(())
@@ -217,12 +214,6 @@ impl<'a> HeadScope<'a> {
 impl<'a> Scope for HeadScope<'a> {
     fn get_pos(&self) -> Position {
         self.p.pos()
-    }
-    fn get_kc(&self) -> &KmerConst {
-        self.kc
-    }
-    fn get_d(&self, i: usize) -> &Xmer {
-        &self.d[i]
     }
 
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation

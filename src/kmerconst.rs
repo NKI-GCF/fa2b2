@@ -100,7 +100,7 @@ impl KmerConst {
             overbit,
             xmer_mask,
             over_mask: overbit | xmer_mask,
-            seed: 0x5EED,
+            seed,
         }
     }
     #[inline(always)]

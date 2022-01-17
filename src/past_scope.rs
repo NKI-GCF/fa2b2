@@ -127,6 +127,7 @@ impl<'a> Scope for PastScope<'a> {
             self.d[self.mod_i].pos = self.p.pos();
             true
         } else {
+            self.i += 1;
             false
         }
     }
@@ -134,7 +135,6 @@ impl<'a> Scope for PastScope<'a> {
         // first bit is strand bit, set according to kmer orientation bit.
         self.p.set_ori(self.d[self.mod_i].update(self.kc, b2));
         self.p.incr_pos();
-        self.i += 1;
     }
     fn set_mark(&mut self, mark: &XmerLoc) {
         dbg_print!("{} (mark)", mark);

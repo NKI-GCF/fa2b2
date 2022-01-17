@@ -191,14 +191,19 @@ impl<'a> Scope for HeadScope<'a> {
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
     /// true if we have at least one kmer.
     fn update(&mut self) -> bool {
-        let old_d = self.d[self.mod_i];
-        self.mod_i += 1;
-        if self.mod_i == self.kc.no_kmers {
-            self.mod_i = 0;
+        if self.i >= self.kc.kmerlen {
+            let old_d = self.d[self.mod_i];
+            self.mod_i += 1;
+            if self.mod_i == self.kc.no_kmers {
+                self.mod_i = 0;
+            }
+            self.d[self.mod_i] = old_d;
+            self.d[self.mod_i].pos = self.p.pos();
+            true
+        } else {
+            self.i += 1;
+            false
         }
-        self.d[self.mod_i] = old_d;
-        self.d[self.mod_i].pos = self.p.pos();
-        self.i >= self.kc.kmerlen
     }
     fn pick_mark(&mut self) -> usize {
         let med = self.kc.no_kmers >> 1;
@@ -238,7 +243,6 @@ impl<'a> Scope for HeadScope<'a> {
         // first bit is strand bit, set according to kmer orientation bit.
         self.p.set_ori(self.d[self.mod_i].update(self.kc, b2));
         self.p.incr_pos();
-        self.i += 1;
     }
 }
 

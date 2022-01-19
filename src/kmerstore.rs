@@ -93,10 +93,9 @@ impl KmerStore {
         while size > 0 {
             size /= 2;
             let mid = base + size;
-            base = match (self.contig[mid].twobit).cmp(&pos) {
-                Less => mid,
-                Greater | Equal => base,
-            };
+            if self.contig[mid].twobit < pos {
+                base = mid;
+            }
         }
         base
     }

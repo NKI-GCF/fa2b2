@@ -7,8 +7,6 @@ use std::fmt;
 
 /// N: 0x7, otherwise bits as in [Twobit]
 #[derive(Debug)]
-pub struct ThreeBit(u8);
-
 // can't leak crate-private type error, unless pub.
 /// Twobit: A: 0x0, C: 0x1, T: 0x2, G: 0x3
 #[derive(Copy, Clone, PartialEq, new)]
@@ -27,26 +25,15 @@ pub(super) struct TwoBitDna(u64);
 #[derive(new, Copy, Clone, PartialEq, Eq, From, Into)]
 pub(super) struct TwoBitRcDna(u64);
 
-impl TryFrom<ThreeBit> for TwoBit {
-    type Error = AnyhowError;
-
-    fn try_from(value: ThreeBit) -> Result<Self, Self::Error> {
-        if value.0 < 4 {
-            Ok(TwoBit(value.0))
-        } else {
-            bail!("Ambiguous sequence")
-        }
-    }
-}
-
-impl From<&u8> for ThreeBit {
-    fn from(val: &u8) -> ThreeBit {
-        ThreeBit((*val >> 1) & 0x7)
-    }
-}
-
 /// No N, 2 bits for code, same as above.
 impl TwoBit {
+    // custom from because error is useless
+    pub(crate) fn from_u8(val: &u8) -> Option<Self> {
+        match (*val >> 1) & 0x7 {
+            b2 if b2 < 4 => Some(TwoBit(b2)),
+            _ => None,
+        }
+    }
     pub(crate) fn as_u8(&self) -> u8 {
         self.0
     }

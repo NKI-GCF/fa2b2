@@ -8,7 +8,7 @@ use crate::head_scope::HeadScope;
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::new_types::position::{BasePos, Position};
-use crate::new_types::twobit::{ThreeBit, TwoBit};
+use crate::new_types::twobit::TwoBit;
 use crate::rdbg::STAT_DB;
 use crate::to_default::ToDefault;
 use anyhow::Result;
@@ -82,8 +82,8 @@ impl<'a> KmerIter<'a> {
 
         let mut seq = record.sequence().as_ref().iter();
 
-        while let Some(b3) = seq.next().map(ThreeBit::from) {
-            if let Ok(b2) = TwoBit::try_from(b3) {
+        while let Some(res) = seq.next().map(TwoBit::from_u8) {
+            if let Some(b2) = res {
                 // NB. test must occur before store_b2(), which updates position.
                 if !self.scp.is_coding_sequence_pending(&self.ks) {
                     self.finalize_n_stretch();

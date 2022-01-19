@@ -1,9 +1,6 @@
 use crate::kmerstore::KmerStore;
 use crate::new_types::extended_position::ExtPosEtc;
-use crate::new_types::{
-    position::Position,
-    twobit::{ThreeBit, TwoBit},
-};
+use crate::new_types::{position::Position, twobit::TwoBit};
 use crate::xmer_location::XmerLoc;
 
 pub trait Scope {

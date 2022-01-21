@@ -33,7 +33,6 @@ impl<'a> KmerIter<'a> {
     }
     fn init_chromosome_accounting(&mut self) -> Position {
         // we start with no offset on contig, if starting with N's, the stored goffs gets updated
-        // we start with no offset on contig, if starting with N's, the stored goffs gets updated
         self.goffs.to_default();
         self.n_stretch.to_default();
         self.scp.partial_reset_get_pos(true)

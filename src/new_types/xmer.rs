@@ -109,7 +109,7 @@ mod tests {
         assert_eq!(vec![true; 256], seen);
     }
     #[test]
-    fn xmer_reversebility_in_xmer_wo_flip() {
+    fn xmer_reversability_in_xmer_wo_flip() {
         let kc = KmerConst::from_bitlen(64, 32, 0);
         let mut xmer: Xmer = Xmer::new();
         assert_eq!(kc.kmerlen, 32);
@@ -152,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn xmer_reversebility_in_xmer_with_flip() {
+    fn xmer_reversability_in_xmer_with_flip() {
         let kc = KmerConst::from_bitlen(64, 32, 0);
         let mut xmer: Xmer = Xmer::new();
         assert_eq!(kc.kmerlen, kc.kmerlen);

@@ -1,7 +1,7 @@
 use crate::kmerconst::RevCmp;
 use crate::new_types::position::{BasePos, Position};
 use crate::rdbg::STAT_DB;
-use anyhow::{bail, Error as AnyhowError};
+use crate::xmer_location::XmerLoc;
 use derive_more::{From, Into};
 use std::fmt;
 
@@ -17,13 +17,13 @@ pub(crate) struct TwoBitx4(u8);
 
 /// At most 32 [Twobits] packed in one u64, but sometimes not all 32.
 #[derive(new, Copy, Clone, PartialEq, Eq, PartialOrd, From, Into)]
-pub(super) struct TwoBitDna(u64);
+pub(crate) struct TwoBitDna(u64);
 
 // TODO: maybe shifting to the reverse complement to the bottom is less performant?
 /// At most 32 [Twobits] packed in one u64 and reverse complemented.
 /// by convention the reverse complement of a [TwoBitDna].
 #[derive(new, Copy, Clone, PartialEq, Eq, From, Into)]
-pub(super) struct TwoBitRcDna(u64);
+pub(crate) struct TwoBitRcDna(u64);
 
 /// No N, 2 bits for code, same as above.
 impl TwoBit {
@@ -62,7 +62,7 @@ impl TwoBitx4 {
 
 impl TwoBitDna {
     /// adds twobit to kmer dna sequences, in the top two bits.
-    pub(super) fn add(&mut self, b2: TwoBit, shift: u32) {
+    pub(crate) fn add(&mut self, b2: TwoBit, shift: u32) {
         self.0 = (self.0 >> 2) | b2.as_kmer_top(shift);
     }
     #[inline(always)]
@@ -79,7 +79,7 @@ impl TwoBitDna {
 
 impl TwoBitRcDna {
     /// adds reverse complement of twobit to reverse complement in the bottom.
-    pub(super) fn add(&mut self, b2: TwoBit, mask: u64) {
+    pub(crate) fn add(&mut self, b2: TwoBit, mask: u64) {
         self.0 = ((self.0 & mask) << 2) | b2.as_kmer_bottom_rc();
     }
     pub(crate) fn to_usize(self) -> usize {

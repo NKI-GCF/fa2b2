@@ -47,6 +47,8 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
         .transpose()?
         .unwrap();
 
+    // Ideally the seed should selecting against repetitive k-mers as a median.
+    // TODO: find out / theorize what seed may do this.
     if matches.occurrences_of("seed") != 0 {
         eprintln!("Warning, changing the seed for indexing and alignment makes your alignment not portable.");
     }

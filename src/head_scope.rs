@@ -1,63 +1,234 @@
-use crate::kmerconst::KmerConst;
+use crate::kmerconst::{KmerConst, XmerHash};
 use crate::kmerstore::KmerStore;
-use crate::new_types::extended_position::ExtPosEtc;
 use crate::new_types::{
-    position::{BasePos, Position},
-    twobit::TwoBit,
-    xmer::Xmer,
+    extended_position::ExtPosEtc,
+    extension::Extension,
+    position::Position,
+    twobit::{TwoBit, TwoBitDna, TwoBitRcDna},
 };
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
-use crate::to_default::ToDefault;
 use crate::xmer_location::XmerLoc;
-use anyhow::Result;
-use smallvec::{smallvec, SmallVec};
-use std::fmt;
+use moveslice::Moveslice;
+use std::cmp::Ordering;
+//std:sync::{mpsc, Arc},
+//std:thread,
 
-const SCOPE_WIDTH_MAX: usize = 128;
+const NTHREADS: usize = 16;
+
+// for this nr of xmers a median will be selected. Two strands, so 16 basepositions + kmer length.
+pub(crate) const NO_XMERS: usize = 32;
 
 pub struct HeadScope<'a> {
     kc: &'a KmerConst,
-    p: ExtPosEtc,
-    d: SmallVec<[Xmer; SCOPE_WIDTH_MAX]>,
-    z: SmallVec<[usize; SCOPE_WIDTH_MAX]>,
-    mark: XmerLoc,
-    i: usize, //TODO: increment this only per mod_i, then could be u32, could matter for padding
-    mod_i: usize,
-    pub(crate) repetitive: u32,
-    period: Position,
+    xmer_loc: [XmerLoc; NO_XMERS],
+    xmer_loc_ord: [usize; NO_XMERS],
+    pos_lookup: [ExtPosEtc; NO_XMERS],
+    mark_i: usize,
+    pos: Position,
+    dna: TwoBitDna,
+    rc: TwoBitRcDna,
+    i: usize,
+    rotation: usize,
 }
 
+/// Processes the sequence head. Filters ambiguous and passes through only median xmers within the
+/// scope NO_XMERS.
 impl<'a> HeadScope<'a> {
     pub(crate) fn new(kc: &'a KmerConst) -> Self {
         HeadScope {
             kc,
-            p: ExtPosEtc::default(),
-            d: smallvec![Xmer::new(); kc.no_kmers],
-            z: (0..kc.no_kmers).into_iter().collect::<SmallVec<_>>(),
-            mark: XmerLoc::default(),
+            xmer_loc: Default::default(),
+            xmer_loc_ord: (0..NO_XMERS).collect::<Vec<_>>().try_into().unwrap(),
+            pos_lookup: Default::default(),
+            mark_i: usize::MAX,
+            pos: Default::default(),
+            dna: TwoBitDna::new(0),
+            rc: TwoBitRcDna::new(0),
             i: 0,
-            mod_i: 0,
-            repetitive: 0,
-            period: Position::default(),
+            rotation: 0,
+        }
+    }
+    /// clear sequence accounting for the processing of more sequence.
+    pub(crate) fn reset_get_pos(&mut self) -> Position {
+        self.i = 0;
+        self.rotation = 0;
+        self.pos
+    }
+    pub(crate) fn get_xmer_loc(&self) -> Option<&XmerLoc> {
+        self.xmer_loc.get(self.mark_i)
+    }
+    pub(crate) fn is_coding_sequence_pending(&self, ks: &KmerStore) -> bool {
+        ks.get_pos() != self.pos
+    }
+    fn get_ready(&mut self) {
+        // Use the seed to hash. TODO: This hash should be undone before colision detection.
+        let ext = self.kc.seed;
+        let mut p = ExtPosEtc::from((Extension::from(ext), self.pos));
+
+        let template_hash = self.kc.xmer_hash(self.dna.to_usize(), ext);
+        self.xmer_loc[self.rotation].set(template_hash, p);
+        self.rotation += 1;
+
+        let reverse_complement_hash = self.kc.xmer_hash(self.dna.to_usize(), ext);
+        self.xmer_loc[self.rotation].set(reverse_complement_hash, p);
+        self.rotation += 1;
+    }
+
+    pub fn set_mark(&mut self) {}
+
+    /// If the median xmer changes, its position may already have been queued for this index. This
+    /// happens because a xmer can first be median, then not and later again be median within NO_KMERS.
+    ///
+    /// Secondly, only pass the first idx & pos for regularly repetitive sequences. Store the
+    /// number of repetitions is stored in a hashmap. Repetitions are also deemed 'unworthy' for storage.
+    ///
+
+    pub fn updated_median_xmer(&mut self, b2: TwoBit) -> Option<usize> {
+        let mut ret = None;
+        if self.i >= self.kc.no_kmers {
+            self.update();
+            // two marks are added for both strands, and two leave. either can become the new mark.
+            let i = self.xmer_loc_ord[self.kc.no_kmers >> 1];
+            if i != self.mark_i {
+                let test = &self.xmer_loc[i];
+                // use first bits of basepos | ori in array for lookup. Sufficient for within scope of NO_KMERS.
+                let scope_idx = test.get_scope_idx();
+                if self.pos_lookup[scope_idx] != test.p {
+                    // TODO: use self.mini_kmp to filter out duplicates
+                    self.pos_lookup[scope_idx] = test.p;
+                    ret = Some(i);
+                }
+            }
+        } else {
+            self.get_ready();
+        }
+        self.increment(b2);
+        ret
+    }
+    /// get hashed k-mer, with no compression of the orientation
+    fn get_hashed_kmer(&self, is_template: bool) -> usize {
+        let seq = if is_template {
+            self.dna.to_usize()
+        } else {
+            self.rc.to_usize()
+        };
+        self.kc.xmer_hash(seq, self.kc.seed)
+    }
+    fn get_xmer_loc_ord_leaving_and_inserted_indices(
+        &self,
+        inserted_value: usize,
+    ) -> (usize, usize) {
+        let rotation = self.rotation;
+        let xmer_loc = &self.xmer_loc;
+        let xmer_loc_ord = &self.xmer_loc_ord;
+        // The leaving xmer_loc to search is implied by the rotation.
+        // another array.
+        let leaving_index = xmer_loc_ord
+            .binary_search_by(|&i| {
+                xmer_loc[i]
+                    .idx
+                    .cmp(&xmer_loc[rotation].idx)
+                    .then(i.cmp(&rotation))
+            })
+            .unwrap();
+        // provide insertion value.
+        match xmer_loc_ord
+            .binary_search_by(|&i| xmer_loc[i].idx.cmp(&inserted_value).then(i.cmp(&rotation)))
+        {
+            Ok(v) => (leaving_index, v + 1),
+            Err(v) => (leaving_index, v),
+        }
+    }
+}
+impl<'a> Scope for HeadScope<'a> {
+    /// Two marks are added for both strands, and two leave. Order is maintained in kmer_idx for
+    /// median selection.
+    fn update(&mut self) {
+        // The seed is used to hash the xmer before median selection. A good seed should help select
+        // against repetitive sequences as median. On the other hand, the flipping of bits
+        // could double the effect of mismatches.
+        let ext = self.kc.seed;
+        let template_p = ExtPosEtc::from((Extension::from(ext), self.pos));
+
+        // binary search of the 2 insert sites for the pending in xmer_loc_ord.
+        for p in [template_p, template_p.get_rc()] {
+            // here the
+            let inserted_value = self.get_hashed_kmer(p.is_template());
+            let (leaving_index, inserted_index) =
+                self.get_xmer_loc_ord_leaving_and_inserted_indices(inserted_value);
+
+            match inserted_index.cmp(&leaving_index) {
+                Ordering::Less => {
+                    self.xmer_loc_ord
+                        .moveslice(inserted_index..leaving_index, inserted_index + 1);
+                    self.xmer_loc_ord[inserted_index] = self.rotation;
+                }
+                Ordering::Greater => {
+                    self.xmer_loc_ord
+                        .moveslice((leaving_index + 1)..inserted_index, leaving_index);
+                    self.xmer_loc_ord[inserted_index - 1] = self.rotation;
+                }
+                Ordering::Equal => {}
+            };
+            if self.mark_i == leaving_index {
+                self.mark_i = usize::MAX
+            }
+            self.xmer_loc[self.rotation].set(inserted_value, p);
+            self.rotation += 1;
+        }
+        if self.rotation == self.kc.no_kmers {
+            self.rotation = 0;
+        }
+    }
+    fn dist_if_repetitive(
+        &self,
+        ks: &KmerStore,
+        stored_p: ExtPosEtc,
+        min_p: ExtPosEtc,
+    ) -> Option<Position> {
+        // FIXME: the contig check was removed. for the upper bound that makes sense for head
+        // scope, as upperbound is pos_max rather than previous
+        let stored_pos = stored_p.pos();
+        let mark_pos = min_p.pos();
+        dbg_assert!(mark_pos > stored_pos);
+        if ks.is_on_last_contig(stored_pos) {
+            let dist = mark_pos - stored_pos;
+            if dist < ks.rep_max_dist {
+                return Some(dist);
+            }
+        }
+        None
+    }
+
+    fn set_mark(&mut self, i: usize) {
+        dbg_print!("{}", self.xmer_loc[i]);
+        self.mark_i = i;
+    }
+
+    /// add twobit to k-mers, increment pos for next median selection
+    fn increment(&mut self, b2: TwoBit) {
+        self.dna.add(b2, self.kc.dna_topb2_shift);
+        self.rc.add(b2, self.kc.rc_mask);
+        self.pos.incr()
+    }
+}
+
+/*pub struct OldHeadScope<'a> {
+    kc: &'a KmerConst,
+    p: ExtPosEtc,
+    mark: XmerLoc,
+}
+
+impl<'a> OldHeadScope<'a> {
+    pub(crate) fn new(kc: &'a KmerConst) -> Self {
+        OldHeadScope {
+            kc,
+            p: ExtPosEtc::default(),
+            mark: XmerLoc::default(),
         }
     }
     pub(crate) fn get_pos(&self) -> Position {
-        self.p.pos()
-    }
-
-    /// clear sequence accounting for the processing of more sequence.
-    pub(crate) fn partial_reset_get_pos(&mut self, is_chromosome_start: bool) -> Position {
-        if is_chromosome_start {
-            self.repetitive = 0;
-        }
-        // TODO: allow repetition to include N-stretch - if both sides of N-stretch show the same repetition.
-        // If a repetition ends in an N-stretch, thereafter offset to period
-        // may differ or the repetition could be different or entirely gone.
-        self.period.to_default();
-
-        self.i = 0;
-        self.mod_i = 0;
         self.p.pos()
     }
 
@@ -114,38 +285,6 @@ impl<'a> HeadScope<'a> {
         Ok(())
     }
 
-    fn update_repetitive(&mut self, ks: &mut KmerStore, pd: Position) {
-        // XXX waarom werkt dit op mark??
-        self.repetitive += 1;
-        let idx = self.mark.get_idx();
-        let stored = ks.kmp[idx];
-        if stored.is_set() {
-            let mark_pos = self.mark.p.pos();
-            let stored_pos = stored.pos();
-            if mark_pos != stored_pos {
-                if let Some(dist) = mark_pos.get_if_mark_on_period(stored_pos, pd) {
-                    if mark_pos > stored_pos {
-                        ks.extend_repetitive(mark_pos, dist);
-                    } else {
-                        dbg_print!(
-                            "repetitive occurs before already stored [{:x}] p {} <=> stored {}",
-                            idx,
-                            self.mark.p,
-                            stored
-                        );
-                        let _x = self.p.x();
-                        dbg_assert!(_x > 0);
-                        ks.replace_repetitive(stored_pos, mark_pos, dist);
-                        // FIXME: moet positie nu niet gezet worden, bij less?
-                    }
-                }
-            }
-        } else {
-            // XXX this occurs, is it an edge case or a bug?
-            dbg_print!("repeat with unset mark.idx (b2 corresponds) ??");
-        }
-    }
-
     fn try_store_mark(&mut self, ks: &mut KmerStore, mark: &mut XmerLoc) -> Result<bool> {
         if self.period.is_set() && ks.kmp[mark.idx].is_set() {
             ks.kmp[mark.idx].set_repetitive();
@@ -187,31 +326,23 @@ impl<'a> HeadScope<'a> {
     }
 }
 
-impl<'a> Scope for HeadScope<'a> {
+impl<'a> Scope for OldHeadScope<'a> {
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
     /// true if we have at least one kmer.
     fn update(&mut self) -> bool {
         if self.i >= self.kc.kmerlen {
-            let old_d = self.d[self.mod_i];
-            self.mod_i += 1;
-            if self.mod_i == self.kc.no_kmers {
-                self.mod_i = 0;
+            let old_d = self.d[self.rotation];
+            self.rotation += 1;
+            if self.rotation == self.kc.no_kmers {
+                self.rotation = 0;
             }
-            self.d[self.mod_i] = old_d;
-            self.d[self.mod_i].pos = self.p.pos();
+            self.d[self.rotation] = old_d;
+            self.d[self.rotation].pos = self.p.pos();
             true
         } else {
             self.i += 1;
             false
         }
-    }
-    fn pick_mark(&mut self) -> usize {
-        let med = self.kc.no_kmers >> 1;
-        let i = self
-            .z
-            .select_nth_unstable_by(med, |&a, &b| self.d[a].cmp(&self.d[b]))
-            .1;
-        *i
     }
 
     fn dist_if_repetitive(
@@ -241,40 +372,7 @@ impl<'a> Scope for HeadScope<'a> {
 
     fn increment(&mut self, b2: TwoBit) {
         // first bit is strand bit, set according to kmer orientation bit.
-        self.p.set_ori(self.d[self.mod_i].update(self.kc, b2));
+        self.p.set_ori(self.d[self.rotation].update(self.kc, b2));
         self.p.incr_pos();
     }
-}
-
-impl<'a> fmt::Display for HeadScope<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let p = self.p.unshift_pos() as usize;
-        let mp = self.mark.p.unshift_pos() as usize;
-        let n = self.kc.kmerlen + self.p.x();
-        let o = " ".repeat((p - self.kc.read_len) * 5);
-        let r = p - mp;
-        if r == 0 {
-            let x = self.kc.read_len - n;
-            let s = if x != 0 {
-                " ".repeat(x << 2) + "|"
-            } else {
-                String::from("")
-            };
-            write!(f, "{2}<{3}{: ^1$x}>", self.mark.get_idx(), n << 2, o, s)
-        } else if r + self.kc.kmerlen == self.kc.read_len {
-            let x = self.kc.read_len - n;
-            let s = if x != 0 {
-                String::from("|") + &" ".repeat(x << 2)
-            } else {
-                String::from("")
-            };
-            write!(f, "{2}<{: ^1$x}{3}>", self.mark.get_idx(), n << 2, o, s)
-        } else {
-            //let l = self.kc.read_len - r - n;
-            //let ls = if o {" ".repeat(o) + "|"} else {String::from("")};
-            //let rs = if l {String::from("|") + &" ".repeat(l << 2)} else {String::from("")};
-            //write!(f, "{2}<{3}|{: ^1$x}|{4}>", self.mark.idx, n << 2, o, ls, rs)
-            write!(f, "")
-        }
-    }
-}
+}*/

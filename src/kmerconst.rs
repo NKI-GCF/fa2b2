@@ -23,7 +23,7 @@ pub struct KmerConst {
 }
 
 pub trait RevCmp<T: PrimInt + FromPrimitive> {
-    fn revcmp(self, kmerlen: u32) -> T;
+    fn revcmp(self, kmerlen: usize) -> T;
 }
 
 /// create bitmask. e.g. dvm::<u32>(0xf0  0xff) => 0xf0_f0_f0_f0
@@ -32,12 +32,12 @@ fn dvm<T: PrimInt + FromPrimitive>(numerator: u32, divisor: u32) -> T {
     let base = T::max_value() / T::from_u32(divisor).unwrap();
     T::from_u32(numerator).unwrap() * base
 }
-
+//TODO: lookup table per byte?
 macro_rules! implement_revcmp { ($($ty:ty),*) => ($(
     /// give twobit reverse complent for given kmerlen
     impl RevCmp<$ty> for $ty {
         #[inline]
-        fn revcmp(self, kmerlen: u32) -> $ty {
+        fn revcmp(self, kmerlen: usize) -> $ty {
             let mut seq = self.swap_bytes() ^ dvm::<$ty>(2, 3);
 
             let left_nibbles = (seq & dvm::<$ty>(0xf, 0xff)) << 4;
@@ -48,12 +48,63 @@ macro_rules! implement_revcmp { ($($ty:ty),*) => ($(
             let all_right_two_bits = (seq & dvm::<$ty>(0xc, 0xf)) >> 2;
             seq = all_left_two_bits | all_right_two_bits;
 
-            seq >> (size_of::<$ty>() * 8 - usize::try_from(kmerlen).unwrap() * 2)
+            seq >> (size_of::<$ty>() * 8 - kmerlen * 2)
         }
     }
     )*)
 }
 implement_revcmp!(usize, u64);
+
+pub trait XmerHash {
+    fn get_kmerlen(&self) -> usize;
+    fn get_overbit(&self) -> usize;
+    /// a reversible hash, no flip to exclude top bit.
+    #[inline(always)]
+    fn xmer_hash(&self, idx: usize, seed: usize) -> usize {
+        let k = self.get_kmerlen();
+        idx ^ ((idx & !seed & ((1 << k) - 1)) << k | ((idx >> k) & seed))
+    }
+    /// after compression, the hash is reversible but it may also require flipping bits. See extend_xmer()
+    fn hash_and_compress(&self, seq: usize, x: usize) -> usize {
+        self.compress_xmer(self.xmer_hash(seq, x))
+    }
+    /// unhash and uncompress to get the k-mer that was selected, sequence or reverse complement.
+    fn unhash_and_uncompress_to_kmer(&self, hash: usize, x: usize) -> usize {
+        // in compress_xmer() bits are flipped if the highest bit was set.
+        let flip = self.xmer_hash(hash, x);
+        if flip < flip.revcmp(self.get_kmerlen()) {
+            // XXX: why is this not the inverse ??
+
+            //then flipped, yes: mark.idx here !!
+            let overbit = self.get_overbit();
+            self.xmer_hash((overbit | (overbit - 1)) & !hash, x)
+        } else {
+            flip
+        }
+    }
+
+    // same hash function, from Xmer.
+    // zou de orientation bit achterwegen kunnen laten, dan zijn er in deze hot loop minder operaties..
+    fn extend_xmer(&self, mark: &mut XmerLoc) -> Result<()> {
+        let old_x = mark.p.x();
+        // early extension, because it may fail if already extended at max.
+        mark.p.extend()?;
+
+        let hash = self.unhash_and_uncompress_to_kmer(mark.idx, old_x);
+        // Now the compressed hash is undone. Hash it again but this time for the next extension.
+        mark.idx = self.hash_and_compress(hash, mark.p.x());
+        Ok(())
+    }
+    /// compress base_seq or xmer_hash from xmer module
+    fn compress_xmer(&self, v: usize) -> usize {
+        let overbit = self.get_overbit();
+        if v & overbit == 0 {
+            v
+        } else {
+            (overbit - 1) & !v
+        }
+    }
+}
 
 impl KmerConst {
     pub(crate) fn new(genomesize: usize, read_len: u16, seed: u16) -> Self {
@@ -103,45 +154,6 @@ impl KmerConst {
             seed,
         }
     }
-    /// a reversible hash, no flip to exclude top bit.
-    #[inline(always)]
-    pub(crate) fn xmer_hash(&self, idx: usize, seed: usize) -> usize {
-        idx ^ (((idx & !seed & self.half_mask) << self.kmerlen) | ((idx >> self.kmerlen) & seed))
-    }
-    /// after compression, the hash is reversible but it may also require flipping bits. See extend_xmer()
-    pub(crate) fn hash_and_compress(&self, seq: usize, x: usize) -> usize {
-        self.compress_xmer(self.xmer_hash(seq, x))
-    }
-    // same hash function, from Xmer.
-    // zou de orientation bit achterwegen kunnen laten, dan zijn er in deze hot loop minder operaties..
-    pub(crate) fn extend_xmer(&self, mark: &mut XmerLoc) -> Result<()> {
-        let old_x = mark.p.x();
-        // early extension, because it may fail if already extended at max.
-        mark.p.extend()?;
-
-        // in compress_xmer() bits are flipped if the highest bit was set.
-        let mut hash = self.xmer_hash(mark.idx, old_x);
-
-        if hash < hash.revcmp(self.kmerlen as u32) {
-            // XXX: why is this not the inverse ??
-
-            //then flipped, yes: mark.idx here !!
-            hash = self.xmer_hash(self.over_mask & !mark.idx, old_x);
-        }
-        // Now the compressed hash is undone. Hash it again but this time for the next extension.
-        mark.idx = self.hash_and_compress(hash, mark.p.x());
-        Ok(())
-    }
-    /// compress base_seq or xmer_hash from xmer module
-    pub(crate) fn compress_xmer(&self, v: usize) -> usize {
-        dbg_assert!(v & self.over_mask == v);
-        if v & self.overbit == 0 {
-            v
-        } else {
-            self.xmer_mask & !v
-        }
-    }
-
     pub(crate) fn get_kmer_boundaries(&self, pos: Position, mut contig: PosRange) -> PosRange {
         let read_len = Position::from(BasePos::from(self.read_len as u64));
 
@@ -150,5 +162,14 @@ impl KmerConst {
         }
         contig.bound_upper(pos + Position::from_basepos(self.no_kmers as u64));
         contig
+    }
+}
+
+impl XmerHash for KmerConst {
+    fn get_kmerlen(&self) -> usize {
+        self.kmerlen
+    }
+    fn get_overbit(&self) -> usize {
+        self.overbit
     }
 }

@@ -4,10 +4,11 @@ use super::{
     twobit::{TwoBit, TwoBitDna, TwoBitRcDna},
 };
 use crate::kmerconst::KmerConst;
+use crate::kmerconst::XmerHash;
 use crate::new_types::extended_position::ExtPosEtc;
 use crate::xmer_location::XmerLoc;
-//use crate::rdbg::STAT_DB;
 use std::cmp;
+//use crate::rdbg::STAT_DB;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 /// An xmer is a kmer that dissociates strand orientation.
@@ -40,6 +41,7 @@ impl Xmer {
         self.dna.add(b2, kc.dna_topb2_shift);
         self.rc.add(b2, kc.rc_mask);
         self.pos.incr();
+        // XXX: why not make pos a ExtPosEtc and store orientation is first bit?
         let orientation = self.is_template();
         let seq = if orientation {
             self.dna.to_usize()

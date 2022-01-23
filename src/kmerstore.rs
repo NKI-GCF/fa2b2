@@ -8,8 +8,6 @@ use crate::xmer_location::XmerLoc;
 use ahash::AHashMap;
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering::{Equal, Greater, Less};
-use to_default::ToDefault;
 
 #[derive(Serialize, Deserialize)]
 pub struct Contig {
@@ -123,7 +121,7 @@ impl KmerStore {
             pos < self.get_pos() || is_repeat,
             "running into sequence head"
         );
-        TwoBitx4::from(&self.b2[byte_pos]).to_b2(pos, is_repeat)
+        TwoBitx4::from(self.b2[byte_pos]).to_b2(pos, is_repeat)
     }
     pub(crate) fn extend_repetitive(&mut self, min_pos: Position, dist: BasePos) {
         let dist_u32 =

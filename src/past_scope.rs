@@ -17,12 +17,12 @@ pub struct PastScope<'a> {
     kc: &'a KmerConst,
     p: ExtPosEtc,
     i: usize,
-    mod_i: usize,
+    rotation: usize,
     plim: PosRange,
     period: Position,
     mark: XmerLoc,
-    d: Vec<Xmer>, // misschien is deze on the fly uit ks te bepalen?
-    z: Vec<usize>,
+    xmer_loc: Vec<Xmer>, // misschien is deze on the fly uit ks te bepalen?
+    xmer_loc_ord: Vec<usize>,
 }
 
 impl<'a> PastScope<'a> {
@@ -31,12 +31,12 @@ impl<'a> PastScope<'a> {
             kc,
             p: ExtPosEtc::default(),
             i: 0,
-            mod_i: 0,
+            rotation: 0,
             plim: PosRange::default(),
             period: Position::default(),
             mark: XmerLoc::default(),
-            d: vec![Xmer::new(); kc.no_kmers],
-            z: (0..kc.no_kmers).collect(),
+            xmer_loc: vec![Xmer::new(); kc.no_kmers],
+            xmer_loc_ord: (0..kc.no_kmers).collect(),
         }
     }
     fn rebuild(&mut self, ks: &KmerStore, p: ExtPosEtc, idx: usize) -> Result<()> {
@@ -54,8 +54,8 @@ impl<'a> PastScope<'a> {
             if self.update() {
                 // we weten extension op voorhand.
                 let i = self.pick_mark();
-                if self.d[i].pos != self.mark.p.pos() {
-                    let mark = self.d[i].get_hash_and_p(self.kc, self.mark.p.x());
+                if self.xmer_loc[i].pos != self.mark.p.pos() {
+                    let mark = self.xmer_loc[i].get_hash_and_p(self.kc, self.mark.p.x());
                     self.set_mark(&mark);
                     if p.same_pos_and_ext(self.mark.p) {
                         break;
@@ -84,6 +84,15 @@ impl<'a> PastScope<'a> {
     fn is_on_contig(&self, pos: Position) -> bool {
         self.plim.has_in_range(pos)
     }
+    //FIXME: outdated.
+    fn pick_mark(&mut self) -> usize {
+        let med = self.kc.no_kmers >> 1;
+        let i = self
+            .xmer_loc_ord
+            .select_nth_unstable_by(med, |&a, &b| self.xmer_loc[a].cmp(&self.xmer_loc[b]))
+            .1;
+        *i
+    }
 }
 
 impl<'a> Scope for PastScope<'a> {
@@ -104,27 +113,19 @@ impl<'a> Scope for PastScope<'a> {
         }
         None
     }
-    fn pick_mark(&mut self) -> usize {
-        let med = self.kc.no_kmers >> 1;
-        let i = self
-            .z
-            .select_nth_unstable_by(med, |&a, &b| self.d[a].cmp(&self.d[b]))
-            .1;
-        *i
-    }
     /// add twobit to k-mers, update k-mer vec, increment pos and update orientation
     /// true if we have at least one kmer.
     fn update(&mut self) -> bool {
         // XXX: function is hot
         if self.i >= self.kc.kmerlen {
-            let old_d = self.d[self.mod_i];
-            self.mod_i += 1;
-            if self.mod_i == self.kc.no_kmers {
-                self.mod_i = 0;
+            let old_d = self.xmer_loc[self.rotation];
+            self.rotation += 1;
+            if self.rotation == self.kc.no_kmers {
+                self.rotation = 0;
             }
-            self.d[self.mod_i] = old_d;
+            self.xmer_loc[self.rotation] = old_d;
             // FIXME: why off by one?
-            self.d[self.mod_i].pos = self.p.pos();
+            self.xmer_loc[self.rotation].pos = self.p.pos();
             true
         } else {
             self.i += 1;
@@ -133,7 +134,8 @@ impl<'a> Scope for PastScope<'a> {
     }
     fn increment(&mut self, b2: TwoBit) {
         // first bit is strand bit, set according to kmer orientation bit.
-        self.p.set_ori(self.d[self.mod_i].update(self.kc, b2));
+        self.p
+            .set_ori(self.xmer_loc[self.rotation].update(self.kc, b2));
         self.p.incr_pos();
     }
     fn set_mark(&mut self, mark: &XmerLoc) {

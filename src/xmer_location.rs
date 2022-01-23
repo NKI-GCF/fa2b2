@@ -1,9 +1,13 @@
+use crate::head_scope::NO_XMERS;
 use crate::new_types::extended_position::ExtPosEtc;
 use crate::rdbg::STAT_DB;
 use std::clone::Clone;
 use std::{cmp, fmt};
 
-#[derive(new, Clone, Copy, PartialEq, Eq)]
+pub(crate) const XMER_DUP_CONTIG_BITS: u32 = 16;
+const XMER_DUP_CONTIG_MASK: usize = (1 << XMER_DUP_CONTIG_BITS) - 1;
+
+#[derive(new, PartialEq, Eq)]
 pub struct XmerLoc {
     pub idx: usize,
     pub p: ExtPosEtc,
@@ -21,6 +25,14 @@ impl XmerLoc {
     }
     pub(crate) fn is_set(&self) -> bool {
         self.idx != usize::max_value()
+    }
+    /// kmers for unique positions for either strand within this mask are in scope for HeadScope.
+    pub(crate) fn get_scope_idx(&self) -> usize {
+        let mut scope_idx = self.p.basepos().as_usize() << 1;
+        if self.p.get_ori() {
+            scope_idx |= 1;
+        }
+        scope_idx & ((1 << NO_XMERS) - 1)
     }
 
     pub(crate) fn set(&mut self, idx: usize, p: ExtPosEtc) {

@@ -1,7 +1,6 @@
 use crate::kmerconst::RevCmp;
 use crate::new_types::position::{BasePos, Position};
 use crate::rdbg::STAT_DB;
-use crate::xmer_location::XmerLoc;
 use derive_more::{From, Into};
 use std::fmt;
 
@@ -28,8 +27,8 @@ pub(crate) struct TwoBitRcDna(u64);
 /// No N, 2 bits for code, same as above.
 impl TwoBit {
     // custom from because error is useless
-    pub(crate) fn from_u8(val: &u8) -> Option<Self> {
-        match (*val >> 1) & 0x7 {
+    pub(crate) fn from_u8(val: u8) -> Option<Self> {
+        match (val >> 1) & 0x7 {
             b2 if b2 < 4 => Some(TwoBit(b2)),
             _ => None,
         }
@@ -72,7 +71,7 @@ impl TwoBitDna {
     pub(crate) fn to_usize(self) -> usize {
         usize::try_from(self.0).unwrap()
     }
-    fn revcmp(&self, k: u32) -> u64 {
+    fn revcmp(&self, k: usize) -> u64 {
         self.0.revcmp(k)
     }
 }
@@ -99,21 +98,22 @@ impl fmt::Display for TwoBit {
     }
 }
 
-impl From<&u8> for TwoBitx4 {
-    fn from(val: &u8) -> TwoBitx4 {
-        TwoBitx4(*val)
+impl From<u8> for TwoBitx4 {
+    fn from(val: u8) -> TwoBitx4 {
+        TwoBitx4(val)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kmerconst::XmerHash;
     use crate::kmerconst::{KmerConst, RevCmp};
     use crate::new_types::xmer::Xmer;
     use rand::{thread_rng, Rng};
     use std::cmp;
     /// return a new kmer for given index, length and orientation.
-    fn kmer_from_idx(index: usize, kmerlen: u32, ori: bool) -> Xmer {
+    fn kmer_from_idx(index: usize, kmerlen: usize, ori: bool) -> Xmer {
         let mut dna = index as u64;
         let mut rc = dna.revcmp(kmerlen);
         if dna > rc || (dna == rc && (dna & 1) == 0) {
@@ -170,7 +170,7 @@ mod tests {
         let mut rng = thread_rng();
         let kmerlen = rng.gen_range(2..32);
         let kc = KmerConst::from_bitlen(kmerlen * 2, kmerlen.into(), 0);
-        let kmerlen = kmerlen as u32;
+        let kmerlen = usize::from(kmerlen);
         let mut xmer: Xmer = Xmer::new();
         for _ in 0..32 {
             xmer.update(&kc, TwoBit::new(rng.gen_range(0..4)));
@@ -182,7 +182,7 @@ mod tests {
         let mut rng = thread_rng();
         let kmerlen = rng.gen_range(12..32);
         let kc = KmerConst::from_bitlen(kmerlen * 2, kmerlen.into(), 0);
-        let kmerlen = kmerlen as u32;
+        let kmerlen = kmerlen;
         let mut test_dna = 0;
         let mut test_rc = 0;
         let mut test_ori = false;

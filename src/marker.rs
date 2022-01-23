@@ -7,10 +7,14 @@ extern crate num_traits;
 use crate::head_scope::HeadScope;
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
-use crate::new_types::position::{BasePos, Position};
-use crate::new_types::twobit::TwoBit;
+use crate::new_types::{
+    extended_position::MiniExtPosOri,
+    position::{BasePos, Position},
+    twobit::TwoBit,
+};
 use crate::rdbg::STAT_DB;
 use crate::to_default::ToDefault;
+use crate::xmer_location::XmerLoc;
 use anyhow::Result;
 use noodles_fasta as fasta;
 
@@ -19,23 +23,38 @@ pub struct KmerIter<'a> {
     pub(super) ks: &'a mut KmerStore,
     n_stretch: BasePos,
     goffs: BasePos,
+    mini_kmp: Vec<MiniExtPosOri>, //
+    pub(crate) repetitive: u32,
+    period: Position,
+    rep_max_dist: usize,
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
     pub(crate) fn new(ks: &'a mut KmerStore, kc: &'a KmerConst) -> Self {
         let scp = HeadScope::new(kc);
+        let rep_max_dist = BasePos::from(ks.rep_max_dist).as_usize();
+        let mini_shift = rep_max_dist.next_power_of_two().trailing_zeros();
         KmerIter {
             scp,
             ks,
             n_stretch: BasePos::default(),
             goffs: BasePos::default(),
+            mini_kmp: vec![MiniExtPosOri::default(); 1 << mini_shift],
+            repetitive: 0,
+            period: Position::default(),
+            rep_max_dist,
         }
     }
     fn init_chromosome_accounting(&mut self) -> Position {
         // we start with no offset on contig, if starting with N's, the stored goffs gets updated
         self.goffs.to_default();
         self.n_stretch.to_default();
-        self.scp.partial_reset_get_pos(true)
+        self.repetitive = 0;
+        // TODO: allow repetition to include N-stretch - if both sides of N-stretch show the same repetition.
+        // If a repetition ends in an N-stretch, thereafter offset to period
+        // may differ or the repetition could be different or entirely gone.
+        self.period.to_default();
+        self.scp.reset_get_pos()
     }
 
     /// Finalize an N-stretch, update stored offsets and prepare to process sequence.
@@ -47,9 +66,59 @@ impl<'a> KmerIter<'a> {
             self.n_stretch.to_default();
         }
     }
+    /// a kmer is recurrent if it reoccurs within rep_max_dist bases, typically 10_000. This is to
+    /// handle e.g. transposons or repetitive DNA, which are not mappable otherwise.
+    fn is_recurrent(&self, test: &XmerLoc) -> bool {
+        let mut x = 0;
+        let repeat_idx = test.idx & (self.mini_kmp.len() - 1);
+        let stored = &self.mini_kmp[repeat_idx];
+        /* FIXME.
+         * if BasePos::from(test.p.pos() - stored.p.pos()).to_usize() < self.rep_max_dist {
+            if stored.x() == x {
+            } else {
+                x += 1;
+            }
+        }*/
+        false
+    }
+    fn update_repetitive(&mut self, pd: Position) {
+        // XXX waarom werkt dit op mark??
+        self.repetitive += 1;
+        let mark = self.scp.get_mark();
+        let idx = mark.get_idx();
+        let stored = self.ks.kmp[idx];
+        if stored.is_set() {
+            let mark_pos = mark.p.pos();
+            let stored_pos = stored.pos();
+            if mark_pos != stored_pos {
+                if let Some(dist) = mark_pos.get_if_mark_on_period(stored_pos, pd) {
+                    if mark_pos > stored_pos {
+                        self.ks.extend_repetitive(mark_pos, dist);
+                    } else {
+                        dbg_print!(
+                            "repetitive occurs before already stored [{:x}] p {} <=> stored {}",
+                            idx,
+                            mark.p,
+                            stored
+                        );
+                        self.ks.replace_repetitive(stored_pos, mark_pos, dist);
+                        // FIXME: moet positie nu niet gezet worden, bij less?
+                    }
+                }
+            }
+        } else {
+            // XXX this occurs, is it an edge case or a bug?
+            dbg_print!("repeat with unset mark.idx (b2 corresponds) ??");
+        }
+    }
 
-    fn spawn_process_coding(&mut self) -> Result<()> {
-        let mut coding_pos = self.scp.partial_reset_get_pos(false);
+    fn spawn_process_coding(&mut self) {
+        // TODO: allow repetition to include N-stretch - if both sides of N-stretch show the same repetition.
+        // If a repetition ends in an N-stretch, thereafter offset to period
+        // may differ or the repetition could be different or entirely gone.
+        self.period.to_default();
+
+        let mut coding_pos = self.scp.reset_get_pos();
         let ahead_pos = self.ks.get_pos();
         self.goffs += BasePos::from(ahead_pos - coding_pos);
         dbg_print!(
@@ -64,14 +133,49 @@ impl<'a> KmerIter<'a> {
         // complete_and_update_mark
         while coding_pos != ahead_pos {
             let b2 = self.ks.b2_for_pos(coding_pos, false);
-            self.scp.complete_and_update_mark(self.ks, b2)?;
+
             coding_pos.incr();
         }
         // NB. if we push this before complete_and_update_mark, then the test for repeat
         // is_on_last_contig() does not work. Maybe change this if repeat can be handled
         // while storing sequence.
         self.ks.push_contig(ahead_pos, self.goffs);
-        Ok(())
+    }
+    pub fn updated_median_xmers_only(&mut self, b: u8) -> Option<XmerLoc> {
+        if let Some(b2) = TwoBit::from_u8(b) {
+            if self.n_stretch.is_set() {
+                self.finalize_n_stretch();
+            }
+            //self.ks.store_b2(b2)?;
+            if let Some(i) = self.scp.updated_median_xmer(b2) {
+                let mut median_xmer = self.xmer_loc[i];
+                let repeat_idx = median_xmer.idx & (self.mini_kmp.len() - 1);
+                if !self.is_recurrent(&median_xmer) {
+                    // update mark so we can skip until next median xmer
+                    self.set_mark(i);
+
+                    // pass through the xmer_loc with hashing undone.
+                    // FIXME: put the other strand in the idx top bits. We need more alternative XmerLoc types
+                    // for distinction along with traits !!
+                    median_xmer.idx = self.kc.xmer_hash(median_xmer.idx, self.kc.seed);
+                    Some(median_xmer);
+                } else {
+                    None
+                }
+            }
+        } else {
+            // TODO / FIXME rather than excluding when Ns occur, try resolving those instances so
+            // the seed selects against these. Iterate over the possible sequences in place of the
+            // ambiguous. Also try min..(median..)max. account which are the sweetspots. Weight is
+            // the nr of positions this resolves.
+            //
+            // past readlen - kmerlen, or we could overcome
+            if !self.n_stretch.is_set() && self.scp.is_coding_sequence_pending(&self.ks) {
+                self.spawn_process_coding();
+            }
+            self.n_stretch.add_assign(1_u64);
+            None
+        }
     }
 
     // TODO: spawn tasks per stretch of non-ambiguous sequence (not N).
@@ -79,36 +183,27 @@ impl<'a> KmerIter<'a> {
         let chr_coding_start = self.init_chromosome_accounting();
         self.ks.push_contig(chr_coding_start, self.goffs);
 
-        let mut seq = record.sequence().as_ref().iter();
-
-        while let Some(res) = seq.next().map(TwoBit::from_u8) {
-            if let Some(b2) = res {
-                // NB. test must occur before store_b2(), which updates position.
-                if !self.scp.is_coding_sequence_pending(&self.ks) {
-                    self.finalize_n_stretch();
-                }
-                // TODO: also skip repetitive !! then administration should go here!
-                self.ks.store_b2(b2)?;
-            } else {
-                // past readlen - kmerlen, or we could overcome
-                if self.scp.is_coding_sequence_pending(&self.ks) {
-                    self.spawn_process_coding()?;
-                }
-                self.n_stretch.add_assign(1_u64);
-            }
+        for median_kmer in record
+            .sequence()
+            .as_ref()
+            .into_iter()
+            .filter_map(|&b| self.updated_median_xmers_only(b))
+        {
+            //self.scp.complete_and_update_mark(self.ks, b2)?;
+            // TODO: also skip repetitive !! then administration should go here!
         }
         dbg_print!("At end, processing last:");
-        if self.scp.is_coding_sequence_pending(&self.ks) {
-            self.spawn_process_coding()?;
-        } else {
+        if self.n_stretch.is_set() {
             self.finalize_n_stretch();
+        } else {
+            self.spawn_process_coding();
         }
 
         if record.name() != "test" {
             if let Some(contig) = self.ks.contig.last() {
                 let coding: u64 = BasePos::from(contig.twobit - chr_coding_start).into();
                 let n_count = u64::try_from(contig.genomic)?;
-                let complex: u64 = coding - self.scp.repetitive as u64;
+                let complex: u64 = coding - self.repetitive as u64;
                 let tot: u64 = coding + n_count;
                 println!(
                 "chromosome {}\tcomplex dna:{} of {}({:.2}%)\trepetitive:{}({:.2}%)\tN-count:{}({:.2}%)\t",
@@ -116,8 +211,8 @@ impl<'a> KmerIter<'a> {
                 complex,
                 tot,
                 100.0 * complex as f64 / tot as f64,
-                self.scp.repetitive,
-                100.0 * self.scp.repetitive as f64 / tot as f64,
+                self.repetitive,
+                100.0 * self.repetitive as f64 / tot as f64,
                 n_count,
                 100.0 * n_count as f64 / tot as f64,
             );

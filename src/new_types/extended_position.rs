@@ -11,9 +11,9 @@ use std::mem::size_of;
 
 // lowering this below 8 may cause some test failures
 //const EXT_BITS: usize = 8;
-const EXT_BITS: usize = 16;
+pub(crate) const EXT_BITS: usize = 16;
 
-pub const EXT_MAX: usize = 1 << EXT_BITS;
+pub(crate) const EXT_MAX: usize = 1 << EXT_BITS;
 
 pub(super) const EXT_SHIFT: u32 = (size_of::<u64>() * 8 - EXT_BITS) as u32;
 pub(crate) const EXT_MASK: u64 = !0x0 ^ ((1 << EXT_SHIFT) - 1);
@@ -46,7 +46,12 @@ const ORI_MASK: u64 = 0x1;
 )]
 #[display(fmt = "{:#x}", _0)]
 #[debug(fmt = "{:#x}", _0)]
+// needs to be pub or "can't leak crate-private type"
 pub struct ExtPosEtc(u64);
+
+#[derive(Default, Clone)]
+pub(crate) struct MiniExtPosOri(u32);
+impl MiniExtPosOri {}
 
 /// The stored information per xmer: in u64 position, extension and flags:
 /// Orientation, Duplicate, Replication(, HasInfo: TODO)
@@ -70,6 +75,7 @@ impl ExtPosEtc {
     {
         ExtPosEtc::from((Extension::default(), Position::from_basepos(value)))
     }
+    #[deprecated]
     pub(crate) fn basepos(&self) -> BasePos {
         BasePos::from(self.pos())
     }
@@ -89,8 +95,12 @@ impl ExtPosEtc {
     pub(crate) fn set_ori(&mut self, ori: bool) {
         self.0 ^= (self.0 ^ if ori { 1 } else { 0 }) & ORI_MASK
     }
+    #[deprecated] // use !is_template
     pub(crate) fn get_ori(&self) -> bool {
         self.0 & ORI_MASK != 0
+    }
+    pub(crate) fn is_template(&self) -> bool {
+        self.0 & ORI_MASK == 0
     }
     pub(crate) fn incr_pos(&mut self) {
         self.0 += 1_u64.checked_shl(POS_SHIFT).expect("incr_pos shft");
@@ -106,7 +116,10 @@ impl ExtPosEtc {
         usize::from(self.extension())
     }
     pub(crate) fn same_ori(&self, p: ExtPosEtc) -> bool {
-        self.get_ori() == p.get_ori()
+        self.is_template() == p.is_template()
+    }
+    pub(crate) fn get_rc(&self) -> ExtPosEtc {
+        ExtPosEtc(self.0 ^ ORI_MASK)
     }
     pub(crate) fn blacklist(&mut self) {
         if self.is_set() {

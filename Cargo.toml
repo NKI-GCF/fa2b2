@@ -32,6 +32,8 @@ noodles-bam = "0.12.0"
 noodles-cram = "0.9.0"
 noodles-fastq = "0.3.0"
 derive_more = "0.99.17"
+moveslice = "2.0.1"
+rayon = "1.5.1"
 
 [profile.release]
 debug = true

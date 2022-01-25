@@ -1,7 +1,6 @@
-use crate::head_scope::NO_XMERS;
 use crate::new_types::extended_position::ExtPosEtc;
 use crate::rdbg::STAT_DB;
-use std::clone::Clone;
+use crate::scope::NO_XMERS;
 use std::{cmp, fmt};
 
 pub(crate) const XMER_DUP_CONTIG_BITS: u32 = 16;
@@ -24,7 +23,7 @@ impl XmerLoc {
         self.idx
     }
     pub(crate) fn is_set(&self) -> bool {
-        self.idx != usize::max_value()
+        self.idx != usize::MAX
     }
     /// kmers for unique positions for either strand within this mask are in scope for HeadScope.
     pub(crate) fn get_scope_idx(&self) -> usize {
@@ -42,6 +41,17 @@ impl XmerLoc {
         dbg_assert!(self.is_set() || self.p.is_zero() || self_p_extension == p_extension);
         self.idx = idx;
         self.p = p;
+    }
+    pub(crate) fn get_thread_index(&self, bitlen: usize, ext_bits: usize) -> usize {
+        self.idx >> (bitlen - ext_bits)
+    }
+}
+impl Default for XmerLoc {
+    fn default() -> Self {
+        XmerLoc {
+            idx: usize::MAX,
+            p: Default::default(),
+        }
     }
 }
 
@@ -68,11 +78,6 @@ impl Ord for XmerLoc {
             },
             x => x,
         }
-    }
-}
-impl Default for XmerLoc {
-    fn default() -> Self {
-        XmerLoc::new(usize::max_value(), ExtPosEtc::default())
     }
 }
 

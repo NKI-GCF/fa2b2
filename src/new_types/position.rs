@@ -2,7 +2,7 @@ use crate::new_types::extended_position::{ExtPosEtc, POS_MASK, POS_SHIFT};
 use crate::num::ToPrimitive;
 use crate::rdbg::STAT_DB;
 use anyhow::Error as AnyhowError;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, ensure, Result};
 use derive_more::{Add, AddAssign, Rem, Sub};
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
@@ -77,9 +77,11 @@ impl PosRange {
     }
 }
 
-impl From<(Position, Position)> for PosRange {
-    fn from(rng: (Position, Position)) -> PosRange {
-        PosRange(rng)
+impl TryFrom<(Position, Position)> for PosRange {
+    type Error = AnyhowError;
+    fn try_from(rng: (Position, Position)) -> Result<PosRange, Self::Error> {
+        ensure!(rng.0 < rng.1);
+        Ok(PosRange(rng))
     }
 }
 

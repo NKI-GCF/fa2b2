@@ -1,8 +1,11 @@
 use crate::kmerconst::RevCmp;
 use crate::new_types::position::{BasePos, Position};
 use crate::rdbg::STAT_DB;
+use bitvec::{field::BitField, order::Lsb0, slice::BitSlice, view::BitView};
 use derive_more::{From, Into};
 use std::fmt;
+
+//TODO: use crate bitvec?
 
 /// N: 0x7, otherwise bits as in [Twobit]
 #[derive(Debug)]
@@ -36,6 +39,9 @@ impl TwoBit {
     pub(crate) fn as_u8(&self) -> u8 {
         self.0
     }
+    pub(crate) fn as_bits(&self) -> &BitSlice<u8, Lsb0> {
+        self.0.view_bits::<Lsb0>().split_at(2).0
+    }
     pub(crate) fn as_kmer_top(&self, shift: u32) -> u64 {
         (self.0 as u64) << shift
     }
@@ -44,14 +50,18 @@ impl TwoBit {
     }
 }
 
+impl From<&BitSlice<u8, Lsb0>> for TwoBit {
+    fn from(val: &BitSlice<u8, Lsb0>) -> TwoBit {
+        TwoBit(val[0..2].load::<u8>())
+    }
+}
+
 /// 4 packed twobits per u8.
 impl TwoBitx4 {
-    pub(crate) fn to_b2(&self, pos: Position, for_repeat: bool) -> TwoBit {
+    pub(crate) fn to_b2(&self, pos: Position) -> TwoBit {
         // the third bit (for N) is actually never set, because we don't store those in TwoBitx4
         let b2 = TwoBit((self.0 >> pos.b2_shift()) & 3);
-        if !for_repeat {
-            dbg_print!("{}: {}", BasePos::from(pos).as_u64(), b2);
-        }
+        dbg_print!("{}: {}", BasePos::from(pos).as_u64(), b2);
         b2
     }
     pub(crate) fn as_u8(&self) -> u8 {

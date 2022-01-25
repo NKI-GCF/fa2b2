@@ -1,6 +1,7 @@
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
-use crate::mapping::Mapper;
+use crate::scope::Scope;
+use crate::xmer_location::XmerLoc;
 use anyhow::{ensure, Result};
 use bincode::deserialize_from;
 use clap::ArgMatches;
@@ -32,15 +33,40 @@ pub fn aln(matches: &ArgMatches) -> Result<()> {
 
     let kc = KmerConst::from_bitlen(bitlen, read_len, ks.seed);
 
-    let mut n = 0;
-    let mut mapper = Mapper::new(&ks, &kc);
+    let scp = Scope::new(&kc);
+    let mut aln = Aligner::new(ks, scp);
 
-    for res in reader.records() {
-        let record = res?;
-        mapper.read_record(record)?;
-        n += 1;
-    }
-    eprintln!("Read {} reads", n);
-
+    aln.align(&mut reader)?;
     Ok(())
+}
+
+struct Aligner<'a> {
+    ks: KmerStore,
+    scp: Scope<'a>,
+}
+
+impl<'a> Aligner<'a> {
+    fn new(ks: KmerStore, scp: Scope<'a>) -> Self {
+        Aligner { ks, scp }
+    }
+    /// FIXME: pass through the best XmerLocs for mapping - i.e. matching in ks.kmp
+    fn filter_median_xmers(&mut self, b: u8) -> Option<XmerLoc> {
+        None
+    }
+    fn align(&mut self, reader: &mut fastq::Reader<io::BufReader<fs::File>>) -> Result<()> {
+        let mut n = 0;
+        for res in reader.records() {
+            let record = res?;
+            for b in record
+                .sequence()
+                .into_iter()
+                .filter_map(|&b| self.filter_median_xmers(b))
+            {
+                //self.scp.;
+            }
+            n += 1;
+        }
+        eprintln!("Processed {} reads", n);
+        Ok(())
+    }
 }

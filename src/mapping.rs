@@ -1,15 +1,15 @@
-use crate::head_scope::NO_XMERS;
 use crate::kmerconst::KmerConst;
 use crate::kmerconst::XmerHash;
 use crate::kmerstore::KmerStore;
 use crate::new_types::{
     extended_position::{ExtPosEtc, EXT_MAX},
     extension::Extension,
-    position::{BasePos, Position},
+    position::Position,
     twobit::{TwoBit, TwoBitDna, TwoBitRcDna},
 };
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
+use crate::scope::NO_XMERS;
 use crate::xmer_location::XmerLoc;
 use anyhow::{anyhow, Result};
 use moveslice::Moveslice;

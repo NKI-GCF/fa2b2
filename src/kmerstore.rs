@@ -1,12 +1,11 @@
 use crate::new_types::extended_position::ExtPosEtc;
-use crate::new_types::{
-    position::{BasePos, PosRange, Position},
-    twobit::{TwoBit, TwoBitx4},
-};
+use crate::new_types::position::{BasePos, PosRange, Position};
+//crate::new_types::twobit::TwoBit,
 use crate::rdbg::STAT_DB;
 use crate::xmer_location::XmerLoc;
 use ahash::AHashMap;
-use anyhow::{bail, Result};
+use anyhow::{ensure, Result};
+use bitvec::{bitvec, order::Lsb0, slice::BitSlice, vec::BitVec};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -21,34 +20,34 @@ pub type Repeat = (u32, u32);
 
 #[derive(Serialize, Deserialize)]
 pub struct KmerStore {
-    b6pos: usize,
     pub(crate) opt: u64,
-    pub(crate) b2: Vec<u8>,
-    pub(crate) kmp: Vec<ExtPosEtc>, // position + strand per k-mer.
+    pub(crate) b2: BitVec<u8, Lsb0>, // sequence (4 per u8). TODO: maybe we can do without storing this.
+    pub(crate) kmp: Vec<ExtPosEtc>,  // position + strand per k-mer.
     pub(crate) contig: Vec<Contig>,
     pub(crate) repeat: AHashMap<Position, Repeat>,
     pub(crate) rep_max_dist: Position,
     pub(crate) seed: u16,
+    b2_bit_ct: u64,
 }
 
 impl KmerStore {
     pub(crate) fn new(bitlen: usize, rep_max_dist: u32, seed: u16) -> Result<Self> {
         let shift = bitlen - 2;
         Ok(KmerStore {
-            b6pos: 0,
             opt: 0,
             rep_max_dist: Position::from_basepos(rep_max_dist),
-            b2: vec![0; 1 << shift], // sequence (4 per u8).
+            b2: bitvec![u8, Lsb0; 0; 1 << shift],
             kmp: vec![ExtPosEtc::default(); 1 << (shift + 1)], // kmer positions
             //kmp,
             contig: Vec::new(), // contig info
             repeat: AHashMap::new(),
             seed: seed,
+            b2_bit_ct: 0,
         })
     }
-    /*pub(crate) fn store_twobit(&mut self, pos: Position, b2: TwoBit) {
-        self.b2[pos.byte_pos()] |= b2.pos_shift(pos).as_u8();
-    }*/
+    pub(crate) fn get_bitlen(&self) -> u8 {
+        self.kmp.len().trailing_zeros() as u8 + 1
+    }
     pub(crate) fn push_contig(&mut self, pos: Position, goffs: BasePos) {
         self.contig.push(Contig {
             twobit: pos,
@@ -65,23 +64,15 @@ impl KmerStore {
         dbg_print!("{} (stored)", mark);
         self.kmp[mark.idx].set(mark.p);
     }
-    pub(crate) fn get_bitlen(&self) -> u8 {
-        self.b2.len().trailing_zeros() as u8 + 2
-    }
     pub(crate) fn is_on_last_contig(&self, pos: Position) -> bool {
         pos >= self.contig.last().unwrap().twobit
     }
-    pub(crate) fn store_b2(&mut self, b2: TwoBit) -> Result<()> {
-        if let Some(qb2) = self.b2.get_mut(self.b6pos >> 3) {
-            *qb2 |= b2.as_u8() << (self.b6pos & 6);
-            self.b6pos += 2;
-            Ok(())
-        } else {
-            bail!("out of bounds for ks.b2: {}", self.get_pos())
-        }
+    pub(crate) fn store_b2(&mut self, b2: &BitSlice<u8, Lsb0>) {
+        self.b2.extend_from_bitslice(b2);
+        self.b2_bit_ct += 2;
     }
     pub(crate) fn get_pos(&self) -> Position {
-        Position::from_basepos((self.b6pos >> 1) as u64)
+        Position::from_basepos(self.b2_bit_ct >> 1)
     }
 
     /// binary search contig lower boundary
@@ -102,27 +93,36 @@ impl KmerStore {
 
         dbg_assert!(i < self.contig.len());
         dbg_assert!(self.contig[i].twobit <= pos);
-        PosRange::from((self.get_twobit_before(i), self.get_twobit_after(i)))
+        PosRange::try_from((self.get_twobit_pos_before(i), self.get_twobit_pos_after(i)))
+            .expect("contig range bug")
     }
-    fn get_twobit_after(&self, i: usize) -> Position {
+    fn get_twobit_pos_after(&self, i: usize) -> Position {
         self.contig
             .get(i + 1)
             .map(|c| c.twobit)
             .unwrap_or(self.get_pos())
     }
-    fn get_twobit_before(&self, i: usize) -> Position {
+    fn get_twobit_pos_before(&self, i: usize) -> Position {
         i.checked_sub(1)
             .map(|t| self.contig[t].twobit)
             .unwrap_or(Position::default())
     }
-    pub(crate) fn b2_for_pos(&self, pos: Position, is_repeat: bool) -> TwoBit {
-        let byte_pos = pos.byte_pos();
-        dbg_assert!(
-            pos < self.get_pos() || is_repeat,
-            "running into sequence head"
-        );
-        TwoBitx4::from(self.b2[byte_pos]).to_b2(pos, is_repeat)
+    pub(crate) fn bit_slice(&self, range: PosRange) -> Result<&BitSlice<u8, Lsb0>> {
+        ensure!(range.lower() < range.upper());
+
+        let end = BasePos::from(range.upper()).as_usize() << 1;
+        ensure!(end <= self.b2_bit_ct as usize);
+
+        let start = BasePos::from(range.lower()).as_usize() << 1;
+        Ok(&self.b2[start..end])
     }
+
+    /*pub(crate) fn b2_for_pos(&self, pos: Position) -> Result<TwoBit> {
+        let twobit_pos = BasePos::from(pos).as_usize() << 1;
+        ensure!(twobit_pos < self.b2_bit_ct, "running into sequence head");
+        let two_bits = self.b2.get(twobit_pos..(twobit_pos + 2)).unwrap();
+        Ok(TwoBit::from(two_bits))
+    }*/
     pub(crate) fn extend_repetitive(&mut self, min_pos: Position, dist: BasePos) {
         let dist_u32 =
             u32::try_from(u64::from(dist)).expect("dist for repeat extension doesn't fit in u32");

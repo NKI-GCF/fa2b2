@@ -1,21 +1,103 @@
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::marker::KmerIter;
-use crate::new_types::extended_position::EXT_MAX;
+use crate::new_types::extended_position::{ExtPosEtc, EXT_MAX};
+use crate::rdbg::STAT_DB;
+use crate::xmer_location::XmerLoc;
+use crate::xmerhasher::XmerHasher;
 use anyhow::{anyhow, ensure, Result};
 use bincode::serialize_into;
 use clap::ArgMatches;
+use crossbeam_channel::unbounded;
+use itertools::izip;
 use noodles_fasta as fasta;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::BufReader;
-use std::io::BufWriter;
+use std::io::{BufReader, BufWriter};
+use std::iter::repeat;
 use std::path::Path;
+use std::sync::Arc;
+use std::thread::spawn;
+
+fn multi_thread(
+    ks: &mut KmerStore,
+    kc: KmerConst,
+    mut fa: fasta::Reader<BufReader<File>>,
+    no_threads: usize,
+) -> Result<()> {
+    // channels to send XmerLocs to threads
+    let (tx_to_thread, rx_from_main): (Vec<_>, Vec<_>) = repeat(())
+        .take(no_threads)
+        .map(|_| unbounded::<XmerLoc>())
+        .unzip();
+
+    // channels for threads to send XmerLocs to one another when extended past their responsibility
+    let (mut tx_inter_thread, rx_inter_thread): (Vec<_>, Vec<_>) = repeat(())
+        .take(no_threads)
+        .map(|_| unbounded::<XmerLoc>())
+        .unzip();
+
+    // rotate transmitter back so that its corresponding receiver is passed to the next thread.
+    let first = tx_inter_thread.remove(0);
+    tx_inter_thread.push(first);
+
+    // to collect the results
+    let (tx_to_main, rx_in_main) = unbounded::<(Vec<ExtPosEtc>, Vec<XmerLoc>)>();
+    let shutdown_poll = Arc::new(0u64);
+
+    let threads: Vec<_> = izip!(
+        (0..no_threads).into_iter(),
+        rx_from_main.into_iter(),
+        tx_inter_thread.into_iter(),
+        rx_inter_thread.into_iter(),
+    )
+    .map(
+        |(thread_nr, rx_from_main, tx_inter_thread, rx_inter_thread)| {
+            let tx_to_main = tx_to_main.clone();
+            let shutdown_poll = shutdown_poll.clone();
+            spawn(move || {
+                XmerHasher::new(
+                    thread_nr,
+                    no_threads,
+                    kc.kmerlen,
+                    rx_from_main,
+                    tx_inter_thread,
+                    rx_inter_thread,
+                    tx_to_main,
+                    shutdown_poll,
+                )
+                .and_then(|mut xh| xh.work())
+            })
+        },
+    )
+    .collect();
+
+    // The main thread to read from fasta and prefilter
+    let mut kmi = KmerIter::new(ks, &kc, tx_to_thread);
+
+    for record in fa.records() {
+        kmi.markcontig(&kc, record?)?;
+    }
+
+    // End transmission to threads
+    drop(kmi);
+
+    for nr in 0..no_threads {
+        let (kmp, max_extended) = rx_in_main.recv()?;
+        ks.kmp.extend(kmp);
+        dbg_print!("Thread {} had {} max extended", nr, max_extended.len());
+    }
+
+    for t in threads {
+        t.join().unwrap()?;
+    }
+    Ok(())
+}
 
 pub fn index(matches: &ArgMatches) -> Result<()> {
     let fa_name = matches.value_of("ref").unwrap();
 
-    let mut fa = File::open(&fa_name)
+    let fa = File::open(&fa_name)
         .map(BufReader::new)
         .map(fasta::Reader::new)
         .map_err(|e| anyhow!("Error opening reference genome: {}", e))?;
@@ -47,6 +129,20 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
         .transpose()?
         .unwrap();
 
+    let no_threads = matches
+        .value_of("no_threads")
+        .map(|v| {
+            v.parse().map(|n: usize| {
+                if n.is_power_of_two() {
+                    n
+                } else {
+                    n.next_power_of_two() - 1
+                }
+            })
+        })
+        .transpose()?
+        .unwrap();
+
     // Ideally the seed should selecting against repetitive k-mers as a median.
     // TODO: find out / theorize what seed may do this.
     if matches.occurrences_of("seed") != 0 {
@@ -60,10 +156,8 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
 
     let kc = KmerConst::new(seq_len, read_len, seed);
     let mut ks = KmerStore::new(kc.bitlen, repetition_max_dist, seed)?;
-    let mut kmi = KmerIter::new(&mut ks, &kc);
-    for record in fa.records() {
-        kmi.markcontig(record?)?;
-    }
+
+    multi_thread(&mut ks, kc, fa, no_threads);
     make_stats(&ks);
 
     if let Some(out_file) = opt_out {

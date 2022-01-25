@@ -110,6 +110,7 @@ impl KmerConst {
     pub(crate) fn new(genomesize: usize, read_len: u16, seed: u16) -> Self {
         // bit width, required to store all (cumulative) genomic positions, is used as len
 
+        // FIXME: met een priority bit per 2*16 kmers zou 2 basen = 4 bits minder ook moeten werken.
         let mut bitlen = genomesize.next_power_of_two().trailing_zeros() as u8;
         if (bitlen & 1) == 1 {
             // must be even.

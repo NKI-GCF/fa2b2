@@ -26,6 +26,9 @@ extern crate bincode;
 extern crate flate2;
 extern crate serde;
 
+#[macro_use]
+extern crate bitvec;
+
 //extended_position
 extern crate to_default;
 #[macro_use]
@@ -46,14 +49,13 @@ extern crate lazy_static;
 ///
 pub(crate) mod rdbg;
 pub mod aln;
-pub(crate) mod head_scope;
 pub mod index;
 pub(crate) mod kmerconst;
 pub(crate) mod kmerstore;
-pub(crate) mod mapping;
+//pub(crate) mod mapping;
 pub(crate) mod marker;
 pub(crate) mod new_types;
 pub(crate) mod past_scope;
 pub(crate) mod scope;
-pub(crate) mod xmer_hash_extension_thread;
 pub(crate) mod xmer_location;
+pub(crate) mod xmerhasher;

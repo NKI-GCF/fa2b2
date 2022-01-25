@@ -11,6 +11,9 @@ use std::mem::size_of;
 
 // lowering this below 8 may cause some test failures
 //const EXT_BITS: usize = 8;
+
+// FIXME: ext_bits hangt af van de kmersize.
+// FIXME 2: zonder ori bit is de extension een bit langer, dat maakt vanalles eenvoudiger.
 pub(crate) const EXT_BITS: usize = 16;
 
 pub(crate) const EXT_MAX: usize = 1 << EXT_BITS;

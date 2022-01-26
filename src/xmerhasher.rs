@@ -71,7 +71,8 @@ impl XmerHasher {
                     {
                         self.to_next.push_front(err.into_inner());
                     } else if let Ok(mark) = self.rx_from_main.recv() {
-                        // We seem starved, block until more work.
+                        // We seem starved, block receive until more work.
+                        // XXX if we have something else to do in the future this should change.
                         self.store_mark_and_extend(mark, &mut max_extended, &mut kmp)?;
                     }
                 }
@@ -80,14 +81,17 @@ impl XmerHasher {
         // The main channel has shutdown.
         loop {
             if let Ok(mark) = self.rx_inter_thread.try_recv() {
+                // indicate we had something to process still by unsetting a bit (if it was set).
                 if let Some(sp) = Arc::get_mut(&mut self.shutdown_poll) {
                     *sp &= !(1 << self.thread_nr);
                 }
                 self.store_mark_and_extend(mark, &mut max_extended, &mut kmp)?;
             } else if self.to_next.is_empty() {
+                // indicate we have nothing left to process. This may be undone upon new received..
                 if let Some(sp) = Arc::get_mut(&mut self.shutdown_poll) {
                     *sp |= 1 << self.thread_nr;
                     if *sp == (1 << self.thread_max) - 1 {
+                        // ..unless all bits are set.
                         break;
                     }
                 }
@@ -99,7 +103,7 @@ impl XmerHasher {
                 self.to_next.push_front(err.into_inner());
             }
         }
-        // send the packages back to main in order of threads.
+        // blocking send the packages back to the main thread in order of processing threads.
         if self.thread_nr == 0 {
             self.tx_to_main.send((kmp, max_extended))?;
         } else if let Ok(_) = self.rx_inter_thread.recv() {
@@ -111,7 +115,7 @@ impl XmerHasher {
         }
         Ok(())
     }
-    /// The main work for the thread, hashing and extending index and updating its p, on collision.
+    /// The actual work for the thread, hashing and extending index and updating its p, on collision.
     fn store_mark_and_extend(
         &mut self,
         mut mark: XmerLoc,

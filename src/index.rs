@@ -82,7 +82,9 @@ fn multi_thread(
     // End transmission to threads
     drop(kmi);
 
+    // receive the data from threads. They should send in order.
     for nr in 0..no_threads {
+        // blocking receive.
         let (kmp, max_extended) = rx_in_main.recv()?;
         ks.kmp.extend(kmp);
         dbg_print!("Thread {} had {} max extended", nr, max_extended.len());

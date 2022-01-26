@@ -294,25 +294,33 @@ impl<'a> KmerIter<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::index::multi_thread;
     use crate::kmerconst::KmerConst;
+    use crate::marker::fasta::Reader;
     use crate::new_types::extended_position::ExtPosEtc;
     use crate::new_types::position::BasePos;
     use anyhow::Result;
+    use std::io;
+
     const SEQLEN: usize = 250;
     const READLEN: u16 = 6;
 
-    fn process<'a>(ks: &'a mut KmerStore, kc: &'a KmerConst, seq: Vec<u8>) -> Result<()> {
-        let mut kmi = KmerIter::new(ks, kc, vec![]);
-        let definition = fasta::record::Definition::new("test", None);
-        let sequence = fasta::record::Sequence::from(seq);
-        kmi.markcontig(kc, fasta::Record::new(definition, sequence))
+    fn read_from_string(s: &str) -> &[u8] {
+        s.as_bytes()
+    }
+
+    fn process<'a>(ks: &'a mut KmerStore, kc: KmerConst, seq: &[u8]) -> Result<()> {
+        let record = [b">test\n", seq].concat();
+        let buf_reader = io::BufReader::new(&record[..]);
+        let reader = Reader::new(buf_reader);
+        multi_thread(ks, kc, reader, 2)
     }
 
     #[test]
     fn test_16n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
-        process(&mut ks, &kc, b"NNNNNNNNNNNNNNNN"[..].to_owned())?;
+        process(&mut ks, kc, b"NNNNNNNNNNNNNNNN")?;
 
         dbg_assert_eq!(ks.contig.len(), 1);
         dbg_assert_eq!(ks.contig[0].twobit, Position::default());
@@ -323,7 +331,7 @@ mod tests {
     fn test_1n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
-        process(&mut ks, &kc, b"N"[..].to_owned())?;
+        process(&mut ks, kc, b"N")?;
 
         dbg_assert_eq!(ks.contig.len(), 1);
         dbg_assert_eq!(ks.contig[0].twobit, Position::default());
@@ -334,22 +342,23 @@ mod tests {
     fn test_1n1c1n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
-        process(&mut ks, &kc, b"NCN"[..].to_owned())?;
+        process(&mut ks, kc, b"NCN")?;
 
         dbg_assert_eq!(ks.contig.len(), 2);
         dbg_assert_eq!(ks.contig[0].twobit, Position::default());
         dbg_assert_eq!(ks.contig[0].genomic, 1.into());
-        dbg_assert_eq!(ks.contig[1].twobit, Position::from_basepos(1_u64)); //XXX
+        dbg_assert_eq!(ks.contig[1].twobit, Position::from_basepos(1_u64));
         dbg_assert_eq!(ks.contig[1].genomic, 3.into());
         Ok(())
     }
     #[test]
     fn test_17c() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let k = kc.kmerlen as u64;
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
-        process(&mut ks, &kc, b"CCCCCCCCCCCCCCCCC"[..].to_owned())?;
+        process(&mut ks, kc, b"CCCCCCCCCCCCCCCCC")?;
         dbg_assert_eq!(ks.kmp.len(), 128);
-        let mut first_pos = ExtPosEtc::from_basepos(kc.kmerlen as u64);
+        let mut first_pos = ExtPosEtc::from_basepos(k);
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 1..ks.kmp.len() {
@@ -364,11 +373,12 @@ mod tests {
     #[test]
     fn test_1n18c1n() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let k = kc.kmerlen as u64;
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         {
-            process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCCCCN"[..].to_owned())?;
+            process(&mut ks, kc, b"NCCCCCCCCCCCCCCCCCCN")?;
         }
-        let mut first_pos = ExtPosEtc::from_basepos(kc.kmerlen as u64);
+        let mut first_pos = ExtPosEtc::from_basepos(k);
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 0..ks.kmp.len() {
@@ -383,12 +393,13 @@ mod tests {
     #[test]
     fn test_1n16c() -> Result<()> {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let k = kc.kmerlen as u64;
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         {
-            process(&mut ks, &kc, b"NCCCCCCCCCCCCCCCC"[..].to_owned())?;
+            process(&mut ks, kc, b"NCCCCCCCCCCCCCCCC")?;
         }
         let mut seen = 0;
-        let mut first_pos = ExtPosEtc::from_basepos(kc.kmerlen as u64);
+        let mut first_pos = ExtPosEtc::from_basepos(k);
         first_pos.set_repetitive();
         for i in 0..ks.kmp.len() {
             if ks.kmp[i].is_set() {
@@ -404,7 +415,7 @@ mod tests {
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         {
-            process(&mut ks, &kc, b"ATATATATATATATATAT"[..].to_owned())?;
+            process(&mut ks, kc, b"ATATATATATATATATAT")?;
         }
         for i in 0..ks.kmp.len() {
             dbg_assert!(

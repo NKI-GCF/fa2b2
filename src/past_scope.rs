@@ -17,6 +17,10 @@ pub struct PastScope<'a> {
     period: Position,
 }
 
+// The past scope is a struct currently only in use for tests. It serves to revisit stored twobit
+// reference sequence and retrieve the k-mer from that site. Similar to the alignment, except for
+// the source. In earlier revisions it was used to retrieve different k-mers from the site, but
+// this has become obsolete. It's obviously cheaper to keep on hashing a single chosen k-mer.
 impl<'a> PastScope<'a> {
     pub(crate) fn new(kc: &'a KmerConst) -> Result<Self> {
         Ok(PastScope {
@@ -102,31 +106,36 @@ impl<'a> PastScope<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::index::multi_thread;
     use crate::kmerconst::KmerConst;
     use crate::marker::KmerIter;
     use crate::new_types::position::BasePos;
+    use crate::past_scope::tests::fasta::Reader;
     use anyhow::Result;
     use noodles_fasta as fasta;
+    use std::io;
     const SEQLEN: usize = 250;
     const READLEN: u16 = 6;
 
     #[test]
     fn test_reconstruct1() -> Result<()> {
+        // indexing
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
-        let mut kmi = KmerIter::new(&mut ks, &kc, vec![]);
-        let seq_vec = b"GCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC"[..]
-            .to_owned();
-        let definition = fasta::record::Definition::new("test", None);
-        let sequence = fasta::record::Sequence::from(seq_vec);
-        kmi.markcontig(&kc, fasta::Record::new(definition, sequence))?;
-        let mut scp = PastScope::new(&kc);
+        let record =
+            b">test\nGCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC";
+        multi_thread(&mut ks, kc, Reader::new(io::BufReader::new(&record[..])), 1)?;
+
+        // Testing whether for every stored xmer, if we go back to the sequence at that site,
+        // We again retrieve that same xmer.
+        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let mut scp = PastScope::new(&kc)?;
         let mut seen = 0;
-        for hash in 0..kmi.ks.kmp.len() {
-            let p = kmi.ks.kmp[hash];
+        for hash in 0..ks.kmp.len() {
+            let p = ks.kmp[hash];
             if p.is_set() {
                 dbg_print!("---[ {:#x} p:{:?} ]---", hash, p);
-                let mark = scp.rebuild(&mut kmi.ks, p, hash)?;
+                let mark = scp.rebuild(&mut ks, p, hash)?;
                 dbg_assert_eq!(mark.p, p.rep_dup_masked(), "[{}]: {:x}", seen, hash);
                 seen += 1;
             }
@@ -143,11 +152,11 @@ mod tests {
         // all mappable.
         let seqlen: usize = 8;
         let kc = KmerConst::new(seqlen, 2, 0);
-        let mut scp = PastScope::new(&kc);
+        let mut scp = PastScope::new(&kc)?;
 
         for gen in 0..=4_usize.pow(seqlen as u32) {
+            let kc = KmerConst::new(seqlen, 2, 0);
             let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
-            let mut kmi = KmerIter::new(&mut ks, &kc, vec![]);
             let seq_vec: Vec<_> = (0..seqlen)
                 .map(|i| match (gen >> (i << 1)) & 3 {
                     0 => 'A',
@@ -161,15 +170,14 @@ mod tests {
             dbg_print!("{:?}", seq_vec);
 
             let vv: Vec<u8> = seq_vec.into_iter().map(|c| c as u8).collect();
-            let definition = fasta::record::Definition::new("test", None);
-            let sequence = fasta::record::Sequence::from(vv);
-            kmi.markcontig(&kc, fasta::Record::new(definition, sequence))?;
-            for hash in 0..kmi.ks.kmp.len() {
-                let p = kmi.ks.kmp[hash];
+            let record = [b">test\n", &vv[..]].concat();
+            multi_thread(&mut ks, kc, Reader::new(io::BufReader::new(&record[..])), 1)?;
+            for hash in 0..ks.kmp.len() {
+                let p = ks.kmp[hash];
                 if p.is_set() {
                     dbg_print!("hash: [{:#x}]: p: {:?}", hash, p);
-                    let mark = scp.rebuild(&mut kmi.ks, p, hash)?;
-                    dbg_assert_eq!(mark.p, p.rep_dup_masked(), "reps: {}", kmi.ks.repeat.len());
+                    let mark = scp.rebuild(&mut ks, p, hash)?;
+                    dbg_assert_eq!(mark.p, p.rep_dup_masked(), "reps: {}", ks.repeat.len());
                 }
             }
         }

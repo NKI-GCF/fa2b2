@@ -32,7 +32,7 @@ pub struct Scope<'a> {
 /// scope NO_XMERS.
 impl<'a> Scope<'a> {
     pub(crate) fn new(kc: &'a KmerConst) -> Result<Self> {
-        ensure!(kc.no_kmers & 1 == 0, "Even: to store template and revcmp");
+        ensure!(kc.no_kmers & 1 == 0, "Even: req to store template & revcmp");
         Ok(Scope {
             kc,
             xmer_loc: repeat(XmerLoc::default())

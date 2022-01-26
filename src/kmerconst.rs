@@ -130,7 +130,7 @@ impl KmerConst {
         dbg_assert!(read_len >= kmerlen);
 
         // e.g. with a RL 4 & KL 2: (0,1), (1,2), (2,3) => 3 kmers.
-        let no_kmers = read_len + 1 - kmerlen;
+        let no_kmers = (read_len + 1 - kmerlen) * 2;
 
         dbg_restart!("read_len: {}, kmerlen: {}\n--", read_len, kmerlen);
         if !cfg!(debug_assertions) {
@@ -161,7 +161,7 @@ impl KmerConst {
         if pos > read_len {
             contig.bound_lower(pos - read_len)
         }
-        contig.bound_upper(pos + Position::from_basepos(self.no_kmers as u64));
+        contig.bound_upper(pos + Position::from_basepos((self.no_kmers / 2) as u64));
         contig
     }
 }

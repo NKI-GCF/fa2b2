@@ -13,18 +13,23 @@ use itertools::izip;
 use noodles_fasta as fasta;
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::BufRead;
 use std::io::{BufReader, BufWriter};
 use std::iter::repeat;
 use std::path::Path;
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::thread::spawn;
 
-fn multi_thread(
+pub(crate) fn multi_thread<T>(
     ks: &mut KmerStore,
     kc: KmerConst,
-    mut fa: fasta::Reader<BufReader<File>>,
+    mut fa: fasta::Reader<T>,
     no_threads: usize,
-) -> Result<()> {
+) -> Result<()>
+where
+    T: BufRead,
+{
     // channels to send XmerLocs to threads
     let (tx_to_thread, rx_from_main): (Vec<_>, Vec<_>) = repeat(())
         .take(no_threads)
@@ -43,7 +48,7 @@ fn multi_thread(
 
     // to collect the results
     let (tx_to_main, rx_in_main) = unbounded::<(Vec<ExtPosEtc>, Vec<XmerLoc>)>();
-    let shutdown_poll = Arc::new(0u64);
+    let shutdown_poll = Arc::new(AtomicUsize::new(0));
 
     let threads: Vec<_> = izip!(
         0..no_threads,
@@ -55,32 +60,31 @@ fn multi_thread(
         let tx_to_main = tx_to_main.clone();
         let shutdown_poll = shutdown_poll.clone();
         spawn(move || {
-            XmerHasher::new(
-                no_threads,
-                kc.kmerlen,
-                xmer_channels,
-                tx_to_main,
-                shutdown_poll,
-            )
-            .and_then(|mut xh| xh.work())
+            XmerHasher::new(no_threads, kc.kmerlen, xmer_channels, tx_to_main)
+                .and_then(|mut xh| xh.work(shutdown_poll))
         })
     })
     .collect();
+    drop(shutdown_poll);
 
     // The main thread to read from fasta and prefilter
     let mut kmi = KmerIter::new(ks, &kc, tx_to_thread)?;
 
-    for record in fa.records() {
-        kmi.markcontig(&kc, record?)?;
+    for res in fa.records() {
+        let record = res?;
+        dbg_print!("Starting with record {}.", record.name());
+        kmi.markcontig(&kc, record)?;
+        dbg_print!("Finished with record.");
     }
 
-    // End transmission to threads
+    dbg_print!("Ending transmission to threads.");
     drop(kmi);
 
     // receive the data from threads. They should send in order.
     for nr in 0..no_threads {
-        // blocking receive.
+        dbg_print!("blocking receive for thread {}..", nr);
         let (kmp, max_extended) = rx_in_main.recv()?;
+        dbg_print!("Received from thread {}..", nr);
 
         //XXX actually why not directly write to disk? do we need ks.kmp still?
         ks.kmp.extend(kmp);

@@ -5,7 +5,8 @@ use crate::xmer_location::XmerLoc;
 use anyhow::{ensure, Result};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::sync;
+use std::sync::atomic::AtomicUsize;
 
 pub(crate) struct XmerHasher {
     thread_nr: usize,
@@ -17,7 +18,6 @@ pub(crate) struct XmerHasher {
     rx_inter_thread: Receiver<XmerLoc>,
     tx_to_main: Sender<(Vec<ExtPosEtc>, Vec<XmerLoc>)>,
     to_next: VecDeque<XmerLoc>,
-    shutdown_poll: Arc<u64>,
 }
 
 type XmerChannels = (usize, Receiver<XmerLoc>, Sender<XmerLoc>, Receiver<XmerLoc>);
@@ -28,7 +28,6 @@ impl XmerHasher {
         kmerlen: usize,
         xmer_channels: XmerChannels,
         tx_to_main: Sender<(Vec<ExtPosEtc>, Vec<XmerLoc>)>,
-        shutdown_poll: Arc<u64>,
     ) -> Result<XmerHasher> {
         ensure!(kmerlen < 16);
         ensure!(thread_max.is_power_of_two());
@@ -43,10 +42,9 @@ impl XmerHasher {
             rx_inter_thread: xmer_channels.3,
             tx_to_main,
             to_next: VecDeque::<XmerLoc>::with_capacity(1 << 16),
-            shutdown_poll,
         })
     }
-    pub(crate) fn work(&mut self) -> Result<()> {
+    pub(crate) fn work(&mut self, shutdown_poll: sync::Arc<AtomicUsize>) -> Result<()> {
         let bitlen = self.kmerlen * 2;
         let shl = bitlen - 2 - usize::try_from(self.thread_max.trailing_zeros()).unwrap();
         let mut kmp = vec![ExtPosEtc::default(); 1 << shl]; // position + strand per xmer handled in this thread.
@@ -77,22 +75,25 @@ impl XmerHasher {
                 }
             }
         }
-        // The main channel has shutdown.
+        dbg_print!("The main channel has shutdown.");
+        let end_state = (1 << self.thread_max) - 1;
         loop {
             if let Ok(mark) = self.rx_inter_thread.try_recv() {
                 // indicate we had something to process still by unsetting a bit (if it was set).
-                if let Some(sp) = Arc::get_mut(&mut self.shutdown_poll) {
-                    *sp &= !(1 << self.thread_nr);
-                }
+                let x_ptr = sync::Arc::as_ptr(&shutdown_poll);
+                unsafe { &*x_ptr }
+                    .fetch_and(!(1 << self.thread_nr), sync::atomic::Ordering::Relaxed);
+
                 self.store_mark_and_extend(mark, &mut max_extended, &mut kmp)?;
             } else if self.to_next.is_empty() {
-                // indicate we have nothing left to process. This may be undone upon new received..
-                if let Some(sp) = Arc::get_mut(&mut self.shutdown_poll) {
-                    *sp |= 1 << self.thread_nr;
-                    if *sp == (1 << self.thread_max) - 1 {
-                        // ..unless all bits are set.
-                        break;
-                    }
+                //This may be undone upon new received..
+                dbg_print!("Thread {} has nothing left to process.", self.thread_nr);
+                let x_ptr = sync::Arc::as_ptr(&shutdown_poll);
+
+                if unsafe { &*x_ptr }.fetch_or(1 << self.thread_nr, sync::atomic::Ordering::Relaxed)
+                    == end_state
+                {
+                    break;
                 }
             } else if let Some(err) = self
                 .to_next
@@ -102,8 +103,11 @@ impl XmerHasher {
                 self.to_next.push_front(err.into_inner());
             }
         }
-        // blocking send the packages back to the main thread in order of processing threads.
+        dbg_print!(
+            "blocking send the packages back to the main thread in order of processing threads."
+        );
         if self.thread_nr == 0 || self.rx_inter_thread.recv().is_ok() {
+            dbg_print!("NOw sending for thread {}", self.thread_nr);
             self.tx_to_main.send((kmp, max_extended))?;
         }
         if self.thread_nr + 1 != self.thread_max {

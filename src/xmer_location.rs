@@ -22,8 +22,8 @@ impl XmerLoc {
         self.idx != usize::MAX
     }
     /// kmers for unique positions for either strand within this mask are the scope of HeadScope,
-    /// not the entire hash, but sufficiently large enough to account for repetitive sequences
-    /// (transposons, simple or less simple repeats).
+    /// not the entire xmer, but sufficiently large for the array to account for repetitive sequences
+    /// (transposons, simple or less simple repeats), I believe usually less than 10_000 bases.
     pub(crate) fn get_scope_idx(&self, no_kmers: usize) -> usize {
         let mut scope_idx = self.p.as_basepos().as_usize() << 1;
         if !self.p.is_template() {

@@ -18,13 +18,13 @@ pub struct PastScope<'a> {
 }
 
 impl<'a> PastScope<'a> {
-    pub(crate) fn new(kc: &'a KmerConst) -> Self {
-        PastScope {
+    pub(crate) fn new(kc: &'a KmerConst) -> Result<Self> {
+        Ok(PastScope {
             kc,
-            scp: Scope::new(kc),
+            scp: Scope::new(kc)?,
             plim: Default::default(),
             period: Default::default(),
-        }
+        })
     }
     fn rebuild(&mut self, ks: &KmerStore, p: ExtPosEtc, idx: usize) -> Result<XmerLoc> {
         let pos = Position::from(p);

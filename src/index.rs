@@ -68,7 +68,7 @@ fn multi_thread(
     .collect();
 
     // The main thread to read from fasta and prefilter
-    let mut kmi = KmerIter::new(ks, &kc, tx_to_thread);
+    let mut kmi = KmerIter::new(ks, &kc, tx_to_thread)?;
 
     for record in fa.records() {
         kmi.markcontig(&kc, record?)?;
@@ -81,6 +81,8 @@ fn multi_thread(
     for nr in 0..no_threads {
         // blocking receive.
         let (kmp, max_extended) = rx_in_main.recv()?;
+
+        //XXX actually why not directly write to disk? do we need ks.kmp still?
         ks.kmp.extend(kmp);
         dbg_print!("Thread {} had {} max extended", nr, max_extended.len());
     }

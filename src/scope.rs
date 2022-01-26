@@ -8,20 +8,18 @@ use crate::new_types::{
 };
 use crate::rdbg::STAT_DB;
 use crate::xmer_location::XmerLoc;
+use anyhow::{ensure, Result};
 use bitvec::prelude::{BitSlice, Lsb0};
 use moveslice::Moveslice;
 use std::cmp::Ordering;
-//std:sync::{mpsc, Arc},
-//std:thread,
+use std::iter::repeat;
 
 // for this nr of xmers a median will be selected. Two strands, so 16 basepositions + kmer length.
-pub(crate) const NO_XMERS: usize = 32;
-
 pub struct Scope<'a> {
     kc: &'a KmerConst,
-    xmer_loc: [XmerLoc; NO_XMERS],
-    xmer_loc_ord: [usize; NO_XMERS],
-    pos_lookup: [ExtPosEtc; NO_XMERS],
+    xmer_loc: Vec<XmerLoc>,
+    xmer_loc_ord: Vec<usize>,
+    pos_lookup: Vec<ExtPosEtc>,
     mark_i: usize,
     pos: Position,
     dna: TwoBitDna,
@@ -33,19 +31,24 @@ pub struct Scope<'a> {
 /// Processes the sequence head. Filters ambiguous and passes through only median xmers within the
 /// scope NO_XMERS.
 impl<'a> Scope<'a> {
-    pub(crate) fn new(kc: &'a KmerConst) -> Self {
-        Scope {
+    pub(crate) fn new(kc: &'a KmerConst) -> Result<Self> {
+        ensure!(kc.no_kmers & 1 == 0, "Even: to store template and revcmp");
+        Ok(Scope {
             kc,
-            xmer_loc: Default::default(),
-            xmer_loc_ord: (0..NO_XMERS).collect::<Vec<_>>().try_into().unwrap(),
-            pos_lookup: Default::default(),
+            xmer_loc: repeat(XmerLoc::default())
+                .take(kc.no_kmers)
+                .collect::<Vec<_>>(),
+            xmer_loc_ord: (0..kc.no_kmers).collect::<Vec<_>>(),
+            pos_lookup: repeat(ExtPosEtc::default())
+                .take(kc.no_kmers)
+                .collect::<Vec<_>>(),
             mark_i: usize::MAX,
             pos: Default::default(),
             dna: TwoBitDna::new(0),
             rc: TwoBitRcDna::new(0),
             i: 0,
             rotation: 0,
-        }
+        })
     }
     /// clear for the processing of more sequence.
     pub(crate) fn reset(&mut self) {
@@ -76,7 +79,7 @@ impl<'a> Scope<'a> {
                 self.mark_i = i;
                 let test = &self.xmer_loc[i];
                 // use first bits of basepos | ori in array for lookup. Sufficient for within scope of NO_KMERS.
-                let scope_idx = test.get_scope_idx();
+                let scope_idx = test.get_scope_idx(self.kc.no_kmers);
                 if self.pos_lookup[scope_idx] != test.p {
                     // TODO: use self.mini_kmp to filter out duplicates
                     self.pos_lookup[scope_idx] = test.p;
@@ -107,7 +110,7 @@ impl<'a> Scope<'a> {
     fn get_ready(&mut self) {
         // Use the seed to hash. TODO: This hash should be undone before colision detection.
         let ext = self.kc.seed;
-        let mut p = ExtPosEtc::from((Extension::from(ext), self.pos));
+        let p = ExtPosEtc::from((Extension::from(ext), self.pos));
 
         let template_hash = self.kc.xmer_hash(self.dna.to_usize(), ext);
         self.xmer_loc[self.rotation].set(template_hash, p);
@@ -116,6 +119,9 @@ impl<'a> Scope<'a> {
         let reverse_complement_hash = self.kc.xmer_hash(self.dna.to_usize(), ext);
         self.xmer_loc[self.rotation].set(reverse_complement_hash, p);
         self.rotation += 1;
+        if self.rotation == self.kc.no_kmers {
+            self.rotation = 0;
+        }
     }
 
     /// get hashed k-mer, with no compression of the orientation

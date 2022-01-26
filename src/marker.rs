@@ -33,11 +33,15 @@ pub struct KmerIter<'a> {
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
-    pub(crate) fn new(ks: &'a mut KmerStore, kc: &'a KmerConst, tx: Vec<Sender<XmerLoc>>) -> Self {
-        let scp = Scope::new(kc);
+    pub(crate) fn new(
+        ks: &'a mut KmerStore,
+        kc: &'a KmerConst,
+        tx: Vec<Sender<XmerLoc>>,
+    ) -> Result<Self> {
+        let scp = Scope::new(kc)?;
         let rep_max_dist = BasePos::from(ks.rep_max_dist).as_usize();
         let mini_shift = rep_max_dist.next_power_of_two().trailing_zeros();
-        KmerIter {
+        Ok(KmerIter {
             scp,
             ks,
             n_stretch: BasePos::default(),
@@ -47,7 +51,7 @@ impl<'a> KmerIter<'a> {
             period: Position::default(),
             rep_max_dist,
             tx,
-        }
+        })
     }
     /// clear sequence accounting and scope for the processing of another chromosome
     fn init_chromosome_accounting(&mut self) -> Position {

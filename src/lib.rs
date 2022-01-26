@@ -52,7 +52,7 @@ pub mod aln;
 pub mod index;
 pub(crate) mod kmerconst;
 pub(crate) mod kmerstore;
-//pub(crate) mod mapping;
+pub(crate) mod mapping;
 pub(crate) mod marker;
 pub(crate) mod new_types;
 pub(crate) mod past_scope;

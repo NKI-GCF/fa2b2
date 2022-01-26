@@ -41,7 +41,7 @@ impl KmerStore {
             //kmp,
             contig: Vec::new(), // contig info
             repeat: AHashMap::new(),
-            seed: seed,
+            seed,
             b2_bit_ct: 0,
         })
     }
@@ -100,12 +100,12 @@ impl KmerStore {
         self.contig
             .get(i + 1)
             .map(|c| c.twobit)
-            .unwrap_or(self.get_pos())
+            .unwrap_or_else(|| self.get_pos())
     }
     fn get_twobit_pos_before(&self, i: usize) -> Position {
         i.checked_sub(1)
             .map(|t| self.contig[t].twobit)
-            .unwrap_or(Position::default())
+            .unwrap_or_default()
     }
     pub(crate) fn bit_slice(&self, range: PosRange) -> Result<&BitSlice<u8, Lsb0>> {
         ensure!(range.lower() < range.upper());

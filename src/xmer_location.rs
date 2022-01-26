@@ -3,9 +3,6 @@ use crate::rdbg::STAT_DB;
 use crate::scope::NO_XMERS;
 use std::{cmp, fmt};
 
-pub(crate) const XMER_DUP_CONTIG_BITS: u32 = 16;
-const XMER_DUP_CONTIG_MASK: usize = (1 << XMER_DUP_CONTIG_BITS) - 1;
-
 #[derive(new, PartialEq, Eq)]
 pub struct XmerLoc {
     pub idx: usize,
@@ -27,8 +24,8 @@ impl XmerLoc {
     }
     /// kmers for unique positions for either strand within this mask are in scope for HeadScope.
     pub(crate) fn get_scope_idx(&self) -> usize {
-        let mut scope_idx = self.p.basepos().as_usize() << 1;
-        if self.p.get_ori() {
+        let mut scope_idx = self.p.as_basepos().as_usize() << 1;
+        if !self.p.is_template() {
             scope_idx |= 1;
         }
         scope_idx & ((1 << NO_XMERS) - 1)
@@ -111,7 +108,7 @@ mod tests {
         for _ in 0..pick {
             let ori = rng.gen_range(0..2);
             kl.next(ori, true);
-            dbg_assert_eq!(ori, if kl.p.get_ori() { 1 } else { 0 });
+            dbg_assert_eq!(ori, if kl.p.is_template() { 0 } else { 1 });
         }
         dbg_assert_eq!(
             kl.p.as_u64() & !1,
@@ -126,7 +123,7 @@ mod tests {
         for _ in 0..pick {
             let ori = rng.gen_range(0..2);
             kl.next(ori, false);
-            dbg_assert_eq!(ori, if kl.p.get_ori() { 1 } else { 0 });
+            dbg_assert_eq!(ori, if kl.p.is_template() { 0 } else { 1 });
         }
         dbg_assert_eq!(
             kl.p.as_u64() & !1,

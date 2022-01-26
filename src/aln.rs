@@ -59,7 +59,7 @@ impl<'a> Aligner<'a> {
             let record = res?;
             for b in record
                 .sequence()
-                .into_iter()
+                .iter()
                 .filter_map(|&b| self.filter_median_xmers(b))
             {
                 //self.scp.;

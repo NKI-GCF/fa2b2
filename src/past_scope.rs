@@ -35,8 +35,10 @@ impl<'a> PastScope<'a> {
         let extension = Extension::from(p);
 
         let mut p = ExtPosEtc::from((extension, bound.lower()));
-        let mut mark = XmerLoc::default();
-        mark.p = ExtPosEtc::from(extension);
+        let mut mark = XmerLoc {
+            p: ExtPosEtc::from(extension),
+            idx: Default::default(),
+        };
 
         //fixme: make this a proper iterator
         for b2 in ks.bit_slice(bound)?.windows(2) {
@@ -66,8 +68,8 @@ impl<'a> PastScope<'a> {
 
 /*impl<'a> fmt::Display for PastScope<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let p = self.p.unshift_pos() as usize;
-        let mp = self.mark.p.unshift_pos() as usize;
+        let p = self.p.unshift_pos();
+        let mp = self.mark.p.unshift_pos();
         let n = self.kc.kmerlen + self.p.x();
         let o = " ".repeat((p - self.kc.read_len) * 5);
         let r = p - mp;

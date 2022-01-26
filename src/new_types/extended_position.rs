@@ -7,7 +7,6 @@ use anyhow::{anyhow, Result};
 use derive_more::Sub;
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
-use std::mem::size_of;
 
 // lowering this below 8 may cause some test failures
 //const EXT_BITS: usize = 8;
@@ -18,7 +17,7 @@ pub(crate) const EXT_BITS: usize = 16;
 
 pub(crate) const EXT_MAX: usize = 1 << EXT_BITS;
 
-pub(super) const EXT_SHIFT: u32 = (size_of::<u64>() * 8 - EXT_BITS) as u32;
+pub(super) const EXT_SHIFT: u32 = u64::BITS - EXT_BITS as u32;
 pub(crate) const EXT_MASK: u64 = !0x0 ^ ((1 << EXT_SHIFT) - 1);
 const REP_SHIFT: u32 = EXT_SHIFT - 1;
 const DUP_SHIFT: u32 = EXT_SHIFT - 2;
@@ -65,8 +64,8 @@ impl ExtPosEtc {
     pub(crate) fn as_u64(&self) -> u64 {
         self.0
     }
-    pub(crate) fn unshift_pos(&self) -> u64 {
-        BasePos::from(self.pos()).as_u64()
+    pub(crate) fn unshift_pos(&self) -> usize {
+        BasePos::from(self.pos()).as_usize()
     }
     /// a position is shifted, but has no other thant the POS_MASK bits set
     pub(crate) fn pos(&self) -> Position {
@@ -77,10 +76,6 @@ impl ExtPosEtc {
         T: Into<u64>,
     {
         ExtPosEtc::from((Extension::default(), Position::from_basepos(value)))
-    }
-    #[deprecated]
-    pub(crate) fn basepos(&self) -> BasePos {
-        BasePos::from(self.pos())
     }
     pub(crate) fn as_basepos(&self) -> BasePos {
         BasePos::from(*self)
@@ -98,10 +93,6 @@ impl ExtPosEtc {
     pub(crate) fn set_ori(&mut self, ori: bool) {
         self.0 ^= (self.0 ^ if ori { 1 } else { 0 }) & ORI_MASK
     }
-    #[deprecated] // use !is_template
-    pub(crate) fn get_ori(&self) -> bool {
-        self.0 & ORI_MASK != 0
-    }
     pub(crate) fn is_template(&self) -> bool {
         self.0 & ORI_MASK == 0
     }
@@ -117,9 +108,6 @@ impl ExtPosEtc {
     }
     pub(crate) fn x(&self) -> usize {
         usize::from(self.extension())
-    }
-    pub(crate) fn same_ori(&self, p: ExtPosEtc) -> bool {
-        self.is_template() == p.is_template()
     }
     pub(crate) fn get_rc(&self) -> ExtPosEtc {
         ExtPosEtc(self.0 ^ ORI_MASK)
@@ -166,9 +154,6 @@ impl ExtPosEtc {
         // only extension bits means blacklisting, except for extension 0. pos is always > kmerlen
         new_entry.extension().as_u64() > self.rep_dup_masked().as_u64() // TODO: count down extension?
             || (new_entry.extension() == self.extension() && new_entry.pos() <= self.pos())
-    }
-    pub(crate) fn is_set_and_not(&self, other: ExtPosEtc) -> bool {
-        self.is_set() && self.pos() != other.pos()
     }
     pub(crate) fn same_pos_and_ext(&self, new_entry: ExtPosEtc) -> bool {
         (self.0 ^ new_entry.0) & (EXT_MASK | POS_MASK) == 0

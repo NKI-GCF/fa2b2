@@ -46,30 +46,25 @@ fn multi_thread(
     let shutdown_poll = Arc::new(0u64);
 
     let threads: Vec<_> = izip!(
-        (0..no_threads).into_iter(),
+        0..no_threads,
         rx_from_main.into_iter(),
         tx_inter_thread.into_iter(),
         rx_inter_thread.into_iter(),
     )
-    .map(
-        |(thread_nr, rx_from_main, tx_inter_thread, rx_inter_thread)| {
-            let tx_to_main = tx_to_main.clone();
-            let shutdown_poll = shutdown_poll.clone();
-            spawn(move || {
-                XmerHasher::new(
-                    thread_nr,
-                    no_threads,
-                    kc.kmerlen,
-                    rx_from_main,
-                    tx_inter_thread,
-                    rx_inter_thread,
-                    tx_to_main,
-                    shutdown_poll,
-                )
-                .and_then(|mut xh| xh.work())
-            })
-        },
-    )
+    .map(|xmer_channels| {
+        let tx_to_main = tx_to_main.clone();
+        let shutdown_poll = shutdown_poll.clone();
+        spawn(move || {
+            XmerHasher::new(
+                no_threads,
+                kc.kmerlen,
+                xmer_channels,
+                tx_to_main,
+                shutdown_poll,
+            )
+            .and_then(|mut xh| xh.work())
+        })
+    })
     .collect();
 
     // The main thread to read from fasta and prefilter
@@ -159,7 +154,7 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
     let kc = KmerConst::new(seq_len, read_len, seed);
     let mut ks = KmerStore::new(kc.bitlen, repetition_max_dist, seed)?;
 
-    multi_thread(&mut ks, kc, fa, no_threads);
+    multi_thread(&mut ks, kc, fa, no_threads)?;
     make_stats(&ks);
 
     if let Some(out_file) = opt_out {

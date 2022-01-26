@@ -20,14 +20,13 @@ pub(crate) struct XmerHasher {
     shutdown_poll: Arc<u64>,
 }
 
+type XmerChannels = (usize, Receiver<XmerLoc>, Sender<XmerLoc>, Receiver<XmerLoc>);
+
 impl XmerHasher {
     pub(crate) fn new(
-        thread_nr: usize,
         thread_max: usize,
         kmerlen: usize,
-        rx_from_main: Receiver<XmerLoc>,
-        tx_inter_thread: Sender<XmerLoc>,
-        rx_inter_thread: Receiver<XmerLoc>,
+        xmer_channels: XmerChannels,
         tx_to_main: Sender<(Vec<ExtPosEtc>, Vec<XmerLoc>)>,
         shutdown_poll: Arc<u64>,
     ) -> Result<XmerHasher> {
@@ -35,13 +34,13 @@ impl XmerHasher {
         ensure!(thread_max.is_power_of_two());
 
         Ok(XmerHasher {
-            thread_nr,
+            thread_nr: xmer_channels.0,
             thread_max,
             kmerlen,
             overbit: 1 << (kmerlen * 2 + 1),
-            rx_from_main,
-            tx_inter_thread,
-            rx_inter_thread,
+            rx_from_main: xmer_channels.1,
+            tx_inter_thread: xmer_channels.2,
+            rx_inter_thread: xmer_channels.3,
             tx_to_main,
             to_next: VecDeque::<XmerLoc>::with_capacity(1 << 16),
             shutdown_poll,
@@ -104,9 +103,7 @@ impl XmerHasher {
             }
         }
         // blocking send the packages back to the main thread in order of processing threads.
-        if self.thread_nr == 0 {
-            self.tx_to_main.send((kmp, max_extended))?;
-        } else if let Ok(_) = self.rx_inter_thread.recv() {
+        if self.thread_nr == 0 || self.rx_inter_thread.recv().is_ok() {
             self.tx_to_main.send((kmp, max_extended))?;
         }
         if self.thread_nr + 1 != self.thread_max {

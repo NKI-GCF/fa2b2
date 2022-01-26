@@ -52,8 +52,6 @@ impl Xmer {
         self.base_index = kc.xmer_hash(seq, kc.seed);
 
         if self.base_index & kc.overbit != 0 {
-            self.base_index;
-        } else {
             self.base_index = kc.xmer_mask & !self.base_index;
         }
         orientation

@@ -14,8 +14,6 @@ use std::cmp::Ordering;
 //std:sync::{mpsc, Arc},
 //std:thread,
 
-const NTHREADS: usize = 16;
-
 // for this nr of xmers a median will be selected. Two strands, so 16 basepositions + kmer length.
 pub(crate) const NO_XMERS: usize = 32;
 

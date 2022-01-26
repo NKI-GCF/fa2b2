@@ -48,7 +48,7 @@ macro_rules! implement_revcmp { ($($ty:ty),*) => ($(
             let all_right_two_bits = (seq & dvm::<$ty>(0xc, 0xf)) >> 2;
             seq = all_left_two_bits | all_right_two_bits;
 
-            seq >> (size_of::<$ty>() * 8 - kmerlen * 2)
+            seq >> (<$ty>::BITS - (kmerlen as u32) * 2)
         }
     }
     )*)

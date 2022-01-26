@@ -196,7 +196,7 @@ impl<'a> KmerIter<'a> {
         let chr_coding_start = self.init_chromosome_accounting();
         self.ks.push_contig(chr_coding_start, self.goffs);
         let ext_bits = usize::try_from(self.tx.len().trailing_zeros())?;
-        for b in record.sequence().as_ref().into_iter() {
+        for b in record.sequence().as_ref().iter() {
             if let Some(mut mark) = self.updated_optimal_xmers_only(*b) {
                 mark.idx = kc.hash_and_compress(mark.idx, 0);
                 let thread_index = mark.get_thread_index(kc.bitlen, ext_bits);

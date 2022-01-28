@@ -7,6 +7,11 @@ pub struct XmerLoc {
     pub idx: usize,
     pub p: ExtPosEtc,
 }
+
+pub(crate) fn xmer_hash(idx: usize, k: usize, ext: usize) -> usize {
+    idx ^ ((idx & !ext & ((1 << k) - 1)) << k | ((idx >> k) & ext))
+}
+
 impl XmerLoc {
     pub(crate) fn get(&self) -> Option<(usize, ExtPosEtc)> {
         if self.is_set() {

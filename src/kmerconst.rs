@@ -3,7 +3,6 @@ use crate::rdbg::STAT_DB;
 use crate::xmer_location::XmerLoc;
 use anyhow::Result;
 use num::{FromPrimitive, PrimInt};
-use std::mem::size_of;
 
 pub struct KmerConst {
     pub(crate) no_kmers: usize,

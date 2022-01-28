@@ -8,7 +8,7 @@ use crate::kmerconst::KmerConst;
 use crate::kmerconst::XmerHash;
 use crate::kmerstore::KmerStore;
 use crate::new_types::{
-    extended_position::{ExtPosEtc, MiniExtPosOri},
+    extended_position::ExtPosEtc,
     position::{BasePos, Position},
 };
 use crate::rdbg::STAT_DB;
@@ -25,10 +25,9 @@ pub struct KmerIter<'a> {
     pub(super) ks: &'a mut KmerStore,
     n_stretch: BasePos,
     goffs: BasePos,
-    mini_kmp: Vec<MiniExtPosOri>, //
+    mini_kmp: Vec<ExtPosEtc>, //
     pub(crate) repetitive: u32,
     period: Position,
-    rep_max_dist: usize,
     tx: Vec<Sender<XmerLoc>>,
 } //^-^\\
 
@@ -39,17 +38,18 @@ impl<'a> KmerIter<'a> {
         tx: Vec<Sender<XmerLoc>>,
     ) -> Result<Self> {
         let scp = Scope::new(kc)?;
-        let rep_max_dist = BasePos::from(ks.rep_max_dist).as_usize();
-        let mini_shift = rep_max_dist.next_power_of_two().trailing_zeros();
+        let mini_shift = BasePos::from(ks.rep_max_dist)
+            .as_usize()
+            .next_power_of_two()
+            .trailing_zeros();
         Ok(KmerIter {
             scp,
             ks,
             n_stretch: BasePos::default(),
             goffs: BasePos::default(),
-            mini_kmp: vec![MiniExtPosOri::default(); 1 << mini_shift],
+            mini_kmp: vec![ExtPosEtc::default(); 1 << mini_shift],
             repetitive: 0,
             period: Position::default(),
-            rep_max_dist,
             tx,
         })
     }
@@ -76,19 +76,45 @@ impl<'a> KmerIter<'a> {
             self.n_stretch.to_default();
         }
     }
+
+    /// FIXME: the repetitive bit is no longer set, if we just filter repetitive on period.
+    /// We should but how? send mark with samepose and repetitive bit set? set these only after completion?
+
     /// a kmer is recurrent if it reoccurs within rep_max_dist bases, typically 10_000. This is to
     /// handle e.g. transposons or repetitive DNA, which are not mappable otherwise.
-    fn is_recurrent(&self, test: &XmerLoc) -> bool {
-        let mut x = 0;
-        let repeat_idx = test.idx & (self.mini_kmp.len() - 1);
-        let stored = &self.mini_kmp[repeat_idx];
-        /* FIXME.
-         * if BasePos::from(test.p.pos() - stored.p.pos()).to_usize() < self.rep_max_dist {
-            if stored.x() == x {
-            } else {
-                x += 1;
+    fn is_recurrent(&mut self, mut test: XmerLoc) -> bool {
+        let mask = self.mini_kmp.len() - 1;
+        loop {
+            let repeat_idx = test.idx & mask;
+            let stored = self.mini_kmp[repeat_idx];
+
+            if stored.is_zero() || test.p.pos() - stored.pos() < self.ks.rep_max_dist {
+                self.mini_kmp[test.idx].set(test.p);
+                break;
             }
-        }*/
+            if stored.is_replaceable_by(test.p) {
+                if stored.pos() == test.p.pos() {
+                    return self.mini_kmp[test.idx].is_dup();
+                }
+                self.mini_kmp[test.idx].set(test.p);
+                if stored.x() == test.p.x() {
+                    // same ext for hash => must be same kmer origin => recurrent.
+                    self.mini_kmp[test.idx].set(test.p);
+                    self.mini_kmp[test.idx].set_dup();
+                    return true;
+                }
+                test.p.set(stored); // to be extended next
+            } else if stored.extension() == test.p.extension() {
+                // Note: same extension and hash means same k-mer origin: identical k-mer sequence.
+                // update with last
+                self.mini_kmp[test.idx].set(test.p);
+            }
+            // From the XmerHash trait, extension fails on last, when all ext bits are set.
+            if self.extend_xmer(&mut test).is_err() {
+                dbg_print!("couldn't extend {}", test);
+                return true;
+            }
+        }
         false
     }
     /*fn update_repetitive(&mut self, pd: Position) {
@@ -187,7 +213,7 @@ impl<'a> KmerIter<'a> {
         if let Some(optimum_xmer) = self
             .scp
             .updated_median_xmer(&b2)
-            .filter(|mx| !self.is_recurrent(mx))
+            .filter(|mx| !self.is_recurrent(mx.clone()))
         {
             // FIXME: put the other strand in the idx top bits (saves reverse complementing).
             // Also, we need more alternative XmerLoc types for distinction along with traits !!
@@ -249,48 +275,20 @@ impl<'a> KmerIter<'a> {
         }
         None
     }
-
-    /*fn try_store_mark(&mut self, mark: &mut XmerLoc) -> Result<bool> {
-        if self.period.is_set() && self.ks.kmp[mark.idx].is_set() {
-            self.ks.kmp[mark.idx].set_repetitive();
-            return Ok(false);
-        }
-        let old_stored_p = self.ks.kmp[mark.idx];
-
-        if old_stored_p.is_zero() {
-            self.ks.set_kmp(&mark);
-            return Ok(false);
-        }
-        if old_stored_p.is_replaceable_by(mark.p) {
-            if old_stored_p.pos() == mark.p.pos() {
-                // set and already mark.p. Leave the bit states.
-                return Ok(false);
-            }
-            self.ks.set_kmp(&mark);
-            if old_stored_p.x() == mark.p.x() {
-                // same extension means same base k-mer origin. this is a duplicate.
-                self.ks.kmp[mark.idx].mark_more_recurs_upseq();
-            }
-            dbg_print!("{} -> ?", mark);
-            mark.p = old_stored_p; // to be extended next
-        } else if old_stored_p.extension() == mark.p.extension() {
-            // Note: same extension and hash means same k-mer origin: identical k-mer sequence.
-
-            // If a kmer occurs multiple times within an extending readlength (repetition),
-            // only the first gets a position. During mapping this should be kept in mind.
-            if let Some(dist) = self.dist_if_repetitive(old_stored_p, mark.p) {
-                //dbg_assert!(dist < self.p.pos() || self.p.is_zero());
-                self.period = dist;
-                self.ks.kmp[mark.idx].set_repetitive();
-                return Ok(false);
-            }
-            self.ks.kmp[mark.idx].mark_more_recurs_upseq();
-        }
-        // collision between hashes, the one in mark.p will be extended and tried again.
-        Ok(true)
-    }*/
 }
 
+impl<'a> XmerHash for KmerIter<'a> {
+    fn get_kmerlen(&self) -> usize {
+        usize::from(self.ks.get_bitlen()) / 2
+    }
+    fn get_overbit(&self) -> usize {
+        let kmerlen = self.get_kmerlen();
+        let dna_topb2_shift = (u32::try_from(kmerlen).unwrap() << 1) - 2;
+        1_usize
+            .checked_shl(dna_topb2_shift + 1)
+            .expect("k-mer shift")
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

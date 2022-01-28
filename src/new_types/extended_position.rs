@@ -51,10 +51,6 @@ const ORI_MASK: u64 = 0x1;
 // needs to be pub or "can't leak crate-private type"
 pub struct ExtPosEtc(u64);
 
-#[derive(Default, Clone)]
-pub(crate) struct MiniExtPosOri(u32);
-impl MiniExtPosOri {}
-
 /// The stored information per xmer: in u64 position, extension and flags:
 /// Orientation, Duplicate, Replication(, HasInfo: TODO)
 impl ExtPosEtc {
@@ -129,12 +125,16 @@ impl ExtPosEtc {
     pub(crate) fn clear_extension(&mut self) {
         self.0 &= !EXT_MASK;
     }
+    #[deprecated]
     pub(crate) fn mark_more_recurs_upseq(&mut self) {
         dbg_assert!(self.is_set());
         self.0 |= DUPLICATE;
     }
     pub(crate) fn is_dup(&self) -> bool {
         self.0 & DUPLICATE != 0
+    }
+    pub(crate) fn set_dup(&mut self) {
+        self.0 |= DUPLICATE;
     }
     pub(crate) fn is_last_on_ref(&self) -> bool {
         !self.is_dup()

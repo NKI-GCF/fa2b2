@@ -84,7 +84,7 @@ where
     for nr in 0..no_threads {
         dbg_print!("blocking receive for thread {}..", nr);
         let (kmp, max_extended) = rx_in_main.recv()?;
-        dbg_print!("Received from thread {}..", nr);
+        dbg_print!("Received from thread {}.. len {}", nr, kmp.len());
 
         //XXX actually why not directly write to disk? do we need ks.kmp still?
         ks.kmp.extend(kmp);

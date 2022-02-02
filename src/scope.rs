@@ -90,7 +90,7 @@ impl<'a> Scope<'a> {
                     // pass through the xmer_loc with hashing undone.
                     median_xmer.idx = self.kc.xmer_hash(median_xmer.idx, self.kc.seed);
                     median_xmer.p.clear_extension();
-                    dbg_print!("{}", median_xmer);
+                    dbg_print!("Median xmer: {}", median_xmer);
                     ret = Some(median_xmer);
                 }
             }
@@ -114,11 +114,11 @@ impl<'a> Scope<'a> {
 
         let template_hash = self.kc.xmer_hash(self.dna.to_usize(), ext);
         self.xmer_loc[self.rotation].set(template_hash, p);
-        self.rotation += 1;
 
         let reverse_complement_hash = self.kc.xmer_hash(self.dna.to_usize(), ext);
-        self.xmer_loc[self.rotation].set(reverse_complement_hash, p);
-        self.rotation += 1;
+        self.xmer_loc[self.rotation + 1].set(reverse_complement_hash, p);
+        self.rotation += 2;
+        self.i += 2;
         if self.rotation == self.kc.no_kmers {
             self.rotation = 0;
         }

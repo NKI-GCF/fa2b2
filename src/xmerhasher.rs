@@ -46,7 +46,7 @@ impl XmerHasher {
     }
     pub(crate) fn work(&mut self, shutdown_poll: sync::Arc<AtomicUsize>) -> Result<()> {
         let bitlen = self.kmerlen * 2;
-        let shl = bitlen - 2 - usize::try_from(self.thread_max.trailing_zeros()).unwrap();
+        let shl = bitlen - 1 - usize::try_from(self.thread_max.trailing_zeros()).unwrap();
         let mut kmp = vec![ExtPosEtc::default(); 1 << shl]; // position + strand per xmer handled in this thread.
         let mut max_extended = Vec::with_capacity(1 << 8);
         loop {
@@ -58,7 +58,15 @@ impl XmerHasher {
                     Err(e)
                 }
             }) {
-                Ok(mark) => self.store_mark_and_extend(mark, &mut max_extended, &mut kmp)?,
+                Ok(mark) => {
+                    dbg_assert!(
+                        !self.is_for_next_thread(&mark),
+                        "Thread {} received {} from main",
+                        self.thread_nr,
+                        mark
+                    );
+                    self.store_mark_and_extend(mark, &mut max_extended, &mut kmp)?
+                }
                 Err(TryRecvError::Disconnected) => break,
                 Err(TryRecvError::Empty) => {
                     if let Some(err) = self
@@ -68,6 +76,12 @@ impl XmerHasher {
                     {
                         self.to_next.push_front(err.into_inner());
                     } else if let Ok(mark) = self.rx_from_main.recv() {
+                        dbg_assert!(
+                            !self.is_for_next_thread(&mark),
+                            "Thread {} received {} from previosu thread",
+                            self.thread_nr,
+                            mark
+                        );
                         // We seem starved, block receive until more work.
                         // XXX if we have something else to do in the future this should change.
                         self.store_mark_and_extend(mark, &mut max_extended, &mut kmp)?;
@@ -107,7 +121,7 @@ impl XmerHasher {
             "blocking send the packages back to the main thread in order of processing threads."
         );
         if self.thread_nr == 0 || self.rx_inter_thread.recv().is_ok() {
-            dbg_print!("NOw sending for thread {}", self.thread_nr);
+            dbg_print!("Now sending for thread {}", self.thread_nr);
             self.tx_to_main.send((kmp, max_extended))?;
         }
         if self.thread_nr + 1 != self.thread_max {
@@ -146,10 +160,11 @@ impl XmerHasher {
     /// we need to extend to keep trying. The actual mark that is extended may change
     /// in the process.
     fn try_store_mark(&mut self, mark: &mut XmerLoc, kmp: &mut Vec<ExtPosEtc>) -> Result<bool> {
-        let old_stored_p = kmp[mark.idx];
+        let kmp_mask = kmp.len() - 1;
+        let old_stored_p = kmp[mark.idx & kmp_mask];
 
         if old_stored_p.is_zero() {
-            kmp[mark.idx].set(mark.p);
+            kmp[mark.idx & kmp_mask].set(mark.p);
             return Ok(false);
         }
         if old_stored_p.is_replaceable_by(mark.p) {
@@ -157,16 +172,16 @@ impl XmerHasher {
                 // set and already mark.p. Leave the bit states.
                 return Ok(false);
             }
-            kmp[mark.idx].set(mark.p);
+            kmp[mark.idx & kmp_mask].set(mark.p);
             if old_stored_p.x() == mark.p.x() {
                 // same extension means same base k-mer origin. this is a duplicate.
-                kmp[mark.idx].mark_more_recurs_upseq();
+                kmp[mark.idx & kmp_mask].set_dup();
             }
             dbg_print!("{} -> ?", mark);
             mark.p = old_stored_p; // to be extended next
         } else if old_stored_p.extension() == mark.p.extension() {
             // Note: same extension and hash means same k-mer origin: identical k-mer sequence.
-            kmp[mark.idx].mark_more_recurs_upseq();
+            kmp[mark.idx & kmp_mask].set_dup();
         }
         // collision between hashes, the one in mark.p will be extended and tried again.
         Ok(true)

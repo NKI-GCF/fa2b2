@@ -34,7 +34,7 @@ impl XmerLoc {
         if !self.p.is_template() {
             scope_idx |= 1;
         }
-        scope_idx & ((1 << no_kmers) - 1)
+        scope_idx & (no_kmers - 1)
     }
 
     pub(crate) fn set(&mut self, idx: usize, p: ExtPosEtc) {
@@ -46,7 +46,7 @@ impl XmerLoc {
         self.p = p;
     }
     pub(crate) fn get_thread_index(&self, bitlen: usize, ext_bits: usize) -> usize {
-        self.idx >> (bitlen - ext_bits)
+        self.idx >> (bitlen - ext_bits - 1)
     }
 }
 impl Default for XmerLoc {

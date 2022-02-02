@@ -77,8 +77,10 @@ impl<'a> KmerIter<'a> {
         }
     }
 
-    /// FIXME: the repetitive bit is no longer set, if we just filter repetitive on period.
-    /// We should but how? send mark with samepose and repetitive bit set? set these only after completion?
+    // FIXME: the repetitive bit is no longer set, if we just filter repetitive on period.
+    // We should but how? send mark with samepose and repetitive bit set? set these only after completion?
+    // FIXME, currently this filters every recurrent, but we should only filter if there is at
+    // least a completed cycle of repeats.
 
     /// a kmer is recurrent if it reoccurs within rep_max_dist bases, typically 10_000. This is to
     /// handle e.g. transposons or repetitive DNA, which are not mappable otherwise.
@@ -92,27 +94,30 @@ impl<'a> KmerIter<'a> {
                 self.mini_kmp[test.idx].set(test.p);
                 break;
             }
-            if stored.is_replaceable_by(test.p) {
-                if stored.pos() == test.p.pos() {
-                    return self.mini_kmp[test.idx].is_dup();
-                }
-                self.mini_kmp[test.idx].set(test.p);
-                if stored.x() == test.p.x() {
-                    // same ext for hash => must be same kmer origin => recurrent.
+            // TODO: allow one long stretch of Ns in between?
+            if self.ks.is_on_last_contig(stored.pos()) {
+                if stored.is_replaceable_by(test.p) {
+                    if stored.pos() == test.p.pos() {
+                        return self.mini_kmp[test.idx].is_dup();
+                    }
                     self.mini_kmp[test.idx].set(test.p);
-                    self.mini_kmp[test.idx].set_dup();
+                    if stored.x() == test.p.x() {
+                        // same ext for hash => must be same kmer origin => recurrent.
+                        self.mini_kmp[test.idx].set(test.p);
+                        self.mini_kmp[test.idx].set_dup();
+                        return true;
+                    }
+                    test.p.set(stored); // to be extended next
+                } else if stored.extension() == test.p.extension() {
+                    // Note: same extension and hash means same k-mer origin: identical k-mer sequence.
+                    // update with last
+                    self.mini_kmp[test.idx].set(test.p);
+                }
+                // From the XmerHash trait, extension fails on last, when all ext bits are set.
+                if self.extend_xmer(&mut test).is_err() {
+                    dbg_print!("couldn't extend {}", test);
                     return true;
                 }
-                test.p.set(stored); // to be extended next
-            } else if stored.extension() == test.p.extension() {
-                // Note: same extension and hash means same k-mer origin: identical k-mer sequence.
-                // update with last
-                self.mini_kmp[test.idx].set(test.p);
-            }
-            // From the XmerHash trait, extension fails on last, when all ext bits are set.
-            if self.extend_xmer(&mut test).is_err() {
-                dbg_print!("couldn't extend {}", test);
-                return true;
             }
         }
         false
@@ -230,6 +235,7 @@ impl<'a> KmerIter<'a> {
             if let Some(mut mark) = self.updated_optimal_xmers_only(*b) {
                 mark.idx = kc.hash_and_compress(mark.idx, 0);
                 let thread_index = mark.get_thread_index(kc.bitlen, ext_bits);
+                dbg_print!("sending {} to thread {}", mark, thread_index);
                 self.tx[thread_index].send(mark)?;
             }
         }
@@ -260,20 +266,6 @@ impl<'a> KmerIter<'a> {
             }
         }
         Ok(())
-    }
-    fn dist_if_repetitive(&self, stored_p: ExtPosEtc, min_p: ExtPosEtc) -> Option<Position> {
-        // FIXME: the contig check was removed. for the upper bound that makes sense for head
-        // scope, as upperbound is pos_max rather than previous
-        let stored_pos = stored_p.pos();
-        let mark_pos = min_p.pos();
-        dbg_assert!(mark_pos > stored_pos);
-        if self.ks.is_on_last_contig(stored_pos) {
-            let dist = mark_pos - stored_pos;
-            if dist < self.ks.rep_max_dist {
-                return Some(dist);
-            }
-        }
-        None
     }
 }
 
@@ -359,7 +351,7 @@ mod tests {
         let mut first_pos = ExtPosEtc::from_basepos(k);
         first_pos.set_repetitive();
         let mut seen = 0;
-        for i in 1..ks.kmp.len() {
+        for i in 0..ks.kmp.len() {
             if ks.kmp[i].is_set() {
                 dbg_assert_eq!(ks.kmp[i], first_pos, "i: {}", i);
                 seen += 1;

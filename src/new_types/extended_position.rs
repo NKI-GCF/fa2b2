@@ -25,7 +25,7 @@ const ETC_SHIFT: u32 = EXT_SHIFT - 3;
 pub(crate) const REPETITIVE: u64 = 1 << REP_SHIFT;
 pub(crate) const DUPLICATE: u64 = 1 << DUP_SHIFT;
 pub(crate) const ETCETERA: u64 = 1 << ETC_SHIFT;
-pub(super) const POS_SHIFT: u32 = 3;
+pub(super) const POS_SHIFT: u32 = 1;
 pub(super) const POS_MASK: u64 = (ETCETERA - 1) ^ ((1 << POS_SHIFT) - 1);
 
 const ORI_MASK: u64 = 0x1;

@@ -68,13 +68,11 @@ impl<'a> KmerIter<'a> {
     }
 
     /// Finalize an N-stretch, update stored offsets and prepare to process sequence.
-    pub(crate) fn finalize_n_stretch(&mut self) {
-        if self.n_stretch.is_set() {
-            self.goffs += self.n_stretch;
-            dbg_print!("N-stretch of {} (goffs: {})", self.n_stretch, self.goffs);
-            self.ks.update_contig_genomic_offset(self.goffs);
-            self.n_stretch.to_default();
-        }
+    fn finalize_n_stretch(&mut self) {
+        self.goffs += self.n_stretch;
+        dbg_print!("N-stretch of {} (goffs: {})", self.n_stretch, self.goffs);
+        self.ks.update_contig_genomic_offset(self.goffs);
+        self.n_stretch.to_default();
     }
 
     // FIXME: the repetitive bit is no longer set, if we just filter repetitive on period.
@@ -153,39 +151,15 @@ impl<'a> KmerIter<'a> {
         }
     }*/
 
-    fn spawn_process_coding(&mut self) {
+    fn finalize_coding(&mut self) {
         // TODO: allow repetition to include N-stretch - if both sides of N-stretch show the same repetition.
         // If a repetition ends in an N-stretch, thereafter offset to period
         // may differ or the repetition could be different or entirely gone.
         self.period.to_default();
 
         self.scp.reset();
-        let mut coding_pos = self.scp.get_pos();
-        let ahead_pos = self.ks.get_pos();
-        self.goffs += BasePos::from(ahead_pos - coding_pos);
-        dbg_print!(
-            "processing coding: {}-{} (goffs: {})",
-            BasePos::from(coding_pos),
-            BasePos::from(ahead_pos),
-            self.goffs
-        );
 
-        // if last spawn is still running, block, otherwise spawn task
-        // retrieving twobits from first_pos to pos, and processing them in
-        // complete_and_update_mark
-        while coding_pos != ahead_pos {
-            // FIXME: outdated usage of ks.b2.
-            //let b2 = self.ks.b2_for_pos(coding_pos);
-
-            coding_pos.incr();
-        }
-        // NB. if we push this before complete_and_update_mark, then the test for repeat
-        // is_on_last_contig() does not work. Maybe change this if repeat can be handled
-        // while storing sequence.
-        self.ks.push_contig(ahead_pos, self.goffs);
-    }
-    fn is_coding_sequence_pending(&self) -> bool {
-        self.ks.get_pos() != self.scp.get_pos()
+        self.ks.push_contig(self.ks.get_pos(), self.goffs);
     }
     fn updated_optimal_xmers_only(&mut self, b: u8) -> Option<XmerLoc> {
         let b2 = match b {
@@ -203,8 +177,8 @@ impl<'a> KmerIter<'a> {
                 // the nr of positions this resolves.
                 //
                 // past readlen - kmerlen, or we could overcome
-                if !self.n_stretch.is_set() && self.is_coding_sequence_pending() {
-                    self.spawn_process_coding();
+                if !self.n_stretch.is_set() && self.scp.is_past_contig() {
+                    self.finalize_coding();
                 }
                 self.n_stretch.add_assign(1_u64);
                 return None;
@@ -213,6 +187,7 @@ impl<'a> KmerIter<'a> {
         if self.n_stretch.is_set() {
             self.finalize_n_stretch();
         }
+        self.goffs.incr();
         //TODO: make sequence storage optional, to a separate file.
         self.ks.store_b2(&b2);
         if let Some(optimum_xmer) = self
@@ -243,7 +218,7 @@ impl<'a> KmerIter<'a> {
         if self.n_stretch.is_set() {
             self.finalize_n_stretch();
         } else {
-            self.spawn_process_coding();
+            self.finalize_coding();
         }
 
         if record.name() != "test" {
@@ -335,8 +310,12 @@ mod tests {
         process(&mut ks, kc, b"NCN")?;
 
         dbg_assert_eq!(ks.contig.len(), 2);
+        // the position of the contig in ks.b2:
         dbg_assert_eq!(ks.contig[0].twobit, Position::default());
+        // the position of the contig in genomic coordinates:
         dbg_assert_eq!(ks.contig[0].genomic, 1.into());
+
+        // The last contig is a dummy, to indicate the end, again b2 position and genomic.
         dbg_assert_eq!(ks.contig[1].twobit, Position::from_basepos(1_u64));
         dbg_assert_eq!(ks.contig[1].genomic, 3.into());
         Ok(())

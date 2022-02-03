@@ -178,6 +178,9 @@ impl BasePos {
         // 4 twobits per byte.
         (self.0 >> (BYTE_SHIFT - POS_SHIFT)) as usize
     }
+    pub(crate) fn incr(&mut self) {
+        self.0 += 1;
+    }
     #[must_use = "this value should be used"]
     pub(crate) fn add<T>(&mut self, add: T) -> BasePos
     where

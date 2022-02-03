@@ -100,6 +100,9 @@ impl<'a> Scope<'a> {
         self.increment(b2);
         ret
     }
+    pub(crate) fn is_past_contig(&self) -> bool {
+        self.i != 0
+    }
     pub(crate) fn get_pos(&self) -> Position {
         self.pos
     }

@@ -64,8 +64,11 @@ impl<'a> Scope<'a> {
     /// Secondly, only pass the first idx & pos for regularly repetitive sequences. Store the
     /// number of repetitions is stored in a hashmap. Repetitions are also deemed 'unworthy' for storage.
 
-    pub fn updated_median_xmer(&mut self, b2: &BitSlice<u8, Lsb0>) -> Option<XmerLoc> {
+    pub(crate) fn updated_median_xmer(&mut self, b2: &BitSlice<u8, Lsb0>) -> Option<XmerLoc> {
         let mut ret = None;
+        self.dna.add(TwoBit::from(b2), self.kc.dna_topb2_shift);
+        self.rc.add(TwoBit::from(b2), self.kc.rc_mask);
+
         if self.is_xmer_ready_to_estimate_optima() {
             self.update();
             // two marks are added for both strands, and two leave. either can become the new mark.
@@ -90,14 +93,13 @@ impl<'a> Scope<'a> {
                     // pass through the xmer_loc with hashing undone.
                     median_xmer.idx = self.kc.xmer_hash(median_xmer.idx, self.kc.seed);
                     median_xmer.p.clear_extension();
-                    dbg_print!("Median xmer: {}", median_xmer);
                     ret = Some(median_xmer);
                 }
             }
         } else {
             self.get_ready();
         }
-        self.increment(b2);
+        self.pos.incr();
         ret
     }
     pub(crate) fn is_past_contig(&self) -> bool {
@@ -107,23 +109,33 @@ impl<'a> Scope<'a> {
         self.pos
     }
     fn is_xmer_ready_to_estimate_optima(&self) -> bool {
-        self.i >= self.kc.no_kmers
+        self.i >= self.kc.kmerlen + (self.kc.no_kmers / 2) - 1
     }
 
     fn get_ready(&mut self) {
-        // Use the seed to hash. TODO: This hash should be undone before colision detection.
-        let ext = self.kc.seed;
-        let p = ExtPosEtc::from((Extension::from(ext), self.pos));
+        self.i += 1;
+        if self.i >= self.kc.kmerlen {
+            // Use the seed to hash. TODO: This hash should be undone before colision detection.
+            let ext = self.kc.seed;
+            let p = ExtPosEtc::from((Extension::from(ext), self.pos));
 
-        let template_hash = self.kc.xmer_hash(self.dna.to_usize(), ext);
-        self.xmer_loc[self.rotation].set(template_hash, p);
+            let template_hash = self.kc.xmer_hash(self.dna.to_usize(), ext);
+            self.xmer_loc[self.rotation].set(template_hash, p);
 
-        let reverse_complement_hash = self.kc.xmer_hash(self.dna.to_usize(), ext);
-        self.xmer_loc[self.rotation + 1].set(reverse_complement_hash, p);
-        self.rotation += 2;
-        self.i += 2;
-        if self.rotation == self.kc.no_kmers {
-            self.rotation = 0;
+            let reverse_complement_hash = self.kc.xmer_hash(self.rc.to_usize(), ext);
+            self.xmer_loc[self.rotation + 1].set(reverse_complement_hash, p.get_rc());
+            self.rotation += 2;
+            if self.rotation == self.kc.no_kmers {
+                self.rotation = 0;
+            }
+            if self.is_xmer_ready_to_estimate_optima() {
+                self.xmer_loc_ord.sort_by(|&a, &b| {
+                    self.xmer_loc[a]
+                        .idx
+                        .cmp(&self.xmer_loc[b].idx)
+                        .then(a.cmp(&b))
+                });
+            }
         }
     }
 
@@ -145,14 +157,15 @@ impl<'a> Scope<'a> {
         let xmer_loc_ord = &self.xmer_loc_ord;
         // The leaving xmer_loc to search is implied by the rotation.
         // another array.
-        let leaving_index = xmer_loc_ord
-            .binary_search_by(|&i| {
-                xmer_loc[i]
-                    .idx
-                    .cmp(&xmer_loc[rotation].idx)
-                    .then(i.cmp(&rotation))
-            })
-            .unwrap();
+        let leaving_index = match xmer_loc_ord.binary_search_by(|&i| {
+            xmer_loc[i]
+                .idx
+                .cmp(&xmer_loc[rotation].idx)
+                .then(i.cmp(&rotation))
+        }) {
+            Ok(v) => v,
+            Err(_) => dbg_panic!("leaving not found"),
+        };
         // provide insertion value.
         match xmer_loc_ord
             .binary_search_by(|&i| xmer_loc[i].idx.cmp(&inserted_value).then(i.cmp(&rotation)))
@@ -181,11 +194,13 @@ impl<'a> Scope<'a> {
                 Ordering::Less => {
                     self.xmer_loc_ord
                         .moveslice(inserted_index..leaving_index, inserted_index + 1);
+                    dbg_assert!(self.rotation < self.xmer_loc.len());
                     self.xmer_loc_ord[inserted_index] = self.rotation;
                 }
                 Ordering::Greater => {
                     self.xmer_loc_ord
                         .moveslice((leaving_index + 1)..inserted_index, leaving_index);
+                    dbg_assert!(self.rotation < self.xmer_loc.len());
                     self.xmer_loc_ord[inserted_index - 1] = self.rotation;
                 }
                 Ordering::Equal => {}
@@ -218,12 +233,5 @@ impl<'a> Scope<'a> {
             }
         }
         None
-    }
-
-    /// add twobit to k-mers, increment pos for next median selection
-    fn increment(&mut self, b2: &BitSlice<u8, Lsb0>) {
-        self.dna.add(TwoBit::from(b2), self.kc.dna_topb2_shift);
-        self.rc.add(TwoBit::from(b2), self.kc.rc_mask);
-        self.pos.incr()
     }
 }

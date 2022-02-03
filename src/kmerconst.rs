@@ -128,12 +128,20 @@ impl KmerConst {
         dbg_assert!(kmerlen > 0);
         dbg_assert!(read_len >= kmerlen);
 
-        // e.g. with a RL 4 & KL 2: (0,1), (1,2), (2,3) => 3 kmers.
+        // e.g. with a RL 4 & KL 2: (0,1), (1,2), (2,3) => 3 kmers + 3x rc.
         let no_kmers = (read_len + 1 - kmerlen) * 2;
 
-        dbg_restart!("read_len: {}, kmerlen: {}\n--", read_len, kmerlen);
+        dbg_restart!(
+            "read_len: {}, kmerlen: {}, no_kmers: {}\n--",
+            read_len,
+            kmerlen,
+            no_kmers
+        );
         if !cfg!(debug_assertions) {
-            eprintln!("read_len: {}, kmerlen: {}", read_len, kmerlen);
+            eprintln!(
+                "read_len: {}, kmerlen: {}, no_kmers: {}",
+                read_len, kmerlen, no_kmers
+            );
         }
         let dna_topb2_shift = (u32::try_from(kmerlen).unwrap() << 1) - 2;
         let overbit = 1_usize

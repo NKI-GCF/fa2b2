@@ -1,5 +1,5 @@
 use crate::kmerconst::XmerHash;
-use crate::new_types::extended_position::ExtPosEtc;
+use crate::new_types::extended_position::{ExtPosEtc, EXT_SHIFT};
 use crate::rdbg::STAT_DB;
 use crate::xmer_location::XmerLoc;
 use anyhow::{ensure, Result};
@@ -78,7 +78,7 @@ impl XmerHasher {
                     } else if let Ok(mark) = self.rx_from_main.recv() {
                         dbg_assert!(
                             !self.is_for_next_thread(&mark),
-                            "Thread {} received {} from previosu thread",
+                            "Thread {} received {} from previous thread",
                             self.thread_nr,
                             mark
                         );
@@ -154,7 +154,7 @@ impl XmerHasher {
     /// or the kmp of the next thread.
     pub(crate) fn is_for_next_thread(&self, mark: &XmerLoc) -> bool {
         let kmer = self.unhash_and_uncompress_to_kmer(mark.idx, mark.p.x());
-        kmer & (self.thread_max - 1) != self.thread_nr
+        (kmer >> EXT_SHIFT) & (self.thread_max - 1) != self.thread_nr
     }
     /// Try to store the mark in kmp (key map or kmer position) returns true while
     /// we need to extend to keep trying. The actual mark that is extended may change

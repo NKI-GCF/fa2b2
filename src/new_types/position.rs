@@ -9,9 +9,6 @@ use std::clone::Clone;
 use std::convert::TryFrom;
 use std::fmt;
 
-// 4 twobits per byte, so unshifted pos is shifted another 2.
-const BYTE_SHIFT: u32 = POS_SHIFT + 2;
-
 // twobit shifts are bit positions 0, 2, 4 and 6 in a byte.
 const TWOBIT_SHIFT: u32 = POS_SHIFT - 1;
 
@@ -103,10 +100,6 @@ impl Position {
     pub(crate) fn is_set(&self) -> bool {
         self.0 != 0
     }
-    pub(crate) fn byte_pos(&self) -> usize {
-        // 4 twobits per byte.
-        (self.0 >> BYTE_SHIFT) as usize
-    }
     // before applying TWOBIT_SHIFT (4 places) I had this:
     // XXX: thread 'main' panicked at 'u32??: TryFromIntError(())', src/new_types/position.rs:49:39
     // TODO: check that distances are sensible.
@@ -173,10 +166,6 @@ impl BasePos {
     }
     pub(crate) fn as_usize(&self) -> usize {
         usize::try_from(self.0).unwrap()
-    }
-    pub(crate) fn byte_pos(&self) -> usize {
-        // 4 twobits per byte.
-        (self.0 >> (BYTE_SHIFT - POS_SHIFT)) as usize
     }
     pub(crate) fn incr(&mut self) {
         self.0 += 1;

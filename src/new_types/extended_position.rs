@@ -17,7 +17,7 @@ pub(crate) const EXT_BITS: usize = 16;
 
 pub(crate) const EXT_MAX: usize = 1 << EXT_BITS;
 
-pub(super) const EXT_SHIFT: u32 = u64::BITS - EXT_BITS as u32;
+pub(crate) const EXT_SHIFT: u32 = u64::BITS - EXT_BITS as u32;
 pub(crate) const EXT_MASK: u64 = !0x0 ^ ((1 << EXT_SHIFT) - 1);
 const REP_SHIFT: u32 = EXT_SHIFT - 1;
 const DUP_SHIFT: u32 = EXT_SHIFT - 2;

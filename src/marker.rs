@@ -88,7 +88,7 @@ impl<'a> KmerIter<'a> {
             let repeat_idx = test.idx & mask;
             let stored = self.mini_kmp[repeat_idx];
 
-            if stored.is_zero() || test.p.pos() - stored.pos() < self.ks.rep_max_dist {
+            if stored.is_zero() || test.p.pos() - stored.pos() > self.ks.rep_max_dist {
                 self.mini_kmp[test.idx].set(test.p);
                 break;
             }

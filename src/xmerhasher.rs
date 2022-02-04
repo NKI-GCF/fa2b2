@@ -11,7 +11,7 @@ use std::sync::atomic::AtomicUsize;
 
 pub(crate) struct XmerHasher {
     thread_nr: usize,
-    thread_max: usize,
+    no_threads: usize,
     kmerlen: usize,
     overbit: usize,
     rep_max_dist: Position,
@@ -26,18 +26,18 @@ type XmerChannels = (usize, Receiver<XmerLoc>, Sender<XmerLoc>, Receiver<XmerLoc
 
 impl XmerHasher {
     pub(crate) fn new(
-        thread_max: usize,
+        no_threads: usize,
         kmerlen: usize,
         rep_max_dist: Position,
         xmer_channels: XmerChannels,
         tx_to_main: Sender<(Vec<ExtPosEtc>, Vec<XmerLoc>)>,
     ) -> Result<XmerHasher> {
         ensure!(kmerlen < 16);
-        ensure!(thread_max.is_power_of_two());
+        ensure!(no_threads == 1 || no_threads.is_power_of_two());
 
         Ok(XmerHasher {
             thread_nr: xmer_channels.0,
-            thread_max,
+            no_threads,
             kmerlen,
             overbit: 1 << (kmerlen * 2 + 1),
             rep_max_dist,
@@ -50,7 +50,7 @@ impl XmerHasher {
     }
     pub(crate) fn work(&mut self, shutdown_poll: sync::Arc<AtomicUsize>) -> Result<()> {
         let bitlen = self.kmerlen * 2;
-        let shl = bitlen - 1 - usize::try_from(self.thread_max.trailing_zeros()).unwrap();
+        let shl = bitlen - 1 - usize::try_from(self.no_threads.trailing_zeros()).unwrap();
         let mut kmp = vec![ExtPosEtc::default(); 1 << shl]; // position + strand per xmer handled in this thread.
         let mut max_extended = Vec::with_capacity(1 << 8);
         loop {
@@ -94,7 +94,7 @@ impl XmerHasher {
             }
         }
         dbg_print!("The main channel has shutdown.");
-        let end_state = (1 << self.thread_max) - 1;
+        let end_state = (1 << self.no_threads) - 1;
         loop {
             if let Ok(mark) = self.rx_inter_thread.try_recv() {
                 // indicate we had something to process still by unsetting a bit (if it was set).
@@ -128,7 +128,7 @@ impl XmerHasher {
             dbg_print!("Now sending for thread {}", self.thread_nr);
             self.tx_to_main.send((kmp, max_extended))?;
         }
-        if self.thread_nr + 1 != self.thread_max {
+        if self.thread_nr + 1 != self.no_threads {
             // message the next thread it can start sending.
             self.tx_inter_thread.send(XmerLoc::default())?;
         }
@@ -158,7 +158,7 @@ impl XmerHasher {
     /// or the kmp of the next thread.
     pub(crate) fn is_for_next_thread(&self, mark: &XmerLoc) -> bool {
         let kmer = self.unhash_and_uncompress_to_kmer(mark.idx, mark.p.x());
-        (kmer >> EXT_SHIFT) & (self.thread_max - 1) != self.thread_nr
+        (kmer >> EXT_SHIFT) & (self.no_threads - 1) != self.thread_nr
     }
     /// Try to store the mark in kmp (key map or kmer position) returns true while
     /// we need to extend to keep trying. The actual mark that is extended may change

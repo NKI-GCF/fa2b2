@@ -36,10 +36,10 @@ macro_rules! dbgf {
 }
 
 /// begin a new round for logging (may trigger dump if dump_next() occurred)
-macro_rules! dbg_restart {
+macro_rules! dbg_init {
     ($fmt:literal$(, $arg:expr)*) => ({
         if cfg!(debug_assertions) {
-            STAT_DB.lock().unwrap().restart(filelinestr!(stringify!($fmt)), format!($fmt$(, $arg)*));
+            STAT_DB.lock().unwrap().init(filelinestr!(stringify!($fmt)), format!($fmt$(, $arg)*));
         }
     });
 }
@@ -177,7 +177,6 @@ macro_rules! dbg_panic {
 
 pub struct StatDeq {
     last: (String, String, bool),
-    ct: usize,
     d: VecDeque<String>,
     h: HashMap<String, u32>,
     repeat: u32,
@@ -186,23 +185,24 @@ pub struct StatDeq {
 
 impl StatDeq {
     /// provide a message buffer of 'ct' lines, clamped between 100 and 10_000.
-    pub(crate) fn new(ct: usize) -> Self {
+    pub(crate) fn new(mut ct: usize) -> Self {
         StatDeq {
             last: (String::new(), String::new(), false),
-            ct: cmp::min(10000, cmp::max(ct, 100)),
-            d: VecDeque::with_capacity(ct),
+            d: VecDeque::with_capacity(cmp::min(10000, cmp::max(ct, 100))),
             h: HashMap::new(),
             repeat: 1,
             dump_next: false,
         }
     }
-    pub(crate) fn restart(&mut self, fmt: String, msg: String) {
-        if self.dump_next {
-            self.dump(false);
-            self.dump_next = false;
+    pub(crate) fn init(&mut self, fmt: String, msg: String) {
+        if self.d.len() == 0 {
+            if self.dump_next {
+                self.dump(false);
+                self.dump_next = false;
+            }
+            self.d.clear();
+            self.add(false, fmt, msg);
         }
-        self.d.clear();
-        self.add(false, fmt, msg);
     }
     pub(crate) fn add(&mut self, new_do_log: bool, fmt: String, msg: String) {
         let last_fmt = self.last.0.to_owned();
@@ -211,8 +211,8 @@ impl StatDeq {
         if last_fmt == fmt && last_msg == msg {
             self.repeat += 1;
         } else {
-            if self.d.len() == self.ct {
-                self.d.pop_front();
+            if self.d.len() == self.d.capacity() {
+                let popped = self.d.pop_front();
             }
             if self.repeat > 1 {
                 last_msg.push_str(&format!(" ({}x)", self.repeat));

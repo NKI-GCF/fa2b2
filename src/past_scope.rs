@@ -171,7 +171,7 @@ mod tests {
 
             let vv: Vec<u8> = seq_vec.into_iter().map(|c| c as u8).collect();
             let record = [b">test\n", &vv[..]].concat();
-            multi_thread(&mut ks, kc, Reader::new(io::BufReader::new(&record[..])), 1)?;
+            multi_thread(&mut ks, kc, Reader::new(io::BufReader::new(&record[..])), 2)?;
             for hash in 0..ks.kmp.len() {
                 let p = ks.kmp[hash];
                 if p.is_set() {

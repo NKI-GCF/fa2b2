@@ -131,7 +131,7 @@ impl KmerConst {
         // e.g. with a RL 4 & KL 2: (0,1), (1,2), (2,3) => 3 kmers + 3x rc.
         let no_kmers = (read_len + 1 - kmerlen) * 2;
 
-        dbg_restart!(
+        dbg_init!(
             "read_len: {}, kmerlen: {}, no_kmers: {}\n--",
             read_len,
             kmerlen,

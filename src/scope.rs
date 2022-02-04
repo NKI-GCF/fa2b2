@@ -64,41 +64,38 @@ impl<'a> Scope<'a> {
     /// Secondly, only pass the first idx & pos for regularly repetitive sequences. Store the
     /// number of repetitions is stored in a hashmap. Repetitions are also deemed 'unworthy' for storage.
 
+    fn get_median_xmer(&mut self) -> Option<XmerLoc> {
+        // two marks are added for both strands, and two leave. either can become the new mark.
+        let i = self.xmer_loc_ord[self.kc.no_kmers >> 1];
+        if i != self.mark_i || self.rotation == 0 {
+            // skip until next median xmer
+            self.mark_i = i;
+            let test = &self.xmer_loc[i];
+            // use first bits of basepos | ori in array for lookup. Sufficient for within scope of NO_KMERS.
+            let scope_idx = test.get_scope_idx(self.kc.no_kmers);
+            if self.pos_lookup[scope_idx] != test.p {
+                self.pos_lookup[scope_idx] = test.p;
+                let mut median_xmer = XmerLoc::new(test.idx, test.p);
+
+                // pass through the xmer_loc with hashing undone.
+                median_xmer.idx = self.kc.xmer_hash(median_xmer.idx, self.kc.seed);
+                median_xmer.p.clear_extension();
+                return Some(median_xmer);
+            }
+        }
+        None
+    }
+
     pub(crate) fn updated_median_xmer(&mut self, b2: &BitSlice<u8, Lsb0>) -> Option<XmerLoc> {
-        let mut ret = None;
         self.dna.add(TwoBit::from(b2), self.kc.dna_topb2_shift);
         self.rc.add(TwoBit::from(b2), self.kc.rc_mask);
 
-        if self.is_xmer_ready_to_estimate_optima() {
+        let ret = if self.is_xmer_ready_to_estimate_optima() {
             self.update();
-            // two marks are added for both strands, and two leave. either can become the new mark.
-            let i = self.xmer_loc_ord[self.kc.no_kmers >> 1];
-            if self.rotation == 0 {
-                // TODO: set bit in ExtPosEtc to prioritize one in no_kmers against extension.
-                // This should allow for smaller kmers and reduce memory.
-            }
-            if i != self.mark_i || self.rotation == 0 {
-                // skip until next median xmer
-                self.mark_i = i;
-                let test = &self.xmer_loc[i];
-                // use first bits of basepos | ori in array for lookup. Sufficient for within scope of NO_KMERS.
-                let scope_idx = test.get_scope_idx(self.kc.no_kmers);
-                if self.pos_lookup[scope_idx] != test.p {
-                    // TODO: use self.mini_kmp to filter out duplicates
-                    self.pos_lookup[scope_idx] = test.p;
-                    let mut median_xmer = XmerLoc::new(test.idx, test.p);
-                    // FIXME: put the other strand in the idx top bits (saves reverse complementing).
-                    // Also, we need more alternative XmerLoc types for distinction along with traits !!
-
-                    // pass through the xmer_loc with hashing undone.
-                    median_xmer.idx = self.kc.xmer_hash(median_xmer.idx, self.kc.seed);
-                    median_xmer.p.clear_extension();
-                    ret = Some(median_xmer);
-                }
-            }
+            self.get_median_xmer()
         } else {
-            self.get_ready();
-        }
+            self.get_ready()
+        };
         self.pos.incr();
         ret
     }
@@ -112,7 +109,7 @@ impl<'a> Scope<'a> {
         self.i >= self.kc.kmerlen + (self.kc.no_kmers / 2) - 1
     }
 
-    fn get_ready(&mut self) {
+    fn get_ready(&mut self) -> Option<XmerLoc> {
         self.i += 1;
         if self.i >= self.kc.kmerlen {
             // Use the seed to hash. TODO: This hash should be undone before colision detection.
@@ -135,8 +132,10 @@ impl<'a> Scope<'a> {
                         .cmp(&self.xmer_loc[b].idx)
                         .then(a.cmp(&b))
                 });
+                return self.get_median_xmer();
             }
         }
+        None
     }
 
     /// get hashed k-mer, with no compression of the orientation

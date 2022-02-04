@@ -46,7 +46,7 @@ impl XmerLoc {
         self.p = p;
     }
     pub(crate) fn get_thread_index(&self, bitlen: usize, ext_bits: usize) -> usize {
-        self.idx >> (bitlen - ext_bits - 1)
+        self.idx >> (bitlen - ext_bits)
     }
 }
 impl Default for XmerLoc {

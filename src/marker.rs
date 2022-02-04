@@ -89,8 +89,8 @@ impl<'a> KmerIter<'a> {
             let repeat_idx = test.idx & mask;
             let stored = self.mini_kmp[repeat_idx];
 
-            if stored.is_zero() || test.p.pos() - stored.pos() > self.ks.rep_max_dist {
-                self.mini_kmp[test.idx].set(test.p);
+            if stored.is_zero() || test.p.pos() > self.ks.rep_max_dist + stored.pos() {
+                self.mini_kmp[repeat_idx].set(test.p);
                 // unsetting dup isn't necessary, if from a stored, were a dup anyway.
                 break;
             }
@@ -98,19 +98,23 @@ impl<'a> KmerIter<'a> {
             if self.ks.is_on_last_contig(stored.pos()) {
                 if stored.gt_ext_or_eq_and_ge_pos(test.p) {
                     if stored.pos() == test.p.pos() {
-                        return self.mini_kmp[test.idx].is_dup();
+                        return self.mini_kmp[repeat_idx].is_dup();
                     }
-                    ret = true;
-                    self.mini_kmp[test.idx].set(test.p);
+                    if stored.is_dup() {
+                        ret = true;
+                    }
+                    self.mini_kmp[repeat_idx].set(test.p);
                     if stored.x() == test.p.x() {
                         // same extension means same base k-mer origin. this is a duplicate.
-                        self.mini_kmp[test.idx].set_dup();
+                        self.mini_kmp[repeat_idx].set_dup();
                     }
                     test.p.set(stored); // to be extended next
                 } else if stored.extension() == test.p.extension() {
                     // Note: same extension and hash means same k-mer origin: identical k-mer sequence.
-                    self.mini_kmp[test.idx].set_dup();
-                    ret = true;
+                    if stored.is_dup() {
+                        ret = true;
+                    }
+                    self.mini_kmp[repeat_idx].set_dup();
                 }
                 // From the XmerHash trait, extension fails on last, when all ext bits are set.
                 if self.extend_xmer(&mut test).is_err() {
@@ -348,7 +352,7 @@ mod tests {
         {
             process(&mut ks, kc, b"NCCCCCCCCCCCCCCCCCCN")?;
         }
-        let mut first_pos = ExtPosEtc::from_basepos(k);
+        let mut first_pos = ExtPosEtc::from_basepos(k).get_rc();
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 0..ks.kmp.len() {
@@ -369,7 +373,7 @@ mod tests {
             process(&mut ks, kc, b"NCCCCCCCCCCCCCCCC")?;
         }
         let mut seen = 0;
-        let mut first_pos = ExtPosEtc::from_basepos(k);
+        let mut first_pos = ExtPosEtc::from_basepos(k).get_rc();
         first_pos.set_repetitive();
         for i in 0..ks.kmp.len() {
             if ks.kmp[i].is_set() {

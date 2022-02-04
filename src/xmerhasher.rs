@@ -1,5 +1,6 @@
 use crate::kmerconst::XmerHash;
 use crate::new_types::extended_position::{ExtPosEtc, EXT_SHIFT};
+use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use crate::xmer_location::XmerLoc;
 use anyhow::{ensure, Result};
@@ -13,6 +14,7 @@ pub(crate) struct XmerHasher {
     thread_max: usize,
     kmerlen: usize,
     overbit: usize,
+    rep_max_dist: Position,
     rx_from_main: Receiver<XmerLoc>,
     tx_inter_thread: Sender<XmerLoc>,
     rx_inter_thread: Receiver<XmerLoc>,
@@ -26,6 +28,7 @@ impl XmerHasher {
     pub(crate) fn new(
         thread_max: usize,
         kmerlen: usize,
+        rep_max_dist: Position,
         xmer_channels: XmerChannels,
         tx_to_main: Sender<(Vec<ExtPosEtc>, Vec<XmerLoc>)>,
     ) -> Result<XmerHasher> {
@@ -37,6 +40,7 @@ impl XmerHasher {
             thread_max,
             kmerlen,
             overbit: 1 << (kmerlen * 2 + 1),
+            rep_max_dist,
             rx_from_main: xmer_channels.1,
             tx_inter_thread: xmer_channels.2,
             rx_inter_thread: xmer_channels.3,
@@ -172,16 +176,26 @@ impl XmerHasher {
                 // set and already mark.p. Leave the bit states.
                 return Ok(false);
             }
-            kmp[mark.idx & kmp_mask].set(mark.p);
             if old_stored_p.x() == mark.p.x() {
                 // same extension means same base k-mer origin. this is a duplicate.
-                kmp[mark.idx & kmp_mask].set_dup();
+                if mark.p.pos() > self.rep_max_dist + old_stored_p.pos() {
+                    mark.p.set_dup();
+                } else {
+                    kmp[mark.idx & kmp_mask].set_repetitive();
+                    return Ok(false);
+                }
             }
+            kmp[mark.idx & kmp_mask].set(mark.p);
             dbg_print!("{} -> ?", mark);
             mark.p = old_stored_p; // to be extended next
         } else if old_stored_p.extension() == mark.p.extension() {
             // Note: same extension and hash means same k-mer origin: identical k-mer sequence.
-            kmp[mark.idx & kmp_mask].set_dup();
+            if mark.p.pos() > self.rep_max_dist + old_stored_p.pos() {
+                kmp[mark.idx & kmp_mask].set_dup();
+            } else {
+                kmp[mark.idx & kmp_mask].set_repetitive();
+                return Ok(false);
+            }
         }
         // collision between hashes, the one in mark.p will be extended and tried again.
         Ok(true)

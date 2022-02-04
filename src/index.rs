@@ -59,9 +59,16 @@ where
     .map(|xmer_channels| {
         let tx_to_main = tx_to_main.clone();
         let shutdown_poll = shutdown_poll.clone();
+        let rep_max_dist = ks.rep_max_dist.clone();
         spawn(move || {
-            XmerHasher::new(no_threads, kc.kmerlen, xmer_channels, tx_to_main)
-                .and_then(|mut xh| xh.work(shutdown_poll))
+            XmerHasher::new(
+                no_threads,
+                kc.kmerlen,
+                rep_max_dist,
+                xmer_channels,
+                tx_to_main,
+            )
+            .and_then(|mut xh| xh.work(shutdown_poll))
         })
     })
     .collect();

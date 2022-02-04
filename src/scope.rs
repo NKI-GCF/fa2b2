@@ -16,7 +16,7 @@ use std::iter::repeat;
 
 // for this nr of xmers a median will be selected. Two strands, so 16 basepositions + kmer length.
 pub struct Scope<'a> {
-    kc: &'a KmerConst,
+    pub(crate) kc: &'a KmerConst,
     xmer_loc: Vec<XmerLoc>,
     xmer_loc_ord: Vec<usize>,
     pos_lookup: Vec<ExtPosEtc>,

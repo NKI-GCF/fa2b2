@@ -84,41 +84,42 @@ impl<'a> KmerIter<'a> {
     /// handle e.g. transposons or repetitive DNA, which are not mappable otherwise.
     fn is_recurrent(&mut self, mut test: XmerLoc) -> bool {
         let mask = self.mini_kmp.len() - 1;
+        let mut ret = false;
         loop {
             let repeat_idx = test.idx & mask;
             let stored = self.mini_kmp[repeat_idx];
 
             if stored.is_zero() || test.p.pos() - stored.pos() > self.ks.rep_max_dist {
                 self.mini_kmp[test.idx].set(test.p);
+                // unsetting dup isn't necessary, if from a stored, were a dup anyway.
                 break;
             }
             // TODO: allow one long stretch of Ns in between?
             if self.ks.is_on_last_contig(stored.pos()) {
-                if stored.is_replaceable_by(test.p) {
+                if stored.gt_ext_or_eq_and_ge_pos(test.p) {
                     if stored.pos() == test.p.pos() {
                         return self.mini_kmp[test.idx].is_dup();
                     }
+                    ret = true;
                     self.mini_kmp[test.idx].set(test.p);
                     if stored.x() == test.p.x() {
-                        // same ext for hash => must be same kmer origin => recurrent.
-                        self.mini_kmp[test.idx].set(test.p);
+                        // same extension means same base k-mer origin. this is a duplicate.
                         self.mini_kmp[test.idx].set_dup();
-                        return true;
                     }
                     test.p.set(stored); // to be extended next
                 } else if stored.extension() == test.p.extension() {
                     // Note: same extension and hash means same k-mer origin: identical k-mer sequence.
-                    // update with last
-                    self.mini_kmp[test.idx].set(test.p);
+                    self.mini_kmp[test.idx].set_dup();
+                    ret = true;
                 }
                 // From the XmerHash trait, extension fails on last, when all ext bits are set.
                 if self.extend_xmer(&mut test).is_err() {
                     dbg_print!("couldn't extend {}", test);
-                    return true;
+                    break;
                 }
             }
         }
-        false
+        ret
     }
     /*fn update_repetitive(&mut self, pd: Position) {
         // XXX waarom werkt dit op mark??
@@ -327,7 +328,7 @@ mod tests {
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         process(&mut ks, kc, b"CCCCCCCCCCCCCCCCC")?;
         dbg_assert_eq!(ks.kmp.len(), 128);
-        let mut first_pos = ExtPosEtc::from_basepos(k);
+        let mut first_pos = ExtPosEtc::from_basepos(k).get_rc();
         first_pos.set_repetitive();
         let mut seen = 0;
         for i in 0..ks.kmp.len() {

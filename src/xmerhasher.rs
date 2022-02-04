@@ -167,7 +167,7 @@ impl XmerHasher {
             kmp[mark.idx & kmp_mask].set(mark.p);
             return Ok(false);
         }
-        if old_stored_p.is_replaceable_by(mark.p) {
+        if old_stored_p.gt_ext_or_eq_and_le_pos(mark.p) {
             if old_stored_p.pos() == mark.p.pos() {
                 // set and already mark.p. Leave the bit states.
                 return Ok(false);

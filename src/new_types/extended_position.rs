@@ -150,11 +150,21 @@ impl ExtPosEtc {
     pub(crate) fn rep_dup_masked(&self) -> ExtPosEtc {
         ExtPosEtc(self.0 & !(DUPLICATE | REPETITIVE))
     }
-    pub(crate) fn is_replaceable_by(&self, new_entry: ExtPosEtc) -> bool {
+    /// in kmp(!) Whether this entry should replace the stored entry. TODO/FIXME: include priority
+    /// i.e. whether mark is for a higher power of 2 no_kmers.
+    ///
+    pub(crate) fn gt_ext_or_eq_and_le_pos(&self, new_entry: ExtPosEtc) -> bool {
         // only extension bits means blacklisting, except for extension 0. pos is always > kmerlen
         new_entry.extension().as_u64() > self.rep_dup_masked().as_u64() // TODO: count down extension?
             || (new_entry.extension() == self.extension() && new_entry.pos() <= self.pos())
     }
+    /// in mini_kmp(!) similar, but a later position gets priority.
+    pub(crate) fn gt_ext_or_eq_and_ge_pos(&self, new_entry: ExtPosEtc) -> bool {
+        // only extension bits means blacklisting, except for extension 0. pos is always > kmerlen
+        new_entry.extension().as_u64() > self.rep_dup_masked().as_u64() // TODO: count down extension?
+            || (new_entry.extension() == self.extension() && new_entry.pos() >= self.pos())
+    }
+
     pub(crate) fn same_pos_and_ext(&self, new_entry: ExtPosEtc) -> bool {
         (self.0 ^ new_entry.0) & (EXT_MASK | POS_MASK) == 0
     }

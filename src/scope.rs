@@ -58,11 +58,13 @@ impl<'a> Scope<'a> {
     pub(crate) fn get_xmer_loc(&self) -> Option<&XmerLoc> {
         self.xmer_loc.get(self.mark_i)
     }
-    /// If the median xmer (mark) changes, its position may already have been queued for this index. This
-    /// happens because a xmer can first be median, then not and later again be median within NO_KMERS.
+
+    /// If the median xmer (mark) changes, its position may already have been registered for this
+    /// index. This happens because a xmer can first be median, then not and later again be median
+    /// within NO_KMERS.
     ///
-    /// Secondly, only pass the first idx & pos for regularly repetitive sequences. Store the
-    /// number of repetitions is stored in a hashmap. Repetitions are also deemed 'unworthy' for storage.
+    /// Secondly, only pass the first idx & pos for regularly repetitive sequences. The nr of
+    /// repetitions is stored in a hashmap. Repetitions are also deemed 'unworthy' for storage.
 
     fn get_median_xmer(&mut self) -> Option<XmerLoc> {
         // two marks are added for both strands, and two leave. either can become the new mark.
@@ -89,6 +91,7 @@ impl<'a> Scope<'a> {
     pub(crate) fn updated_median_xmer(&mut self, b2: &BitSlice<u8, Lsb0>) -> Option<XmerLoc> {
         self.dna.add(TwoBit::from(b2), self.kc.dna_topb2_shift);
         self.rc.add(TwoBit::from(b2), self.kc.rc_mask);
+        self.pos.incr();
 
         let ret = if self.is_xmer_ready_to_estimate_optima() {
             self.update();
@@ -96,7 +99,6 @@ impl<'a> Scope<'a> {
         } else {
             self.get_ready()
         };
-        self.pos.incr();
         ret
     }
     pub(crate) fn is_past_contig(&self) -> bool {
@@ -121,6 +123,7 @@ impl<'a> Scope<'a> {
 
             let reverse_complement_hash = self.kc.xmer_hash(self.rc.to_usize(), ext);
             self.xmer_loc[self.rotation + 1].set(reverse_complement_hash, p.get_rc());
+
             self.rotation += 2;
             if self.rotation == self.kc.no_kmers {
                 self.rotation = 0;

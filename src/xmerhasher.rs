@@ -1,5 +1,5 @@
 use crate::kmerconst::XmerHash;
-use crate::new_types::extended_position::{ExtPosEtc, EXT_SHIFT};
+use crate::new_types::extended_position::ExtPosEtc;
 use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use crate::xmer_location::XmerLoc;
@@ -14,6 +14,7 @@ pub(crate) struct XmerHasher {
     no_threads: usize,
     kmerlen: usize,
     overbit: usize,
+    shift: usize,
     rep_max_dist: Position,
     rx_from_main: Receiver<XmerLoc>,
     tx_inter_thread: Sender<XmerLoc>,
@@ -34,12 +35,15 @@ impl XmerHasher {
     ) -> Result<XmerHasher> {
         ensure!(kmerlen < 16);
         ensure!(no_threads == 1 || no_threads.is_power_of_two());
+        let bitlen = kmerlen * 2;
+        let shift = bitlen - 1 - usize::try_from(no_threads.trailing_zeros()).unwrap();
 
         Ok(XmerHasher {
             thread_nr: xmer_channels.0,
             no_threads,
             kmerlen,
             overbit: 1 << (kmerlen * 2 + 1),
+            shift,
             rep_max_dist,
             rx_from_main: xmer_channels.1,
             tx_inter_thread: xmer_channels.2,
@@ -49,9 +53,7 @@ impl XmerHasher {
         })
     }
     pub(crate) fn work(&mut self, shutdown_poll: sync::Arc<AtomicUsize>) -> Result<()> {
-        let bitlen = self.kmerlen * 2;
-        let shl = bitlen - 1 - usize::try_from(self.no_threads.trailing_zeros()).unwrap();
-        let mut kmp = vec![ExtPosEtc::default(); 1 << shl]; // position + strand per xmer handled in this thread.
+        let mut kmp = vec![ExtPosEtc::default(); 1 << self.shift]; // position + strand per xmer handled in this thread.
         let mut max_extended = Vec::with_capacity(1 << 8);
         loop {
             // non blocking first
@@ -147,7 +149,7 @@ impl XmerHasher {
                 max_extended.push(mark);
                 break;
             }
-            if self.is_for_next_thread(&mark) {
+            if !self.is_for_this_thread(&mark) {
                 self.to_next.push_back(mark);
                 break;
             }
@@ -156,9 +158,8 @@ impl XmerHasher {
     }
     /// the top bits of the xmerhash indicate whether the extension can be stored in this kmp
     /// or the kmp of the next thread.
-    pub(crate) fn is_for_next_thread(&self, mark: &XmerLoc) -> bool {
-        let kmer = self.unhash_and_uncompress_to_kmer(mark.idx, mark.p.x());
-        (kmer >> EXT_SHIFT) & (self.no_threads - 1) != self.thread_nr
+    pub(crate) fn is_for_this_thread(&self, mark: &XmerLoc) -> bool {
+        (mark.idx >> self.shift) == self.thread_nr || (!mark.idx >> self.shift) == self.thread_nr
     }
     /// Try to store the mark in kmp (key map or kmer position) returns true while
     /// we need to extend to keep trying. The actual mark that is extended may change

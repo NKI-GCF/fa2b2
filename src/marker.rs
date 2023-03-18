@@ -82,14 +82,20 @@ impl<'a> KmerIter<'a> {
 
     /// a kmer is recurrent if it reoccurs within rep_max_dist bases, typically 10_000. This is to
     /// handle e.g. transposons or repetitive DNA, which are not mappable otherwise.
-    fn is_recurrent(&mut self, mut test: XmerLoc) -> bool {
+    fn is_recurrent(&mut self, mut median_xmer: XmerLoc) -> Option<XmerLoc> {
         let mask = self.mini_kmp.len() - 1;
-        let mut ret = false;
+        let mut mx_clone = median_xmer.clone();
+        let mut ret = Some(median_xmer);
+        let mut test = &mut median_xmer;
         loop {
             let repeat_idx = test.idx & mask;
             let stored = self.mini_kmp[repeat_idx];
 
             if stored.is_zero() || test.p.pos() > self.ks.rep_max_dist + stored.pos() {
+                dbg_assert!(
+                    stored.pos() + Position::from_basepos((self.scp.kc.no_kmers / 2) as u64)
+                        < test.p.pos()
+                );
                 self.mini_kmp[repeat_idx].set(test.p);
                 // unsetting dup isn't necessary, if from a stored, were a dup anyway.
                 break;
@@ -97,22 +103,23 @@ impl<'a> KmerIter<'a> {
             // TODO: allow one long stretch of Ns in between?
             if self.ks.is_on_last_contig(stored.pos()) {
                 if stored.gt_ext_or_eq_and_ge_pos(test.p) {
-                    if stored.pos() == test.p.pos() {
-                        return self.mini_kmp[repeat_idx].is_dup();
-                    }
                     if stored.is_dup() {
-                        ret = true;
+                        ret = None;
+                    }
+                    if stored.pos() == test.p.pos() {
+                        break;
                     }
                     self.mini_kmp[repeat_idx].set(test.p);
                     if stored.x() == test.p.x() {
                         // same extension means same base k-mer origin. this is a duplicate.
                         self.mini_kmp[repeat_idx].set_dup();
                     }
+                    test = &mut mx_clone;
                     test.p.set(stored); // to be extended next
                 } else if stored.extension() == test.p.extension() {
                     // Note: same extension and hash means same k-mer origin: identical k-mer sequence.
                     if stored.is_dup() {
-                        ret = true;
+                        ret = None;
                     }
                     self.mini_kmp[repeat_idx].set_dup();
                 }
@@ -123,7 +130,11 @@ impl<'a> KmerIter<'a> {
                 }
             }
         }
-        ret
+        if ret {
+            Some(median_xmer)
+        } else {
+            None
+        }
     }
     /*fn update_repetitive(&mut self, pd: Position) {
         // XXX waarom werkt dit op mark??
@@ -195,14 +206,11 @@ impl<'a> KmerIter<'a> {
         self.goffs.incr();
         //TODO: make sequence storage optional, to a separate file.
         self.ks.store_b2(&b2);
-        if let Some(optimum_xmer) = self
-            .scp
-            .updated_median_xmer(&b2)
-            .filter(|mx| !self.is_recurrent(mx.clone()))
-        {
+        if let Some(optimum_xmer) = self.scp.updated_median_xmer(&b2) {
             // FIXME: put the other strand in the idx top bits (saves reverse complementing).
             // Also, we need more alternative XmerLoc types for distinction along with traits !!
-            return Some(optimum_xmer);
+            // EDIT: not sure if the xor with revcmp really adds entropy.
+            return self.is_recurrent(optimum_xmer);
         }
         None
     }

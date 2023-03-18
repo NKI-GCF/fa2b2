@@ -43,10 +43,12 @@ impl<'a> PastScope<'a> {
             p: ExtPosEtc::from(extension),
             idx: Default::default(),
         };
+        self.scp.reset();
 
         //fixme: make this a proper iterator
         for b2 in ks.bit_slice(bound)?.windows(2) {
             if let Some(median_xmer) = self.scp.updated_median_xmer(b2) {
+                dbg_print!("{}", median_xmer);
                 if p.same_pos_and_ext(median_xmer.p) {
                     mark.p = p;
                     return Ok(mark);
@@ -59,8 +61,8 @@ impl<'a> PastScope<'a> {
                         p
                     );
                 }
-                p.incr_pos();
             }
+            p.incr_pos();
         }
         dbg_print!("kmer {:x} not observed for {} !!", idx, p);
         Ok(mark)
@@ -124,18 +126,18 @@ mod tests {
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         let record =
             b">test\nGCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC";
-        multi_thread(&mut ks, kc, Reader::new(io::BufReader::new(&record[..])), 1)?;
+        multi_thread(&mut ks, kc, Reader::new(io::BufReader::new(&record[..])), 4)?;
 
         // Testing whether for every stored xmer, if we go back to the sequence at that site,
         // We again retrieve that same xmer.
         let kc = KmerConst::new(SEQLEN, READLEN, 0);
-        let mut scp = PastScope::new(&kc)?;
+        let mut pscp = PastScope::new(&kc)?;
         let mut seen = 0;
         for hash in 0..ks.kmp.len() {
             let p = ks.kmp[hash];
             if p.is_set() {
                 dbg_print!("---[ {:#x} p:{:?} ]---", hash, p);
-                let mark = scp.rebuild(&mut ks, p, hash)?;
+                let mark = pscp.rebuild(&mut ks, p, hash)?;
                 dbg_assert_eq!(mark.p, p.rep_dup_masked(), "[{}]: {:x}", seen, hash);
                 seen += 1;
             }
@@ -152,7 +154,7 @@ mod tests {
         // all mappable.
         let seqlen: usize = 8;
         let kc = KmerConst::new(seqlen, 2, 0);
-        let mut scp = PastScope::new(&kc)?;
+        let mut pscp = PastScope::new(&kc)?;
 
         for gen in 0..=4_usize.pow(seqlen as u32) {
             let kc = KmerConst::new(seqlen, 2, 0);
@@ -176,7 +178,7 @@ mod tests {
                 let p = ks.kmp[hash];
                 if p.is_set() {
                     dbg_print!("hash: [{:#x}]: p: {:?}", hash, p);
-                    let mark = scp.rebuild(&mut ks, p, hash)?;
+                    let mark = pscp.rebuild(&mut ks, p, hash)?;
                     dbg_assert_eq!(mark.p, p.rep_dup_masked(), "reps: {}", ks.repeat.len());
                 }
             }

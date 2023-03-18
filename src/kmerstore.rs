@@ -114,6 +114,7 @@ impl KmerStore {
         ensure!(end <= self.b2_bit_ct as usize);
 
         let start = BasePos::from(range.lower()).as_usize() << 1;
+        dbg_print!("bits {}, {}..{}", self.b2.len(), start, end);
         Ok(&self.b2[start..end])
     }
 

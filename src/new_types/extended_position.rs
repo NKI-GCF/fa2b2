@@ -136,6 +136,9 @@ impl ExtPosEtc {
     pub(crate) fn set_dup(&mut self) {
         self.0 |= DUPLICATE;
     }
+    pub(crate) fn unset_dup(&mut self) {
+        self.0 &= !DUPLICATE;
+    }
     pub(crate) fn is_last_on_ref(&self) -> bool {
         !self.is_dup()
     }

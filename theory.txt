@@ -1,0 +1,33 @@
+
+In computers anything is stored as a series of binary numbers. It is only by convention, that series of bytes are interpreted as text. The four common nucleotides can also be more tightly stored in series of two bits. A generic k-mer of 16 nucleotides, for instance, can be stored in 32 bits.
+
+k-mers obtained from the template and the antisense strand, may be specific for one site on the genome. The 32 bit k-mer can also be interpreted as a binary number, for instance an offset in a series of numbers, 64 bit in size. 64 bit are sufficient to contain the positions where these unique k-mers occur on the genome; a k-mer genomic mapping lookup table.
+
+Many k-mers of 16 occur on multiple locations, however, the 64 bit entries of the table can only accomodate a single position on large genomes. That k-mers can occur on two strands is not helping, nor is it required. Per position, one k-mer orientation can be selected based on the sequence at that site.
+
+Dependent on the first bit that deviates between the two k-mer complements, the orientation can be chosen which has its deviant bit set. The k-mer has become orientless, which strand the k-mer originated from can be stored in the lookup table, alongside the position of the k-mer on the genome.
+
+Orientless k-mers can still occur on multiple genomic sites. For each k-mer to be specific for one particular genomic site, k-mers would have to grow. But the position lookup table cannot grow indefinately; computer memory is limited. The k-mer offsets are bound to a maximum table size. To keep offsets within table bounds, extended k-mers need to be shortened.
+
+A shortened k-mer is deduced from the first and last 16 nucleotide k-mer, occurring at the two ends of the extended k-mer. These ends are hashed via a bitwise xor operation. Hashing somewhat preserves the long k-mer's sequence specificity and has a bitwise randomizing effect. The hash may also result in a collision, however, an offset that was already associated with another k-mer in the lookup table.
+
+#check
+In case of collisions, offsets derived from longer k-mers have precedence. The position at the center of the longer k-mer is stored, the shorter k-mer is elongated. If the elongation is the same, both are elongated, and the position is cleared but marked as
+
+There are more strategies to avoid collisions and recurring k-mers. Not all k-mers are required. If sequenced reads have a minimum length of 64 nucleotides, the storage of only the minimum k-mer of 16 within could suffice to place the read.
+
+These minima receive a priority bit stored alongside the position. The extension is also stored alongside the position. Position for priority k-mers overrides k-mers without, if the same, more extended k-mer positions have priority.
+
+Recurring k-mers can occur even with solely minima per 64, in particular offsets to the low registers of the lookup table may recur. To solve priority k-mer recurances, k-mers are elongatad. If the recurring k-mers had the same elongation, both are elongated, and the offset for this recurrent k-mer is marked as in-use for this extension (extension bits set for next extension, position cleared).
+
+Steps to elongate are in powers of 2, starting with 2, resulting in new hashed k-mers. Position is the average between the first and last k-mer within. Elongated k-mers remain within readlength of 64 as well.
+
+TODO:
+If still recurring, maxima of neigbouring similarly recurring maxima are hashed (wrapped sum).
+
+// with 16 Nt we can make an entry, but minima / maxima are determined only with
+// 64 Nts. Minima for kmers with no extension; for extensions 2, 4, 8, 16, 32 and 48
+// a hashed kmer maximum is used as index, instead. (with 48 there is one entry).
+// If still not unique, include all kmers wrapping sum hashes for minima within
+// 64bp, until 1 << 16 This is to enable paired-end matching.
+

@@ -37,6 +37,7 @@ impl XmerHasher {
         ensure!(no_threads == 1 || no_threads.is_power_of_two());
         let bitlen = kmerlen * 2;
         let shift = bitlen - 1 - usize::try_from(no_threads.trailing_zeros()).unwrap();
+        dbg_print!("thread {}, shift: {}", xmer_channels.0, shift);
 
         Ok(XmerHasher {
             thread_nr: xmer_channels.0,
@@ -66,10 +67,12 @@ impl XmerHasher {
             }) {
                 Ok(mark) => {
                     dbg_assert!(
-                        !self.is_for_next_thread(&mark),
-                        "Thread {} received {} from main",
+                        self.is_for_this_thread(&mark),
+                        "Thread {} received {} ({:#x}) from main or inter thread, but it seems for thread {}",
                         self.thread_nr,
-                        mark
+                        mark,
+                        self.unhash_and_uncompress_to_kmer(mark.idx, mark.p.x()),
+                        self.unhash_and_uncompress_to_kmer(mark.idx, mark.p.x()) >> self.shift
                     );
                     self.store_mark_and_extend(mark, &mut max_extended, &mut kmp)?
                 }
@@ -83,10 +86,12 @@ impl XmerHasher {
                         self.to_next.push_front(err.into_inner());
                     } else if let Ok(mark) = self.rx_from_main.recv() {
                         dbg_assert!(
-                            !self.is_for_next_thread(&mark),
-                            "Thread {} received {} from previous thread",
+                            self.is_for_this_thread(&mark),
+                            "Thread {} received {} ({:#x}) from main thread (after block), but it seems for thread {}",
                             self.thread_nr,
-                            mark
+                            mark,
+                            self.unhash_and_uncompress_to_kmer(mark.idx, mark.p.x()),
+                            self.unhash_and_uncompress_to_kmer(mark.idx, mark.p.x()) >> self.shift
                         );
                         // We seem starved, block receive until more work.
                         // XXX if we have something else to do in the future this should change.
@@ -144,6 +149,7 @@ impl XmerHasher {
         kmp: &mut Vec<ExtPosEtc>,
     ) -> Result<()> {
         while self.try_store_mark(&mut mark, kmp)? {
+            dbg_print!("mark {} needs extension", mark);
             // From the XmerHash trait, extension fails on last, when all ext bits are set.
             if self.extend_xmer(&mut mark).is_err() {
                 max_extended.push(mark);

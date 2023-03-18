@@ -69,6 +69,13 @@ impl<'a> Scope<'a> {
     fn get_median_xmer(&mut self) -> Option<XmerLoc> {
         // two marks are added for both strands, and two leave. either can become the new mark.
         let i = self.xmer_loc_ord[self.kc.no_kmers >> 1];
+        if self.rotation == 0 {
+            // TODO: set bit in ExtPosEtc to prioritize one in no_kmers against extension.
+            // This should allow for smaller kmers and reduce memory.
+            //
+            // Actually should do prioritization for multiple no_kmer rotations (powers of 2),
+            // longer rotations, higher priority.
+        }
         if i != self.mark_i || self.rotation == 0 {
             // skip until next median xmer
             self.mark_i = i;
@@ -76,8 +83,11 @@ impl<'a> Scope<'a> {
             // use first bits of basepos | ori in array for lookup. Sufficient for within scope of NO_KMERS.
             let scope_idx = test.get_scope_idx(self.kc.no_kmers);
             if self.pos_lookup[scope_idx] != test.p {
+                // TODO: use self.mini_kmp to filter out duplicates
                 self.pos_lookup[scope_idx] = test.p;
                 let mut median_xmer = XmerLoc::new(test.idx, test.p);
+                // FIXME: put the other strand in the idx top bits (saves reverse complementing).
+                // Also, we need more alternative XmerLoc types for distinction along with traits !!
 
                 // pass through the xmer_loc with hashing undone.
                 median_xmer.idx = self.kc.xmer_hash(median_xmer.idx, self.kc.seed);

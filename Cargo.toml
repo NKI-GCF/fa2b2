@@ -39,6 +39,8 @@ crossbeam-channel = "0.5.2"
 crossbeam-queue = "0.3.3"
 crossbeam-utils = "0.8.6"
 itertools = "0.10.3"
+tempfile = "3"
 
 [profile.release]
 debug = true
+

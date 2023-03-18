@@ -17,6 +17,7 @@ use std::io::BufRead;
 use std::io::{BufReader, BufWriter};
 use std::iter::repeat;
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::thread::spawn;
@@ -104,13 +105,17 @@ where
     Ok(())
 }
 
+pub fn parse_fasta_file(fa: PathBuf) -> Result<fasta::Reader<BufReader<File>>> {
+    File::open(fa)
+        .map(BufReader::new)
+        .map(fasta::Reader::new)
+        .map_err(|e| anyhow!("Error opening reference genome: {}", e))
+}
+
 pub fn index(matches: &ArgMatches) -> Result<()> {
     let fa_name = matches.value_of("ref").unwrap();
 
-    let fa = File::open(&fa_name)
-        .map(BufReader::new)
-        .map(fasta::Reader::new)
-        .map_err(|e| anyhow!("Error opening reference genome: {}", e))?;
+    let fa = parse_fasta_file(PathBuf::from(fa_name))?;
 
     let opt_out = if matches.occurrences_of("stats_only") == 1 {
         None

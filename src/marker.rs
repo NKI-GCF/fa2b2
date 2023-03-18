@@ -130,11 +130,7 @@ impl<'a> KmerIter<'a> {
                 }
             }
         }
-        if ret {
-            Some(median_xmer)
-        } else {
-            None
-        }
+        return ret;
     }
     /*fn update_repetitive(&mut self, pd: Position) {
         // XXX waarom werkt dit op mark??

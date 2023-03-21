@@ -143,14 +143,17 @@ pub fn parse_fasta_file(fa: PathBuf) -> Result<fasta::Reader<BufReader<File>>> {
 }
 
 pub fn index(cmd: IndexCmd) -> Result<()> {
-    let ks_name = format!("{:?}.ks", cmd.ref_file);
+    let mut ks_file = cmd.ref_file.clone();
+    ks_file.set_extension("ks");
+    eprintln!("Reading {:?}", cmd.ref_file);
     let fa = parse_fasta_file(cmd.ref_file)?;
 
     let opt_out = if cmd.stats_only {
         None
     } else {
-        ensure!(!Path::new(&ks_name).exists(), "{} already exists!", ks_name);
-        Some(BufWriter::new(File::create(ks_name)?))
+        ensure!(!Path::new(&ks_file).exists(), "{ks_file:?} already exists!");
+        eprintln!("Reading {ks_file:?}");
+        Some(BufWriter::new(File::create(ks_file)?))
     };
 
     let no_threads = if cmd.no_threads.is_power_of_two() {

@@ -103,13 +103,12 @@ impl<'a> Scope<'a> {
         self.rc.add(TwoBit::from(b2), self.kc.rc_mask);
         self.pos.incr();
 
-        let ret = if self.is_xmer_ready_to_estimate_optima() {
+        if self.is_xmer_ready_to_estimate_optima() {
             self.update();
             self.get_median_xmer()
         } else {
             self.get_ready()
-        };
-        ret
+        }
     }
     pub(crate) fn is_past_contig(&self) -> bool {
         self.i != 0

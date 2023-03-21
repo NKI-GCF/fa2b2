@@ -60,7 +60,7 @@ where
     .map(|xmer_channels| {
         let tx_to_main = tx_to_main.clone();
         let shutdown_poll = shutdown_poll.clone();
-        let rep_max_dist = ks.rep_max_dist.clone();
+        let rep_max_dist = ks.rep_max_dist;
         spawn(move || {
             XmerHasher::new(
                 no_threads,
@@ -158,7 +158,7 @@ pub fn index(matches: &ArgMatches) -> Result<()> {
         .transpose()?
         .unwrap();
 
-    // Ideally the seed should selecting against repetitive k-mers as a median.
+    // Ideally the seed should select against repetitive k-mers as a median.
     // TODO: find out / theorize what seed may do this.
     if matches.occurrences_of("seed") != 0 {
         eprintln!("Warning, changing the seed for indexing and alignment makes your alignment not portable.");

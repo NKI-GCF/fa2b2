@@ -84,7 +84,7 @@ impl<'a> KmerIter<'a> {
     /// handle e.g. transposons or repetitive DNA, which are not mappable otherwise.
     fn is_recurrent(&mut self, mut median_xmer: XmerLoc) -> Option<XmerLoc> {
         let mask = self.mini_kmp.len() - 1;
-        let mut mx_clone = median_xmer.clone();
+        let mut mx_clone = median_xmer;
         let mut ret = Some(median_xmer);
         let mut test = &mut median_xmer;
         loop {
@@ -124,13 +124,13 @@ impl<'a> KmerIter<'a> {
                     self.mini_kmp[repeat_idx].set_dup();
                 }
                 // From the XmerHash trait, extension fails on last, when all ext bits are set.
-                if self.extend_xmer(&mut test).is_err() {
+                if self.extend_xmer(test).is_err() {
                     dbg_print!("couldn't extend {}", test);
                     break;
                 }
             }
         }
-        return ret;
+        ret
     }
     /*fn update_repetitive(&mut self, pd: Position) {
         // XXX waarom werkt dit op mark??

@@ -20,7 +20,7 @@ pub struct PastScope<'a> {
 // The past scope is a struct currently only in use for tests. It serves to revisit stored twobit
 // reference sequence and retrieve the k-mer from that site. Similar to the alignment, except for
 // the source. In earlier revisions it was used to retrieve different k-mers from the site, but
-// this has become obsolete. It's obviously cheaper to keep on hashing a single chosen k-mer.
+// this has become obsolete. It's cheaper to keep on hashing a single chosen k-mer.
 impl<'a> PastScope<'a> {
     pub(crate) fn new(kc: &'a KmerConst) -> Result<Self> {
         Ok(PastScope {
@@ -118,6 +118,36 @@ mod tests {
     use std::io;
     const SEQLEN: usize = 250;
     const READLEN: u16 = 6;
+
+    #[test]
+    fn test_reconstruct_10() -> Result<()> {
+        // indexing
+        let kc = KmerConst::new(32, 4, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
+        let record = b">test\nGCGATATTCT";
+        multi_thread(&mut ks, kc, Reader::new(io::BufReader::new(&record[..])), 4)?;
+
+        // Testing whether for every stored xmer, if we go back to the sequence at that site,
+        // We again retrieve that same xmer.
+        let kc = KmerConst::new(32, 4, 0);
+        let mut pscp = PastScope::new(&kc)?;
+        let mut seen = 0;
+        for hash in 0..ks.kmp.len() {
+            let p = ks.kmp[hash];
+            if p.is_set() {
+                dbg_print!("---[ {:#x} p:{:?} ]---", hash, p);
+                let mark = pscp.rebuild(&mut ks, p, hash)?;
+                dbg_assert_eq!(mark.p, p.rep_dup_masked(), "[{}]: {:x}", seen, hash);
+                seen += 1;
+            }
+        }
+        dbg_assert_eq!(
+            seen,
+            42,
+            "XXX: the number of seen kmers could change, though"
+        );
+        Ok(())
+    }
 
     #[test]
     fn test_reconstruct1() -> Result<()> {

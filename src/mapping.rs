@@ -8,7 +8,7 @@ use crate::xmer_location::XmerLoc;
 use anyhow::{anyhow, Result};
 use bitvec::prelude::Lsb0;
 use noodles_fastq as fastq;
-use std::{fs, io};
+use std::{cmp, fs, io};
 
 pub struct Aligner<'a> {
     ks: KmerStore,
@@ -33,20 +33,24 @@ impl<'a> Aligner<'a> {
         for x in 0..=EXT_MAX {
             let hash = self.kc.xmer_hash(median_xmer.idx, x);
             let test_p = self.ks.kmp[hash];
-            if test_p.x() == x {
-                let pos = test_p.pos();
-                // Because we haven't seen a non-DUPLICATE, we know there should follow more.
-                // x and hash lead to one baseindex. That should be position ordered.
-                dbg_assert!(last_pos < pos, "Xmer invalid by ref coordinate order.");
+            match test_p.x().cmp(&x) {
+                cmp::Ordering::Equal => {
+                    let pos = test_p.pos();
+                    // Because we haven't seen a non-DUPLICATE, we know there should follow more.
+                    // x and hash lead to one baseindex. That should be position ordered.
+                    dbg_assert!(last_pos < pos, "Xmer invalid by ref coordinate order.");
 
-                last_pos = pos;
-                if test_p.is_repetitive() {}
-                if test_p.is_last_on_ref() {
-                    // no DUPLICATE: => last sequence that corresponded with this xmer.
-                    break;
+                    last_pos = pos;
+                    if test_p.is_repetitive() {}
+                    if test_p.is_last_on_ref() {
+                        // no DUPLICATE: => last sequence that corresponded with this xmer.
+                        break;
+                    }
                 }
-            } else if test_p.x() < x {
-                return Err(anyhow!("Xmer invalid by non-pos."));
+                cmp::Ordering::Less => {
+                    return Err(anyhow!("Xmer invalid by non-pos."));
+                }
+                cmp::Ordering::Greater => {}
             }
             // test_p.x() > x can happen: collisions
             // since the other extension was greater, this xmer & p got extended.
@@ -80,7 +84,7 @@ impl<'a> Aligner<'a> {
         None
     }
     pub(crate) fn read_record(&mut self, record: &fastq::Record) -> Result<()> {
-        for b in record.sequence().into_iter() {
+        for b in record.sequence().iter() {
             if let Some(median_xmer) = self.updated_optimal_xmers_only(*b) {
                 self.se_mapping(&median_xmer)?;
             } else {

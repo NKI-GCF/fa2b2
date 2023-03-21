@@ -20,11 +20,10 @@ pub fn aln(matches: &ArgMatches) -> Result<()> {
         .transpose()?
         .unwrap();
 
-    let ks_name = format!("{}.ks", fa_name);
+    let ks_name = format!("{fa_name}.ks");
     ensure!(
         path::Path::new(&ks_name).exists(),
-        "{} does not exist!",
-        ks_name
+        "{ks_name} does not exist!"
     );
     let ks_file = io::BufReader::new(fs::File::create(ks_name)?);
     let ks: KmerStore = deserialize_from(ks_file)?;

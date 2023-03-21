@@ -185,7 +185,7 @@ pub struct StatDeq {
 
 impl StatDeq {
     /// provide a message buffer of 'ct' lines, clamped between 100 and 10_000.
-    pub(crate) fn new(mut ct: usize) -> Self {
+    pub(crate) fn new(ct: usize) -> Self {
         StatDeq {
             last: (String::new(), String::new(), false),
             d: VecDeque::with_capacity(cmp::min(10000, cmp::max(ct, 100))),
@@ -195,7 +195,7 @@ impl StatDeq {
         }
     }
     pub(crate) fn init(&mut self, fmt: String, msg: String) {
-        if self.d.len() == 0 {
+        if self.d.is_empty() {
             if self.dump_next {
                 self.dump(false);
                 self.dump_next = false;
@@ -212,7 +212,7 @@ impl StatDeq {
             self.repeat += 1;
         } else {
             if self.d.len() == self.d.capacity() {
-                let popped = self.d.pop_front();
+                let _popped = self.d.pop_front();
             }
             if self.repeat > 1 {
                 last_msg.push_str(&format!(" ({}x)", self.repeat));

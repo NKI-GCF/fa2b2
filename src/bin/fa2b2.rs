@@ -22,7 +22,7 @@ use std::path;
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// indexes a reference file
-    IndexCmd(index::IndexCmd),
+    Index(index::IndexCmd),
 
     /// Align reads to a reference
     Aln(aln::AlnCmd),
@@ -48,7 +48,7 @@ fn main() -> Result<()> {
     let fa2b2 = Fa2b2::parse();
 
     match fa2b2.command {
-        Some(Commands::IndexCmd(index_cmd)) => index::index(index_cmd),
+        Some(Commands::Index(index_cmd)) => index::index(index_cmd),
         Some(Commands::Aln(aln_cmd)) => aln::aln(aln_cmd),
         None => Ok(()),
     }

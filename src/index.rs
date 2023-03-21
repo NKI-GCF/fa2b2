@@ -23,20 +23,20 @@ use std::thread::spawn;
 #[derive(Args, Debug)]
 pub struct IndexCmd {
     /// The faidx'ed reference genome file, optionally bgzipped
-    #[arg(short, long, value_name = "FASTA", required = true)]
+    #[arg(short = 'R', long, value_name = "FASTA", required = true)]
     ref_file: PathBuf,
 
     /// The output file
-    #[arg(short, long)]
+    #[arg(short = 'N', long)]
     stats_only: bool,
 
     // I believe transposons are generally 100 to 10_000 bases in length
     /// Maximum distance between kmers to be considered for repetition
-    #[arg(short, long, default_value = "10000")]
+    #[arg(short = 'x', long, default_value = "10000")]
     repetition_max_dist: u32,
 
     /// Length of sequence reads
-    #[arg(short, long, value_name = "read_length", required = true)]
+    #[arg(short = 'l', long, value_name = "read_length", required = true)]
     read_len: u16,
 
     /// Total length of genome sequence
@@ -44,7 +44,7 @@ pub struct IndexCmd {
     seq_len: u64,
 
     /// Seed for indexing (affects x-mer choice)
-    #[arg(short, long, value_name = "seed", default_value = "40164")]
+    #[arg(short = 'S', long, value_name = "seed", default_value = "40164")]
     seed: u16,
 
     /// Total length of genome sequence

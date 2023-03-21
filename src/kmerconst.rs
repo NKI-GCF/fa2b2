@@ -17,7 +17,7 @@ pub struct KmerConst {
     pub(crate) xmer_mask: usize,
     pub(crate) over_mask: usize,
     // XXX!seed influences order of selection, a good seed may improve indexing / mapping.
-    // XXX!HOWEVER!XXX indexing and mapping should use the same seed !!
+    // XXX!indexing and mapping should use the same seed !!
     pub(crate) seed: usize,
 }
 

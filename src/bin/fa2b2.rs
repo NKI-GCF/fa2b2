@@ -14,7 +14,7 @@ extern crate fa2b2;
 //use flate2::bufread::MultiGzDecoder;
 
 use anyhow::Result;
-use clap::{Arg, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use fa2b2::aln;
 use fa2b2::index;
 use std::path;

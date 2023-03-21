@@ -27,10 +27,10 @@ lazy_static = "^1.4"
 serde = {version = "^1.0", features = ["derive"]}
 anyhow = "^1.0"
 ahash = { version = "^0.8", "features" = ["serde"] }
-noodles-fasta = "^0.5"
-noodles-bam = "^0.12"
-noodles-cram = "^0.9"
-noodles-fastq = "^0.3"
+noodles-fasta = "^0.20"
+noodles-bam = "^0.28"
+noodles-cram = "^0.25"
+noodles-fastq = "^0.6"
 derive_more = "^0.99"
 moveslice = "^2.0"
 bitvec = { version = "^1.0", "features" = ["serde"]}

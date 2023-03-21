@@ -12,89 +12,44 @@ extern crate fa2b2;
 //use std::io::BufReader;
 //use std::io::prelude::*;
 //use flate2::bufread::MultiGzDecoder;
-use clap::{App, Arg, SubCommand};
 
 use anyhow::Result;
-use fa2b2::aln::aln;
-use fa2b2::index::index;
+use clap::{Arg, Parser, Subcommand};
+use fa2b2::aln;
+use fa2b2::index;
+use std::path;
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// indexes a reference file
+    IndexCmd(index::IndexCmd),
+
+    /// Align reads to a reference
+    Aln(aln::AlnCmd),
+}
+
+/// Read genome fasta file and write 2bit and region data
+#[derive(Parser, Debug)]
+#[command(author, version, about)]
+struct Fa2b2 {
+    /// Sets a custom config file
+    #[arg(short, long, value_name = "FILE")]
+    config: Option<path::PathBuf>,
+
+    /// Turn debugging information on
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    debug: u8,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
 
 fn main() -> Result<()> {
-    let matches = App::new("fa2b2")
-        .version("1.0")
-        .about("Read genome fasta file and write 2bit and region data ")
-        .subcommand(
-            SubCommand::with_name("index")
-                .arg(
-                    Arg::with_name("ref")
-                        .short("r")
-                        .long("ref")
-                        .value_name("FASTA")
-                        .help("The faidx'ed reference genome file, optionally bgzipped")
-                        .index(1)
-                        .required(true)
-                        .takes_value(true),
-                )
-                .arg(
-                    Arg::with_name("stats_only")
-                        .short("S")
-                        .long("stats_only")
-                        .help("The output file"),
-                )
-                .arg(
-                    Arg::with_name("repetition_max_dist")
-                        .short("X")
-                        .long("repetition-max-dist")
-                        .value_name("repetition_max_dist")
-                        .default_value("10000")
-                        .help("Maximum distance between kmers to be considered for repetition")
-                        .takes_value(true),
-                )
-                .arg(
-                    Arg::with_name("read_length")
-                        .short("l")
-                        .long("seqlen")
-                        .required(true)
-                        .value_name("read_length")
-                        .help("length of sequence reads")
-                        .takes_value(true),
-                )
-                .arg(
-                    Arg::with_name("sequence_length")
-                        .short("L")
-                        .long("seqlen")
-                        .value_name("sequence_length")
-                        .default_value("3099750718")
-                        .help("total length of genome sequence")
-                        .takes_value(true),
-                )
-                .arg(
-                    Arg::with_name("seed")
-                        .short("X")
-                        .long("seed")
-                        .value_name("seed")
-                        .default_value("40164")
-                        .help("Seed for indexing (affects x-mer choice)")
-                        .takes_value(true),
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("aln").arg(
-                Arg::with_name("ref")
-                    .short("r")
-                    .long("ref")
-                    .value_name("FASTA")
-                    .help("The faidx'ed reference genome file, optionally bgzipped")
-                    .index(1)
-                    .required(true)
-                    .takes_value(true),
-            ),
-        )
-        .get_matches();
-    if let Some(matches) = matches.subcommand_matches("index") {
-        index(matches)
-    } else if let Some(matches) = matches.subcommand_matches("aln") {
-        aln(matches)
-    } else {
-        unreachable!();
+    let fa2b2 = Fa2b2::parse();
+
+    match fa2b2.command {
+        Some(Commands::IndexCmd(index_cmd)) => index::index(index_cmd),
+        Some(Commands::Aln(aln_cmd)) => aln::aln(aln_cmd),
+        None => Ok(()),
     }
 }

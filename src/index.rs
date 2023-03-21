@@ -7,20 +7,50 @@ use crate::xmer_location::XmerLoc;
 use crate::xmerhasher::XmerHasher;
 use anyhow::{anyhow, ensure, Result};
 use bincode::serialize_into;
-use clap::ArgMatches;
+use clap::Args;
 use crossbeam_channel::unbounded;
 use itertools::izip;
 use noodles_fasta as fasta;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::BufRead;
-use std::io::{BufReader, BufWriter};
+use std::io::{BufRead, BufReader, BufWriter};
 use std::iter::repeat;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::thread::spawn;
+
+#[derive(Args, Debug)]
+pub struct IndexCmd {
+    /// The faidx'ed reference genome file, optionally bgzipped
+    #[arg(short, long, value_name = "FASTA", required = true)]
+    ref_file: PathBuf,
+
+    /// The output file
+    #[arg(short, long)]
+    stats_only: bool,
+
+    // I believe transposons are generally 100 to 10_000 bases in length
+    /// Maximum distance between kmers to be considered for repetition
+    #[arg(short, long, default_value = "10000")]
+    repetition_max_dist: u32,
+
+    /// Length of sequence reads
+    #[arg(short, long, value_name = "read_length", required = true)]
+    read_len: u16,
+
+    /// Total length of genome sequence
+    #[arg(short, long, default_value = "3099750718")]
+    seq_len: u64,
+
+    /// Seed for indexing (affects x-mer choice)
+    #[arg(short, long, value_name = "seed", default_value = "40164")]
+    seed: u16,
+
+    /// Total length of genome sequence
+    #[arg(short, long, default_value = "1")]
+    no_threads: usize,
+}
 
 pub(crate) fn multi_thread<T>(
     ks: &mut KmerStore,
@@ -112,65 +142,31 @@ pub fn parse_fasta_file(fa: PathBuf) -> Result<fasta::Reader<BufReader<File>>> {
         .map_err(|e| anyhow!("Error opening reference genome: {}", e))
 }
 
-pub fn index(matches: &ArgMatches) -> Result<()> {
-    let fa_name = matches.value_of("ref").unwrap();
+pub fn index(cmd: IndexCmd) -> Result<()> {
+    let ks_name = format!("{:?}.ks", cmd.ref_file);
+    let fa = parse_fasta_file(cmd.ref_file)?;
 
-    let fa = parse_fasta_file(PathBuf::from(fa_name))?;
-
-    let opt_out = if matches.occurrences_of("stats_only") == 1 {
+    let opt_out = if cmd.stats_only {
         None
     } else {
-        let ks_name = format!("{}.ks", fa_name);
         ensure!(!Path::new(&ks_name).exists(), "{} already exists!", ks_name);
         Some(BufWriter::new(File::create(ks_name)?))
     };
 
-    // I believe transposons are generally 100 to 10_000 bases in length
-    let repetition_max_dist = matches
-        .value_of("repetition_max_dist")
-        .map(|v| v.parse())
-        .transpose()?
-        .unwrap();
-
-    let read_len = matches
-        .value_of("read_length")
-        .map(|v| v.parse())
-        .transpose()?
-        .unwrap();
-
-    let seq_len = matches
-        .value_of("sequence_length")
-        .map(|v| v.parse())
-        .transpose()?
-        .unwrap();
-
-    let no_threads = matches
-        .value_of("no_threads")
-        .map(|v| {
-            v.parse().map(|n: usize| {
-                if n.is_power_of_two() {
-                    n
-                } else {
-                    n.next_power_of_two() - 1
-                }
-            })
-        })
-        .transpose()?
-        .unwrap();
+    let no_threads = if cmd.no_threads.is_power_of_two() {
+        cmd.no_threads
+    } else {
+        cmd.no_threads.next_power_of_two() - 1
+    };
 
     // Ideally the seed should select against repetitive k-mers as a median.
     // TODO: find out / theorize what seed may do this.
-    if matches.occurrences_of("seed") != 0 {
+    if cmd.seed != 40164 {
         eprintln!("Warning, changing the seed for indexing and alignment makes your alignment not portable.");
     }
-    let seed = matches
-        .value_of("seed")
-        .map(|v| v.parse())
-        .transpose()?
-        .unwrap();
 
-    let kc = KmerConst::new(seq_len, read_len, seed);
-    let mut ks = KmerStore::new(kc.bitlen, repetition_max_dist, seed)?;
+    let kc = KmerConst::new(cmd.seq_len, cmd.read_len, cmd.seed);
+    let mut ks = KmerStore::new(kc.bitlen, cmd.repetition_max_dist, cmd.seed)?;
 
     multi_thread(&mut ks, kc, fa, no_threads)?;
     make_stats(&ks);

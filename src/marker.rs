@@ -184,7 +184,7 @@ impl<'a> KmerIter<'a> {
                     dbg_print!("Observed odd base {}, treating as ambiguous..", n);
                 }
                 // TODO / FIXME rather than excluding when Ns occur, try resolving those instances so
-                // the seed selects against these as optima. Iterate over the possible sequences in place of the
+                // the seed selects against these as optimal. Iterate over the possible sequences in place of the
                 // ambiguous. Could try min..max. account which are the sweetspots. Weight is
                 // the nr of positions this resolves.
                 //
@@ -276,7 +276,7 @@ mod tests {
     use anyhow::Result;
     use std::io;
 
-    const SEQLEN: usize = 250;
+    const GENOME_SIZE: u64 = 250;
     const READLEN: u16 = 6;
 
     fn read_from_string(s: &str) -> &[u8] {
@@ -292,7 +292,7 @@ mod tests {
 
     #[test]
     fn test_16n() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let kc = KmerConst::new(GENOME_SIZE, READLEN, 0);
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         process(&mut ks, kc, b"NNNNNNNNNNNNNNNN")?;
 
@@ -303,7 +303,7 @@ mod tests {
     }
     #[test]
     fn test_1n() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let kc = KmerConst::new(GENOME_SIZE, READLEN, 0);
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         process(&mut ks, kc, b"N")?;
 
@@ -314,7 +314,7 @@ mod tests {
     }
     #[test]
     fn test_1n1c1n() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let kc = KmerConst::new(GENOME_SIZE, READLEN, 0);
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         process(&mut ks, kc, b"NCN")?;
 
@@ -331,7 +331,7 @@ mod tests {
     }
     #[test]
     fn test_17c() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let kc = KmerConst::new(GENOME_SIZE, READLEN, 0);
         let k = kc.kmerlen as u64;
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         process(&mut ks, kc, b"CCCCCCCCCCCCCCCCC")?;
@@ -350,7 +350,7 @@ mod tests {
     }
     #[test]
     fn test_1n18c1n() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let kc = KmerConst::new(GENOME_SIZE, READLEN, 0);
         let k = kc.kmerlen as u64;
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         {
@@ -370,7 +370,7 @@ mod tests {
     }
     #[test]
     fn test_1n16c() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let kc = KmerConst::new(GENOME_SIZE, READLEN, 0);
         let k = kc.kmerlen as u64;
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         {
@@ -390,7 +390,7 @@ mod tests {
     }
     #[test]
     fn test_18at() -> Result<()> {
-        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let kc = KmerConst::new(GENOME_SIZE, READLEN, 0);
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         {
             process(&mut ks, kc, b"ATATATATATATATATAT")?;

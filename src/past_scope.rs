@@ -116,7 +116,7 @@ mod tests {
     use anyhow::Result;
     use noodles_fasta as fasta;
     use std::io;
-    const SEQLEN: usize = 250;
+    const GENOME_SIZE: u64 = 250;
     const READLEN: u16 = 6;
 
     #[test]
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn test_reconstruct1() -> Result<()> {
         // indexing
-        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let kc = KmerConst::new(GENOME_SIZE, READLEN, 0);
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
         let record =
             b">test\nGCGATATTCTAACCACGATATGCGTACAGTTATATTACAGACATTCGTGTGCAATAGAGATATCTACCCC";
@@ -160,7 +160,7 @@ mod tests {
 
         // Testing whether for every stored xmer, if we go back to the sequence at that site,
         // We again retrieve that same xmer.
-        let kc = KmerConst::new(SEQLEN, READLEN, 0);
+        let kc = KmerConst::new(GENOME_SIZE, READLEN, 0);
         let mut pscp = PastScope::new(&kc)?;
         let mut seen = 0;
         for hash in 0..ks.kmp.len() {
@@ -182,14 +182,14 @@ mod tests {
     #[test]
     fn test_reconstruct_gs4_all() -> Result<()> {
         // all mappable.
-        let seqlen: usize = 8;
-        let kc = KmerConst::new(seqlen, 2, 0);
+        let genome_size: u64 = 8;
+        let kc = KmerConst::new(genome_size, 2, 0);
         let mut pscp = PastScope::new(&kc)?;
 
-        for gen in 0..=4_usize.pow(seqlen as u32) {
-            let kc = KmerConst::new(seqlen, 2, 0);
+        for gen in 0..=4_usize.pow(genome_size as u32) {
+            let kc = KmerConst::new(genome_size, 2, 0);
             let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
-            let seq_vec: Vec<_> = (0..seqlen)
+            let seq_vec: Vec<_> = (0..genome_size)
                 .map(|i| match (gen >> (i << 1)) & 3 {
                     0 => 'A',
                     1 => 'C',

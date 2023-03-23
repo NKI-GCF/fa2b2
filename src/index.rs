@@ -163,7 +163,7 @@ pub fn index(cmd: IndexCmd) -> Result<()> {
     };
 
     // Ideally the seed should select against repetitive k-mers as a median.
-    // TODO: find out / theorize what seed may do this.
+    // TODO: find out / theorize what seed (if any) does this.
     if cmd.seed != 40164 {
         eprintln!("Warning, changing the seed for indexing and alignment makes your alignment not portable.");
     }

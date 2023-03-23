@@ -2,13 +2,14 @@ use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::marker::KmerIter;
 use crate::new_types::extended_position::{ExtPosEtc, EXT_MAX};
+use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use crate::xmer_location::XmerLoc;
 use crate::xmerhasher::XmerHasher;
 use anyhow::{anyhow, ensure, Result};
 use bincode::serialize_into;
 use clap::Args;
-use crossbeam_channel::unbounded;
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use itertools::izip;
 use noodles_fasta as fasta;
 use std::collections::HashMap;
@@ -19,6 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::thread::spawn;
+use std::thread::JoinHandle;
 
 #[derive(Args, Debug)]
 pub struct IndexCmd {
@@ -48,25 +50,30 @@ pub struct IndexCmd {
     seed: u16,
 
     /// Total length of genome sequence
-    #[arg(short, long, default_value = "1")]
+    #[arg(short, long, default_value = "8")]
     no_threads: usize,
 }
 
-pub(crate) fn multi_thread<T>(
-    ks: &mut KmerStore,
-    kc: KmerConst,
-    mut fa: fasta::Reader<T>,
+fn create_threads(
     no_threads: usize,
-) -> Result<()>
-where
-    T: BufRead,
-{
+    kmerlen: usize,
+    rep_max_dist: Position,
+) -> (
+    Vec<JoinHandle<Result<(), anyhow::Error>>>,
+    Receiver<(Vec<ExtPosEtc>, Vec<XmerLoc>)>,
+    Vec<Sender<XmerLoc>>,
+) {
     // channels to send XmerLocs to threads
     let (tx_to_thread, rx_from_main): (Vec<_>, Vec<_>) = repeat(())
         .take(no_threads)
         .map(|_| unbounded::<XmerLoc>())
         .unzip();
 
+    // channels for threads to send XmerLocs to one another when extended past their responsibility
+    let (mut tx_inter_thread, rx_inter_thread): (Vec<_>, Vec<_>) = repeat(())
+        .take(no_threads)
+        .map(|_| unbounded::<XmerLoc>())
+        .unzip();
     // channels for threads to send XmerLocs to one another when extended past their responsibility
     let (mut tx_inter_thread, rx_inter_thread): (Vec<_>, Vec<_>) = repeat(())
         .take(no_threads)
@@ -90,20 +97,26 @@ where
     .map(|xmer_channels| {
         let tx_to_main = tx_to_main.clone();
         let shutdown_poll = shutdown_poll.clone();
-        let rep_max_dist = ks.rep_max_dist;
         spawn(move || {
-            XmerHasher::new(
-                no_threads,
-                kc.kmerlen,
-                rep_max_dist,
-                xmer_channels,
-                tx_to_main,
-            )
-            .and_then(|mut xh| xh.work(shutdown_poll))
+            XmerHasher::new(no_threads, kmerlen, rep_max_dist, xmer_channels, tx_to_main)
+                .and_then(|mut xh| xh.work(shutdown_poll))
         })
     })
     .collect();
-    drop(shutdown_poll);
+    (threads, rx_in_main, tx_to_thread)
+}
+
+pub(crate) fn multi_thread<T>(
+    ks: &mut KmerStore,
+    kc: KmerConst,
+    mut fa: fasta::Reader<T>,
+    no_threads: usize,
+) -> Result<()>
+where
+    T: BufRead,
+{
+    let (threads, rx_in_main, tx_to_thread) =
+        create_threads(no_threads, kc.kmerlen, ks.rep_max_dist);
 
     // The main thread to read from fasta and prefilter
     let mut kmi = KmerIter::new(ks, &kc, tx_to_thread)?;

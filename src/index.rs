@@ -106,6 +106,28 @@ fn create_threads(
     (threads, rx_in_main, tx_to_thread)
 }
 
+fn mark_contig<T>(
+    ks: &mut KmerStore,
+    kc: KmerConst,
+    mut fa: fasta::Reader<T>,
+    tx_to_thread: Vec<Sender<XmerLoc>>,
+) -> Result<()>
+where
+    T: BufRead,
+{
+    // The main thread to read from fasta and prefilter
+    let mut kmi = KmerIter::new(ks, &kc, tx_to_thread)?;
+
+    for res in fa.records() {
+        let record = res?;
+        dbg_print!("Starting with record {}.", record.name());
+        kmi.markcontig(&kc, record)?;
+        dbg_print!("Finished with record.");
+    }
+    dbg_print!("Ending transmission to threads.");
+    Ok(())
+}
+
 pub(crate) fn multi_thread<T>(
     ks: &mut KmerStore,
     kc: KmerConst,
@@ -118,18 +140,7 @@ where
     let (threads, rx_in_main, tx_to_thread) =
         create_threads(no_threads, kc.kmerlen, ks.rep_max_dist);
 
-    // The main thread to read from fasta and prefilter
-    let mut kmi = KmerIter::new(ks, &kc, tx_to_thread)?;
-
-    for res in fa.records() {
-        let record = res?;
-        dbg_print!("Starting with record {}.", record.name());
-        kmi.markcontig(&kc, record)?;
-        dbg_print!("Finished with record.");
-    }
-
-    dbg_print!("Ending transmission to threads.");
-    drop(kmi);
+    mark_contig(ks, kc, fa, tx_to_thread)?;
 
     // receive the data from threads. They should send in order.
     for nr in 0..no_threads {

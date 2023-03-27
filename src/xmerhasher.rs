@@ -35,7 +35,7 @@ impl XmerHasher {
     ) -> XmerHasher {
         let bitlen = kmerlen * 2;
         let shift = bitlen - 1 - usize::try_from(no_threads.trailing_zeros()).unwrap();
-        dbg_print!("thread {}, shift: {}", xmer_channels.0, shift);
+        dbg_print!("thread {}", xmer_channels.0);
 
         XmerHasher {
             thread_nr: xmer_channels.0,

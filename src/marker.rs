@@ -224,7 +224,7 @@ impl<'a> KmerIter<'a> {
                 let thread_index = mark.get_thread_index(kc.bitlen, ext_bits);
                 dbg_print!("sending {} to thread {}", mark, thread_index);
                 if let Err(e) = self.tx[thread_index].send(mark) {
-                    eprintln!("An sending to closed channel error here may mena that xmerhasher thread errored");
+                    eprintln!("Sending to closed channel error here may mena that xmerhasher thread errored");
                     return Err(e.into());
                 }
             }

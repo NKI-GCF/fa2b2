@@ -132,14 +132,14 @@ impl KmerConst {
         let no_kmers = (read_len + 1 - kmerlen) * 2;
 
         dbg_init!(
-            "read_len: {}, kmerlen: {}, no_kmers: {}\n--",
+            "read_len: {}, kmerlen: {}, no_kmers: {} (including rc)\n--",
             read_len,
             kmerlen,
             no_kmers
         );
         if !cfg!(debug_assertions) {
             eprintln!(
-                "read_len: {}, kmerlen: {}, no_kmers: {}",
+                "read_len: {}, kmerlen: {}, no_kmers: {} (including rc)",
                 read_len, kmerlen, no_kmers
             );
         }

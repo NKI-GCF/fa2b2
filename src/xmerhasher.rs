@@ -32,14 +32,12 @@ impl XmerHasher {
         rep_max_dist: Position,
         xmer_channels: XmerChannels,
         tx_to_main: Sender<(Vec<ExtPosEtc>, Vec<XmerLoc>)>,
-    ) -> Result<XmerHasher> {
-        ensure!(kmerlen < 16);
-        ensure!(no_threads == 1 || no_threads.is_power_of_two());
+    ) -> XmerHasher {
         let bitlen = kmerlen * 2;
         let shift = bitlen - 1 - usize::try_from(no_threads.trailing_zeros()).unwrap();
         dbg_print!("thread {}, shift: {}", xmer_channels.0, shift);
 
-        Ok(XmerHasher {
+        XmerHasher {
             thread_nr: xmer_channels.0,
             no_threads,
             kmerlen,
@@ -51,7 +49,7 @@ impl XmerHasher {
             rx_inter_thread: xmer_channels.3,
             tx_to_main,
             to_next: VecDeque::<XmerLoc>::with_capacity(1 << 16),
-        })
+        }
     }
     pub(crate) fn work(&mut self, shutdown_poll: sync::Arc<AtomicUsize>) -> Result<()> {
         let mut kmp = vec![ExtPosEtc::default(); 1 << self.shift]; // position + strand per xmer handled in this thread.
@@ -74,7 +72,7 @@ impl XmerHasher {
                         self.unhash_and_uncompress_to_kmer(mark.idx, mark.p.x()),
                         self.unhash_and_uncompress_to_kmer(mark.idx, mark.p.x()) >> self.shift
                     );
-                    self.store_mark_and_extend(mark, &mut max_extended, &mut kmp)?
+                    self.store_mark_and_extend(mark, &mut max_extended, &mut kmp);
                 }
                 Err(TryRecvError::Disconnected) => break,
                 Err(TryRecvError::Empty) => {
@@ -95,7 +93,7 @@ impl XmerHasher {
                         );
                         // We seem starved, block receive until more work.
                         // XXX if we have something else to do in the future this should change.
-                        self.store_mark_and_extend(mark, &mut max_extended, &mut kmp)?;
+                        self.store_mark_and_extend(mark, &mut max_extended, &mut kmp);
                     }
                 }
             }
@@ -109,7 +107,7 @@ impl XmerHasher {
                 unsafe { &*x_ptr }
                     .fetch_and(!(1 << self.thread_nr), sync::atomic::Ordering::Relaxed);
 
-                self.store_mark_and_extend(mark, &mut max_extended, &mut kmp)?;
+                self.store_mark_and_extend(mark, &mut max_extended, &mut kmp);
             } else if self.to_next.is_empty() {
                 //This may be undone upon new received..
                 dbg_print!("Thread {} has nothing left to process.", self.thread_nr);
@@ -133,11 +131,11 @@ impl XmerHasher {
         );
         if self.thread_nr == 0 || self.rx_inter_thread.recv().is_ok() {
             dbg_print!("Now sending for thread {}", self.thread_nr);
-            self.tx_to_main.send((kmp, max_extended))?;
+            let x = self.tx_to_main.send((kmp, max_extended));
         }
         if self.thread_nr + 1 != self.no_threads {
             // message the next thread it can start sending.
-            self.tx_inter_thread.send(XmerLoc::default())?;
+            let x = self.tx_inter_thread.send(XmerLoc::default());
         }
         Ok(())
     }
@@ -147,8 +145,8 @@ impl XmerHasher {
         mut mark: XmerLoc,
         max_extended: &mut Vec<XmerLoc>,
         kmp: &mut Vec<ExtPosEtc>,
-    ) -> Result<()> {
-        while self.try_store_mark(&mut mark, kmp)? {
+    ) {
+        while self.try_store_mark(&mut mark, kmp) {
             dbg_print!("mark {} needs extension", mark);
             // From the XmerHash trait, extension fails on last, when all ext bits are set.
             if self.extend_xmer(&mut mark).is_err() {
@@ -160,7 +158,6 @@ impl XmerHasher {
                 break;
             }
         }
-        Ok(())
     }
     /// the top bits of the xmerhash indicate whether the extension can be stored in this kmp
     /// or the kmp of the next thread.
@@ -170,18 +167,18 @@ impl XmerHasher {
     /// Try to store the mark in kmp (key map or kmer position) returns true while
     /// we need to extend to keep trying. The actual mark that is extended may change
     /// in the process.
-    fn try_store_mark(&mut self, mark: &mut XmerLoc, kmp: &mut Vec<ExtPosEtc>) -> Result<bool> {
+    fn try_store_mark(&mut self, mark: &mut XmerLoc, kmp: &mut Vec<ExtPosEtc>) -> bool {
         let kmp_mask = kmp.len() - 1;
         let old_stored_p = kmp[mark.idx & kmp_mask];
 
         if old_stored_p.is_zero() {
             kmp[mark.idx & kmp_mask].set(mark.p);
-            return Ok(false);
+            return false;
         }
         if old_stored_p.gt_ext_or_eq_and_le_pos(mark.p) {
             if old_stored_p.pos() == mark.p.pos() {
                 // set and already mark.p. Leave the bit states.
-                return Ok(false);
+                return false;
             }
             if old_stored_p.x() == mark.p.x() {
                 // same extension means same base k-mer origin. this is a duplicate.
@@ -189,7 +186,7 @@ impl XmerHasher {
                     mark.p.set_dup();
                 } else {
                     kmp[mark.idx & kmp_mask].set_repetitive();
-                    return Ok(false);
+                    return false;
                 }
             }
             kmp[mark.idx & kmp_mask].set(mark.p);
@@ -201,11 +198,11 @@ impl XmerHasher {
                 kmp[mark.idx & kmp_mask].set_dup();
             } else {
                 kmp[mark.idx & kmp_mask].set_repetitive();
-                return Ok(false);
+                return false;
             }
         }
         // collision between hashes, the one in mark.p will be extended and tried again.
-        Ok(true)
+        true
     }
 }
 

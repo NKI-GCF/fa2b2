@@ -99,7 +99,7 @@ fn create_threads(
         let shutdown_poll = shutdown_poll.clone();
         spawn(move || {
             XmerHasher::new(no_threads, kmerlen, rep_max_dist, xmer_channels, tx_to_main)
-                .and_then(|mut xh| xh.work(shutdown_poll))
+                .work(shutdown_poll)
         })
     })
     .collect();
@@ -137,8 +137,11 @@ pub(crate) fn multi_thread<T>(
 where
     T: BufRead,
 {
+    ensure!(kc.kmerlen <= 16);
+    ensure!(no_threads == 1 || no_threads.is_power_of_two());
     let (threads, rx_in_main, tx_to_thread) =
         create_threads(no_threads, kc.kmerlen, ks.rep_max_dist);
+    eprintln!("Using {no_threads} threads");
 
     mark_contig(ks, kc, fa, tx_to_thread)?;
 

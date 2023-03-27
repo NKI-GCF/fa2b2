@@ -94,10 +94,13 @@ impl<'a> KmerIter<'a> {
             if stored.is_zero() || test.p.pos() > self.ks.rep_max_dist + stored.pos() {
                 dbg_assert!(
                     stored.pos() + Position::from_basepos((self.scp.kc.no_kmers / 2) as u64)
-                        < test.p.pos()
+                        < test.p.pos(),
+                    "{} >= {} ?",
+                    stored.pos() + Position::from_basepos((self.scp.kc.no_kmers / 2) as u64),
+                    test.p.pos()
                 );
                 self.mini_kmp[repeat_idx].set(test.p);
-                // unsetting dup isn't necessary, if from a stored, were a dup anyway.
+                // unsetting dup isn't necessary, if from a stored, we're a dup anyway.
                 break;
             }
             // TODO: allow one long stretch of Ns in between?
@@ -220,7 +223,10 @@ impl<'a> KmerIter<'a> {
                 mark.idx = kc.hash_and_compress(mark.idx, 0);
                 let thread_index = mark.get_thread_index(kc.bitlen, ext_bits);
                 dbg_print!("sending {} to thread {}", mark, thread_index);
-                self.tx[thread_index].send(mark)?;
+                if let Err(e) = self.tx[thread_index].send(mark) {
+                    eprintln!("An sending to closed channel error here may mena that xmerhasher thread errored");
+                    return Err(e.into());
+                }
             }
         }
         dbg_print!("At end, processing last:");

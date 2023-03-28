@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
     use fa2b2::index::parse_fasta_file;
     use noodles_fasta::{
         self as fasta,

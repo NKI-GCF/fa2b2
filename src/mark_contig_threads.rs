@@ -21,7 +21,7 @@ use std::thread::JoinHandle;
 pub(crate) struct MarkContigThreads {
     pub(crate) threads: Vec<JoinHandle<Result<(), anyhow::Error>>>,
     pub(crate) rx_in_main: Receiver<(Vec<ExtPosEtc>, Vec<XmerLoc>)>,
-    tx_to_thread: Vec<Sender<XmerLoc>>,
+    pub(crate) tx_to_thread: Vec<Sender<XmerLoc>>,
 }
 
 fn gen_xloc_threads(ct: usize) -> impl Iterator<Item = (Sender<XmerLoc>, Receiver<XmerLoc>)> {

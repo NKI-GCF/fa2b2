@@ -3,27 +3,17 @@
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::mark_contig_threads::MarkContigThreads;
-use crate::marker::KmerIter;
-use crate::new_types::extended_position::{ExtPosEtc, EXT_MAX};
-use crate::new_types::position::Position;
+use crate::new_types::extended_position::EXT_MAX;
 use crate::rdbg::STAT_DB;
-use crate::xmer_location::XmerLoc;
-use crate::xmerhasher::XmerHasher;
 use anyhow::{anyhow, ensure, Result};
 use bincode::serialize_into;
 use clap::Args;
-use crossbeam_channel::{unbounded, Receiver, Sender};
-use itertools::izip;
+use crossbeam_channel::TryRecvError;
 use noodles_fasta as fasta;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter};
-use std::iter::repeat;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
-use std::thread::spawn;
-use std::thread::JoinHandle;
 
 #[derive(Args, Debug)]
 pub struct IndexCmd {
@@ -76,16 +66,28 @@ where
     // receive the data from threads. They should send in order.
     for nr in 0..ct {
         dbg_print!("blocking receive for thread {}..", nr);
-        let (kmp, max_extended) = threads.rx_in_main.recv()?;
-        dbg_print!("Received from thread {}.. len {}", nr, kmp.len());
+        match threads.rx_in_main.try_recv() {
+            Err(TryRecvError::Disconnected) => return Err(anyhow!("Main chnnel is diconnected?")),
+            Err(TryRecvError::Empty) => {
+                // can happen in tests.
+                eprintln!("thread {nr}/{ct} yielded nothing.");
+            }
+            Ok((kmp, max_extended)) => {
+                dbg_print!("Received from thread {}.. len {}", nr, kmp.len());
 
-        //XXX actually why not directly write to disk? do we need ks.kmp still?
-        ks.kmp.extend(kmp);
-        dbg_print!("Thread {} had {} max extended", nr, max_extended.len());
+                //XXX actually why not directly write to disk? do we need ks.kmp still?
+                ks.kmp.extend(kmp);
+                dbg_print!("Thread {} had {} max extended", nr, max_extended.len());
+            }
+        }
     }
-
+    eprintln!("Done receiving from {ct} threads");
     for t in threads.threads {
-        t.join().unwrap()?;
+        if t.is_finished() {
+            t.join().unwrap()?;
+        } else {
+            eprintln!("FIXME: thread is not finished");
+        }
     }
     Ok(())
 }

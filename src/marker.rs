@@ -122,7 +122,7 @@ impl<'a> KmerIter<'a> {
                 }
                 // From the XmerHash trait, extension fails on last, when all ext bits are set.
                 if self.extend_xmer(test).is_err() {
-                    dbg_print!("couldn't extend {}", test);
+                    dbg_print!("couldn't extend {test}");
                     break;
                 }
             }
@@ -171,14 +171,14 @@ impl<'a> KmerIter<'a> {
         self.ks.push_contig(self.ks.get_pos(), self.goffs);
     }
     fn updated_optimal_xmers_only(&mut self, b: u8) -> Option<XmerLoc> {
-        let b2 = match b {
-            b'A' | b'a' => bitvec![u8, Lsb0; 0, 0],
-            b'C' | b'c' => bitvec![u8, Lsb0; 1, 0],
-            b'T' | b't' | b'U' | b'u' => bitvec![u8, Lsb0; 0, 1],
-            b'G' | b'g' => bitvec![u8, Lsb0; 1, 1],
+        let b2 = match b.to_ascii_uppercase() {
+            b'A' => bitvec![u8, Lsb0; 0, 0],
+            b'C' => bitvec![u8, Lsb0; 1, 0],
+            b'T' | b'U' => bitvec![u8, Lsb0; 0, 1],
+            b'G' => bitvec![u8, Lsb0; 1, 1],
             n => {
-                if n != b'N' && n != b'n' {
-                    dbg_print!("Observed odd base {}, treating as ambiguous..", n);
+                if n != b'N' {
+                    dbg_print!("Observed odd base {b:#x}, treating as ambiguous..");
                 }
                 // TODO / FIXME rather than excluding when Ns occur, try resolving those instances so
                 // the seed selects against these as optimal. Iterate over the possible sequences in place of the
@@ -242,14 +242,11 @@ impl<'a> KmerIter<'a> {
                 let complex: u64 = coding - self.repetitive as u64;
                 let tot: u64 = coding + n_count;
                 println!(
-                "chromosome {}\tcomplex dna:{} of {}({:.2}%)\trepetitive:{}({:.2}%)\tN-count:{}({:.2}%)\t",
+                "chromosome {}\tcomplex dna:{complex} of {tot}({:.2}%)\trepetitive:{}({:.2}%)\tN-count:{n_count}({:.2}%)\t",
                 record.name(),
-                complex,
-                tot,
                 100.0 * complex as f64 / tot as f64,
                 self.repetitive,
                 100.0 * self.repetitive as f64 / tot as f64,
-                n_count,
                 100.0 * n_count as f64 / tot as f64,
             );
             }

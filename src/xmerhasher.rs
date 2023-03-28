@@ -66,9 +66,8 @@ impl XmerHasher {
                 Ok(mark) => {
                     dbg_assert!(
                         self.is_for_this_thread(&mark),
-                        "Thread {} received {} ({:#x}) from main or inter thread, but it seems for thread {}",
+                        "Thread {} received {mark} ({:#x}) from main or inter thread, but it seems for thread {}",
                         self.thread_nr,
-                        mark,
                         self.unhash_and_uncompress_to_kmer(mark.idx, mark.p.x()),
                         self.unhash_and_uncompress_to_kmer(mark.idx, mark.p.x()) >> self.shift
                     );
@@ -85,9 +84,8 @@ impl XmerHasher {
                     } else if let Ok(mark) = self.rx_from_main.recv() {
                         dbg_assert!(
                             self.is_for_this_thread(&mark),
-                            "Thread {} received {} ({:#x}) from main thread (after block), but it seems for thread {}",
+                            "Thread {} received {mark} ({:#x}) from main thread (after block), but it seems for thread {}",
                             self.thread_nr,
-                            mark,
                             self.unhash_and_uncompress_to_kmer(mark.idx, mark.p.x()),
                             self.unhash_and_uncompress_to_kmer(mark.idx, mark.p.x()) >> self.shift
                         );

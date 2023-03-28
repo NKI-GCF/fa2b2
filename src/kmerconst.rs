@@ -132,15 +132,11 @@ impl KmerConst {
         let no_kmers = (read_len + 1 - kmerlen) * 2;
 
         dbg_init!(
-            "read_len: {}, kmerlen: {}, no_kmers: {} (including rc)\n--",
-            read_len,
-            kmerlen,
-            no_kmers
+            "read_len: {read_len}, kmerlen: {kmerlen}, no_kmers: {no_kmers} (including rc)\n--"
         );
         if !cfg!(debug_assertions) {
             eprintln!(
-                "read_len: {}, kmerlen: {}, no_kmers: {} (including rc)",
-                read_len, kmerlen, no_kmers
+                "read_len: {read_len}, kmerlen: {kmerlen}, no_kmers: {no_kmers} (including rc)"
             );
         }
         let dna_topb2_shift = (u32::try_from(kmerlen).unwrap() << 1) - 2;

@@ -124,7 +124,7 @@ mod tests {
         // indexing
         let kc = KmerConst::new(32, 4, 0);
         let mut ks = KmerStore::new(kc.bitlen, 10_000, 0)?;
-        let record = b">test\nGCGATATTCT";
+        let record = b">test\nNNNNNNGCGATATTCT";
         multi_thread(&mut ks, kc, Reader::new(io::BufReader::new(&record[..])), 4)?;
 
         // Testing whether for every stored xmer, if we go back to the sequence at that site,

@@ -236,19 +236,19 @@ impl<'a> KmerIter<'a> {
                 let thread_index = mark.get_thread_index(kc.bitlen, ext_bits);
                 dbg_print!("sending {mark} to thread {thread_index}");
                 if let Err(e) = tx[thread_index].send(mark) {
-                    eprintln!("Sending to closed channel error here may mena that xmerhasher thread errored");
+                    eprintln!("Sending to closed channel error here may mean that xmerhasher thread errored");
                     return Err(e.into());
                 }
             }
         }
-        dbg_print!("At end, processing last:");
+        dbg_print!("At end, processing last");
         if self.n_stretch.is_set() {
             self.finalize_n_stretch();
         } else {
             self.finalize_coding();
         }
 
-        if record.name() != "test" {
+        if !record.name().starts_with("test") {
             if let Some(contig) = self.ks.contig.last() {
                 let coding: u64 = BasePos::from(contig.twobit - chr_coding_start).into();
                 let n_count = u64::try_from(contig.genomic)?;

@@ -5,7 +5,7 @@ use crate::new_types::extended_position::ExtPosEtc;
 use crate::new_types::position::Position;
 use crate::rdbg::STAT_DB;
 use crate::xmer_location::XmerLoc;
-use anyhow::{ensure, Result};
+use anyhow::{anyhow, Result};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use std::collections::VecDeque;
 use std::sync;
@@ -66,6 +66,7 @@ impl XmerHasher {
                 }
             }) {
                 Ok(mark) => {
+                    dbg_print!("{{{}}} received mark {mark}.", self.thread_nr);
                     dbg_assert!(
                         self.is_for_this_thread(&mark),
                         "Thread {} received {mark} ({:#x}) from main or inter thread, but it seems for thread {}",
@@ -75,8 +76,12 @@ impl XmerHasher {
                     );
                     self.store_mark_and_extend(mark, &mut max_extended, &mut kmp);
                 }
-                Err(TryRecvError::Disconnected) => break,
+                Err(TryRecvError::Disconnected) => {
+                    dbg_print!("{{{}}} Thread disconnect", self.thread_nr);
+                    break;
+                }
                 Err(TryRecvError::Empty) => {
+                    dbg_print!("{{{}}} Thread empty", self.thread_nr);
                     if let Some(err) = self
                         .to_next
                         .pop_front()
@@ -84,6 +89,7 @@ impl XmerHasher {
                     {
                         self.to_next.push_front(err.into_inner());
                     } else if let Ok(mark) = self.rx_from_main.recv() {
+                        dbg_print!("{{{}}} block-received mark {mark}.", self.thread_nr);
                         dbg_assert!(
                             self.is_for_this_thread(&mark),
                             "Thread {} received {mark} ({:#x}) from main thread (after block), but it seems for thread {}",
@@ -131,11 +137,17 @@ impl XmerHasher {
         );
         if self.thread_nr == 0 || self.rx_inter_thread.recv().is_ok() {
             dbg_print!("Now sending for thread {}", self.thread_nr);
-            let x = self.tx_to_main.send((kmp, max_extended));
+            match self.tx_to_main.send((kmp, max_extended)) {
+                Err(e) => return Err(anyhow!("Sending to main failed: {e}")),
+                Ok(()) => {}
+            }
         }
         if self.thread_nr + 1 != self.no_threads {
             // message the next thread it can start sending.
-            let x = self.tx_inter_thread.send(XmerLoc::default());
+            match self.tx_inter_thread.send(XmerLoc::default()) {
+                Err(e) => return Err(anyhow!("Sending to inter thread failed: {e}")),
+                Ok(()) => {}
+            }
         }
         Ok(())
     }

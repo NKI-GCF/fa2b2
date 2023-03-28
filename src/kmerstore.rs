@@ -40,8 +40,7 @@ impl KmerStore {
             rep_max_dist: Position::from_basepos(rep_max_dist),
             b2: BitVec::with_capacity(1 << shift),
             kmp: Vec::with_capacity(1 << (shift + 1)), // kmer positions
-            //kmp,
-            contig: Vec::new(), // contig info
+            contig: Vec::new(),                        // contig info
             repeat: AHashMap::new(),
             seed,
             b2_bit_ct: 0,

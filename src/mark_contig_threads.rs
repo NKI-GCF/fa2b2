@@ -64,7 +64,7 @@ impl MarkContigThreads {
         }
     }
     pub(crate) fn mark_contig<T>(
-        &self,
+        &mut self,
         ks: &mut KmerStore,
         kc: KmerConst,
         mut fa: fasta::Reader<T>,
@@ -82,6 +82,7 @@ impl MarkContigThreads {
             dbg_print!("Finished with record.");
         }
         dbg_print!("Ending transmission to threads.");
+        let _: Vec<_> = self.tx_to_thread.drain(..).collect();
         Ok(())
     }
 }

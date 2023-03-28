@@ -3,18 +3,20 @@
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::mark_contig_threads::MarkContigThreads;
+use crate::new_types::extended_position::ExtPosEtc;
 use crate::new_types::extended_position::EXT_MAX;
 use crate::rdbg::STAT_DB;
+use crate::xmer_location::XmerLoc;
 use anyhow::{anyhow, ensure, Result};
 use bincode::serialize_into;
 use clap::Args;
-use crossbeam_channel::TryRecvError;
 use noodles_fasta as fasta;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter};
 use std::path::{Path, PathBuf};
-use std::thread::JoinHandle;
+//use crossbeam_channel::TryRecvError;
+//use std::thread::JoinHandle;
 
 #[derive(Args, Debug)]
 pub struct IndexCmd {
@@ -48,6 +50,14 @@ pub struct IndexCmd {
     ct: usize,
 }
 
+fn receive_kmp_etc(ks: &mut KmerStore, kmp: Vec<ExtPosEtc>, max_extended: Vec<XmerLoc>, nr: usize) {
+    eprintln!("Received from thread {}.. len {}", nr, kmp.len());
+
+    //XXX actually why not directly write to disk? do we need ks.kmp still?
+    ks.kmp.extend(kmp);
+    eprintln!("Thread {} had {} max extended", nr, max_extended.len());
+}
+
 pub(crate) fn multi_thread<T>(
     ks: &mut KmerStore,
     kc: KmerConst,
@@ -59,34 +69,19 @@ where
 {
     ensure!(kc.kmerlen <= 16);
     ensure!(ct == 1 || ct.is_power_of_two());
-    let mut threads = MarkContigThreads::new(ct, kc.kmerlen, ks.rep_max_dist);
+    let mut mct = MarkContigThreads::new(ct, kc.kmerlen, ks.rep_max_dist);
     eprintln!("Using {ct} threads");
 
-    threads.mark_contig(ks, kc, fa)?;
+    mct.mark_contig(ks, kc, fa)?;
 
     // receive the data from threads. They should send in order.
     for nr in 0..ct {
         dbg_print!("blocking receive for thread {}..", nr);
-        match threads.rx_in_main.try_recv() {
-            Err(TryRecvError::Disconnected) => return Err(anyhow!("Main chnnel is diconnected?")),
-            Err(TryRecvError::Empty) => {
-                // can happen in tests.
-                eprintln!("thread {nr}/{ct} yielded nothing.");
-            }
-            Ok((kmp, max_extended)) => {
-                dbg_print!("Received from thread {}.. len {}", nr, kmp.len());
-
-                //XXX actually why not directly write to disk? do we need ks.kmp still?
-                ks.kmp.extend(kmp);
-                dbg_print!("Thread {} had {} max extended", nr, max_extended.len());
-            }
-        }
+        let (kmp, max_extended) = mct.rx_in_main.recv()?;
+        receive_kmp_etc(ks, kmp, max_extended, nr);
     }
-    // drop so the channels close:
-    let inner_threads: Vec<_> = threads.threads.drain(..).collect();
-    drop(threads);
-
-    for t in inner_threads {
+    // threads must be drained for mct to be dropped and channels to close.
+    for t in mct.threads.drain(..) {
         t.join().unwrap()?;
     }
     Ok(())

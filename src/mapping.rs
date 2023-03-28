@@ -1,3 +1,5 @@
+// (c) Roel Kluin, 2023, GPL v3
+
 use crate::kmerconst::KmerConst;
 use crate::kmerconst::XmerHash;
 use crate::kmerstore::KmerStore;

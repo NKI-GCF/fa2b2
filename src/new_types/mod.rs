@@ -1,3 +1,5 @@
+// Roel Kluin, 2023, GPL v3
+
 pub mod extension;
 pub mod position;
 

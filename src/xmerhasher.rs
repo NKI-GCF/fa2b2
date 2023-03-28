@@ -1,3 +1,5 @@
+// Roel Kluin, 2023, GPL v3
+
 use crate::kmerconst::XmerHash;
 use crate::new_types::extended_position::ExtPosEtc;
 use crate::new_types::position::Position;

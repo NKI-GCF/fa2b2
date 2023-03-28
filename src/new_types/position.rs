@@ -1,3 +1,5 @@
+// (c) Roel Kluin, 2023, GPL v3
+
 use crate::new_types::extended_position::{ExtPosEtc, POS_MASK, POS_SHIFT};
 use crate::num::ToPrimitive;
 use crate::rdbg::STAT_DB;

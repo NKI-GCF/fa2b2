@@ -1,3 +1,5 @@
+// Roel Kluin, 2023, GPL v3
+
 use crate::new_types::position::{BasePos, PosRange, Position};
 use crate::rdbg::STAT_DB;
 use crate::xmer_location::XmerLoc;

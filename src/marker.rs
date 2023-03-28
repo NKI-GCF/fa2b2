@@ -1,3 +1,5 @@
+// (c) Roel Kluin, 2023, GPL v3
+
 extern crate arrayvec;
 extern crate bincode;
 extern crate clap;
@@ -126,6 +128,9 @@ impl<'a> KmerIter<'a> {
                     dbg_print!("couldn't extend {test}");
                     break;
                 }
+            } else {
+                ret = None;
+                break;
             }
         }
         ret
@@ -218,7 +223,14 @@ impl<'a> KmerIter<'a> {
         let chr_coding_start = self.init_chromosome_accounting();
         self.ks.push_contig(chr_coding_start, self.goffs);
         let ext_bits = usize::try_from(tx.len().trailing_zeros())?;
+        let mut i = 0;
         for b in record.sequence().as_ref().iter() {
+            i += 1;
+            if i == 250000 {
+                // XXX hot looping after 250000 bases.
+                eprint!(".");
+                i = 0;
+            }
             if let Some(mut mark) = self.updated_optimal_xmers_only(*b) {
                 mark.idx = kc.hash_and_compress(mark.idx, 0);
                 let thread_index = mark.get_thread_index(kc.bitlen, ext_bits);

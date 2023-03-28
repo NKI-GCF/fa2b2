@@ -1,3 +1,5 @@
+// (c) Roel Kluin, 2023, GPL v3
+
 extern crate arrayvec;
 extern crate bincode;
 extern crate clap;

@@ -20,6 +20,7 @@
 //!
 //! The fa2b2 binary provides the two main subcommands index and aln.
 //!
+// (c) Roel Kluin, 2023, GPL v3
 
 //kmerstore
 extern crate bincode;
@@ -53,6 +54,7 @@ pub mod index;
 pub(crate) mod kmerconst;
 pub(crate) mod kmerstore;
 pub(crate) mod mapping;
+pub(crate) mod mark_contig_threads;
 pub(crate) mod marker;
 pub(crate) mod new_types;
 pub(crate) mod past_scope;

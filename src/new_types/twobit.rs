@@ -1,3 +1,5 @@
+// (c) Roel Kluin, 2023, GPL v3
+
 use crate::kmerconst::RevCmp;
 use crate::new_types::position::{BasePos, Position};
 use crate::rdbg::STAT_DB;

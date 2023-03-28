@@ -1,3 +1,5 @@
+// Roel Kluin, 2023, GPL v3
+
 use std::sync::Mutex;
 use std::{
     cmp,

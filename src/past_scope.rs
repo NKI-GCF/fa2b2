@@ -1,3 +1,5 @@
+// (c) Roel Kluin, 2023, GPL v3
+
 use crate::kmerconst::KmerConst;
 use crate::kmerstore::KmerStore;
 use crate::new_types::{

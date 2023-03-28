@@ -51,99 +51,99 @@ pub struct IndexCmd {
 
     /// Total length of genome sequence
     #[arg(short, long, default_value = "8")]
-    no_threads: usize,
+    ct: usize,
 }
 
-fn create_threads(
-    no_threads: usize,
-    kmerlen: usize,
-    rep_max_dist: Position,
-) -> (
-    Vec<JoinHandle<Result<(), anyhow::Error>>>,
-    Receiver<(Vec<ExtPosEtc>, Vec<XmerLoc>)>,
-    Vec<Sender<XmerLoc>>,
-) {
-    // channels to send XmerLocs to threads
-    let (tx_to_thread, rx_from_main): (Vec<_>, Vec<_>) = repeat(())
-        .take(no_threads)
-        .map(|_| unbounded::<XmerLoc>())
-        .unzip();
+struct MarkContigThreads {
+    threads: Vec<JoinHandle<Result<(), anyhow::Error>>>,
+    rx_in_main: Receiver<(Vec<ExtPosEtc>, Vec<XmerLoc>)>,
+    tx_to_thread: Vec<Sender<XmerLoc>>,
+}
 
-    // channels for threads to send XmerLocs to one another when extended past their responsibility
-    let (mut tx_inter_thread, rx_inter_thread): (Vec<_>, Vec<_>) = repeat(())
-        .take(no_threads)
-        .map(|_| unbounded::<XmerLoc>())
-        .unzip();
+fn gen_xloc_threads(ct: usize) -> impl Iterator<Item = (Sender<XmerLoc>, Receiver<XmerLoc>)> {
+    repeat(()).take(ct).map(|_| unbounded::<XmerLoc>())
+}
 
-    // rotate transmitter back so that its corresponding receiver is passed to the next thread.
-    let first = tx_inter_thread.remove(0);
-    tx_inter_thread.push(first);
+impl MarkContigThreads {
+    fn new(ct: usize, kmerlen: usize, rep_max_dist: Position) -> Self {
+        // channels to send XmerLocs to threads
+        let (tx_to_thread, rx_from_main): (Vec<_>, Vec<_>) = gen_xloc_threads(ct).unzip();
 
-    // to collect the results
-    let (tx_to_main, rx_in_main) = unbounded::<(Vec<ExtPosEtc>, Vec<XmerLoc>)>();
-    let shutdown_poll = Arc::new(AtomicUsize::new(0));
+        // channels for threads to send XmerLocs to one another when extended past their responsibility
+        let (mut tx_inter_thread, rx_inter_thread): (Vec<_>, Vec<_>) = gen_xloc_threads(ct).unzip();
 
-    let threads: Vec<_> = izip!(
-        0..no_threads,
-        rx_from_main.into_iter(),
-        tx_inter_thread.into_iter(),
-        rx_inter_thread.into_iter(),
-    )
-    .map(|xmer_channels| {
-        let tx_to_main = tx_to_main.clone();
-        let shutdown_poll = shutdown_poll.clone();
-        spawn(move || {
-            XmerHasher::new(no_threads, kmerlen, rep_max_dist, xmer_channels, tx_to_main)
-                .work(shutdown_poll)
+        // rotate transmitter back so that its corresponding receiver is passed to the next thread.
+        let first = tx_inter_thread.remove(0);
+        tx_inter_thread.push(first);
+
+        // to collect the results
+        let (tx_to_main, rx_in_main) = unbounded::<(Vec<ExtPosEtc>, Vec<XmerLoc>)>();
+        let shutdown_poll = Arc::new(AtomicUsize::new(0));
+
+        let threads: Vec<_> = izip!(
+            0..ct,
+            rx_from_main.into_iter(),
+            tx_inter_thread.into_iter(),
+            rx_inter_thread.into_iter(),
+        )
+        .map(|xmer_channels| {
+            let tx_to_main = tx_to_main.clone();
+            let shutdown_poll = shutdown_poll.clone();
+            spawn(move || {
+                XmerHasher::new(ct, kmerlen, rep_max_dist, xmer_channels, tx_to_main)
+                    .work(shutdown_poll)
+            })
         })
-    })
-    .collect();
-    (threads, rx_in_main, tx_to_thread)
-}
-
-fn mark_contig<T>(
-    ks: &mut KmerStore,
-    kc: KmerConst,
-    mut fa: fasta::Reader<T>,
-    tx_to_thread: &Vec<Sender<XmerLoc>>,
-) -> Result<()>
-where
-    T: BufRead,
-{
-    // The main thread to read from fasta and prefilter
-    let mut kmi = KmerIter::new(ks, &kc)?;
-
-    for res in fa.records() {
-        let record = res?;
-        dbg_print!("Starting with record {}.", record.name());
-        kmi.markcontig(tx_to_thread, &kc, record)?;
-        dbg_print!("Finished with record.");
+        .collect();
+        MarkContigThreads {
+            threads,
+            rx_in_main,
+            tx_to_thread,
+        }
     }
-    dbg_print!("Ending transmission to threads.");
-    Ok(())
+    fn mark_contig<T>(
+        &self,
+        ks: &mut KmerStore,
+        kc: KmerConst,
+        mut fa: fasta::Reader<T>,
+    ) -> Result<()>
+    where
+        T: BufRead,
+    {
+        // The main thread to read from fasta and prefilter
+        let mut kmi = KmerIter::new(ks, &kc)?;
+
+        for res in fa.records() {
+            let record = res?;
+            dbg_print!("Starting with record {}.", record.name());
+            kmi.markcontig(&self.tx_to_thread, &kc, record)?;
+            dbg_print!("Finished with record.");
+        }
+        dbg_print!("Ending transmission to threads.");
+        Ok(())
+    }
 }
 
 pub(crate) fn multi_thread<T>(
     ks: &mut KmerStore,
     kc: KmerConst,
     fa: fasta::Reader<T>,
-    no_threads: usize,
+    ct: usize,
 ) -> Result<()>
 where
     T: BufRead,
 {
     ensure!(kc.kmerlen <= 16);
-    ensure!(no_threads == 1 || no_threads.is_power_of_two());
-    let (threads, rx_in_main, tx_to_thread) =
-        create_threads(no_threads, kc.kmerlen, ks.rep_max_dist);
-    eprintln!("Using {no_threads} threads");
+    ensure!(ct == 1 || ct.is_power_of_two());
+    let threads = MarkContigThreads::new(ct, kc.kmerlen, ks.rep_max_dist);
+    eprintln!("Using {ct} threads");
 
-    mark_contig(ks, kc, fa, &tx_to_thread)?;
+    threads.mark_contig(ks, kc, fa)?;
 
     // receive the data from threads. They should send in order.
-    for nr in 0..no_threads {
+    for nr in 0..ct {
         dbg_print!("blocking receive for thread {}..", nr);
-        let (kmp, max_extended) = rx_in_main.recv()?;
+        let (kmp, max_extended) = threads.rx_in_main.recv()?;
         dbg_print!("Received from thread {}.. len {}", nr, kmp.len());
 
         //XXX actually why not directly write to disk? do we need ks.kmp still?
@@ -151,7 +151,7 @@ where
         dbg_print!("Thread {} had {} max extended", nr, max_extended.len());
     }
 
-    for t in threads {
+    for t in threads.threads {
         t.join().unwrap()?;
     }
     Ok(())
@@ -178,10 +178,10 @@ pub fn index(cmd: IndexCmd) -> Result<()> {
         Some(BufWriter::new(File::create(ks_file)?))
     };
 
-    let no_threads = if cmd.no_threads.is_power_of_two() {
-        cmd.no_threads
+    let ct = if cmd.ct.is_power_of_two() {
+        cmd.ct
     } else {
-        cmd.no_threads.next_power_of_two() - 1
+        cmd.ct.next_power_of_two() - 1
     };
 
     // Ideally the seed should select against repetitive k-mers as a median.
@@ -193,7 +193,7 @@ pub fn index(cmd: IndexCmd) -> Result<()> {
     let kc = KmerConst::new(cmd.seq_len, cmd.read_len, cmd.seed);
     let mut ks = KmerStore::new(kc.bitlen, cmd.repetition_max_dist, cmd.seed)?;
 
-    multi_thread(&mut ks, kc, fa, no_threads)?;
+    multi_thread(&mut ks, kc, fa, ct)?;
     make_stats(&ks);
 
     if let Some(out_file) = opt_out {

@@ -87,8 +87,9 @@ impl<'a> KmerIter<'a> {
 
             if stored.is_zero() || test.p.pos() > self.ks.rep_max_dist + stored.pos() {
                 dbg_assert!(
-                    stored.pos() + Position::from_basepos((self.scp.kc.no_kmers / 2) as u64)
-                        < test.p.pos(),
+                    stored.is_zero()
+                        || stored.pos() + Position::from_basepos((self.scp.kc.no_kmers / 2) as u64)
+                            < test.p.pos(),
                     "{} >= {} ?",
                     stored.pos() + Position::from_basepos((self.scp.kc.no_kmers / 2) as u64),
                     test.p.pos()

@@ -174,7 +174,7 @@ pub fn index(cmd: IndexCmd) -> Result<()> {
         None
     } else {
         ensure!(!Path::new(&ks_file).exists(), "{ks_file:?} already exists!");
-        eprintln!("Reading {ks_file:?}");
+        eprintln!("Writing {ks_file:?}");
         Some(BufWriter::new(File::create(ks_file)?))
     };
 

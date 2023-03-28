@@ -89,10 +89,8 @@ impl MarkContigThreads {
         .map(|xmer_channels| {
             let tx_to_main = tx_to_main.clone();
             let shutdown_poll = shutdown_poll.clone();
-            spawn(move || {
-                XmerHasher::new(ct, kmerlen, rep_max_dist, xmer_channels, tx_to_main)
-                    .work(shutdown_poll)
-            })
+            let mut xh = XmerHasher::new(ct, kmerlen, rep_max_dist, xmer_channels, tx_to_main);
+            spawn(move || xh.work(shutdown_poll))
         })
         .collect();
         MarkContigThreads {

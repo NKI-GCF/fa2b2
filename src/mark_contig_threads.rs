@@ -58,7 +58,7 @@ impl MarkContigThreads {
         })
         .collect();
         MarkContigThreads {
-            threads,
+            threads: threads,
             rx_in_main,
             tx_to_thread,
         }

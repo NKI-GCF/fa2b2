@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter};
 use std::path::{Path, PathBuf};
+use std::thread::JoinHandle;
 
 #[derive(Args, Debug)]
 pub struct IndexCmd {
@@ -58,7 +59,7 @@ where
 {
     ensure!(kc.kmerlen <= 16);
     ensure!(ct == 1 || ct.is_power_of_two());
-    let threads = MarkContigThreads::new(ct, kc.kmerlen, ks.rep_max_dist);
+    let mut threads = MarkContigThreads::new(ct, kc.kmerlen, ks.rep_max_dist);
     eprintln!("Using {ct} threads");
 
     threads.mark_contig(ks, kc, fa)?;
@@ -81,13 +82,12 @@ where
             }
         }
     }
-    eprintln!("Done receiving from {ct} threads");
-    for t in threads.threads {
-        if t.is_finished() {
-            t.join().unwrap()?;
-        } else {
-            eprintln!("FIXME: thread is not finished");
-        }
+    // drop so the channels close:
+    let inner_threads: Vec<_> = threads.threads.drain(..).collect();
+    drop(threads);
+
+    for t in inner_threads {
+        t.join().unwrap()?;
     }
     Ok(())
 }

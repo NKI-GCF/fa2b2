@@ -28,15 +28,10 @@ pub struct KmerIter<'a> {
     mini_kmp: Vec<ExtPosEtc>, //
     pub(crate) repetitive: u32,
     period: Position,
-    tx: Vec<Sender<XmerLoc>>,
 } //^-^\\
 
 impl<'a> KmerIter<'a> {
-    pub(crate) fn new(
-        ks: &'a mut KmerStore,
-        kc: &'a KmerConst,
-        tx: Vec<Sender<XmerLoc>>,
-    ) -> Result<Self> {
+    pub(crate) fn new(ks: &'a mut KmerStore, kc: &'a KmerConst) -> Result<Self> {
         let scp = Scope::new(kc)?;
         let mini_shift = BasePos::from(ks.rep_max_dist)
             .as_usize()
@@ -50,7 +45,6 @@ impl<'a> KmerIter<'a> {
             mini_kmp: vec![ExtPosEtc::default(); 1 << mini_shift],
             repetitive: 0,
             period: Position::default(),
-            tx,
         })
     }
     /// clear sequence accounting and scope for the processing of another chromosome
@@ -214,16 +208,21 @@ impl<'a> KmerIter<'a> {
         None
     }
     // TODO: spawn tasks per stretch of non-ambiguous sequence (not N).
-    pub(crate) fn markcontig(&mut self, kc: &KmerConst, record: fasta::Record) -> Result<()> {
+    pub(crate) fn markcontig(
+        &mut self,
+        tx: &Vec<Sender<XmerLoc>>,
+        kc: &KmerConst,
+        record: fasta::Record,
+    ) -> Result<()> {
         let chr_coding_start = self.init_chromosome_accounting();
         self.ks.push_contig(chr_coding_start, self.goffs);
-        let ext_bits = usize::try_from(self.tx.len().trailing_zeros())?;
+        let ext_bits = usize::try_from(tx.len().trailing_zeros())?;
         for b in record.sequence().as_ref().iter() {
             if let Some(mut mark) = self.updated_optimal_xmers_only(*b) {
                 mark.idx = kc.hash_and_compress(mark.idx, 0);
                 let thread_index = mark.get_thread_index(kc.bitlen, ext_bits);
-                dbg_print!("sending {} to thread {}", mark, thread_index);
-                if let Err(e) = self.tx[thread_index].send(mark) {
+                dbg_print!("sending {mark} to thread {thread_index}");
+                if let Err(e) = tx[thread_index].send(mark) {
                     eprintln!("Sending to closed channel error here may mena that xmerhasher thread errored");
                     return Err(e.into());
                 }

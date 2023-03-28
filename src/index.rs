@@ -74,11 +74,6 @@ fn create_threads(
         .take(no_threads)
         .map(|_| unbounded::<XmerLoc>())
         .unzip();
-    // channels for threads to send XmerLocs to one another when extended past their responsibility
-    let (mut tx_inter_thread, rx_inter_thread): (Vec<_>, Vec<_>) = repeat(())
-        .take(no_threads)
-        .map(|_| unbounded::<XmerLoc>())
-        .unzip();
 
     // rotate transmitter back so that its corresponding receiver is passed to the next thread.
     let first = tx_inter_thread.remove(0);
@@ -110,18 +105,18 @@ fn mark_contig<T>(
     ks: &mut KmerStore,
     kc: KmerConst,
     mut fa: fasta::Reader<T>,
-    tx_to_thread: Vec<Sender<XmerLoc>>,
+    tx_to_thread: &Vec<Sender<XmerLoc>>,
 ) -> Result<()>
 where
     T: BufRead,
 {
     // The main thread to read from fasta and prefilter
-    let mut kmi = KmerIter::new(ks, &kc, tx_to_thread)?;
+    let mut kmi = KmerIter::new(ks, &kc)?;
 
     for res in fa.records() {
         let record = res?;
         dbg_print!("Starting with record {}.", record.name());
-        kmi.markcontig(&kc, record)?;
+        kmi.markcontig(tx_to_thread, &kc, record)?;
         dbg_print!("Finished with record.");
     }
     dbg_print!("Ending transmission to threads.");
@@ -131,7 +126,7 @@ where
 pub(crate) fn multi_thread<T>(
     ks: &mut KmerStore,
     kc: KmerConst,
-    mut fa: fasta::Reader<T>,
+    fa: fasta::Reader<T>,
     no_threads: usize,
 ) -> Result<()>
 where
@@ -143,7 +138,7 @@ where
         create_threads(no_threads, kc.kmerlen, ks.rep_max_dist);
     eprintln!("Using {no_threads} threads");
 
-    mark_contig(ks, kc, fa, tx_to_thread)?;
+    mark_contig(ks, kc, fa, &tx_to_thread)?;
 
     // receive the data from threads. They should send in order.
     for nr in 0..no_threads {

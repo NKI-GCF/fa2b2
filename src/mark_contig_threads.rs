@@ -18,6 +18,7 @@ use std::sync::Arc;
 use std::thread::spawn;
 use std::thread::JoinHandle;
 
+/// container for the xmer hasher threads that extract markers from the contigs.
 pub(crate) struct MarkContigThreads {
     pub(crate) threads: Vec<JoinHandle<Result<(), anyhow::Error>>>,
     pub(crate) rx_in_main: Receiver<(Vec<ExtPosEtc>, Vec<XmerLoc>)>,

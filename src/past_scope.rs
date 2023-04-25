@@ -10,7 +10,7 @@ use crate::new_types::{
 use crate::rdbg::STAT_DB;
 use crate::scope::Scope;
 use crate::xmer_location::XmerLoc;
-use anyhow::{ensure, Result};
+use anyhow::{bail, ensure, Result};
 
 pub struct PastScope<'a> {
     kc: &'a KmerConst,
@@ -42,15 +42,15 @@ impl<'a> PastScope<'a> {
 
         let extension = Extension::from(p);
         let mut pos = ExtPosEtc::from((extension, bound.lower()));
-        let mut mark = XmerLoc::default();
-        mark.p = ExtPosEtc::from(extension);
         self.scp.reset();
 
         //fixme: make this a proper iterator
         for b2 in ks.bit_slice(bound)?.chunks(2) {
             //dbg_print!("{b2}");
             if let Some(mut median_xmer) = self.scp.updated_median_xmer(b2) {
-                median_xmer.idx = self.kc.hash_and_compress(median_xmer.idx, median_xmer.p.x());
+                median_xmer.idx = self
+                    .kc
+                    .hash_and_compress(median_xmer.idx, median_xmer.p.x());
                 dbg_print!("{}", median_xmer);
                 if pos.same_pos_and_ext(median_xmer.p) {
                     return Ok(median_xmer);
@@ -66,8 +66,7 @@ impl<'a> PastScope<'a> {
             }
             pos.incr_pos();
         }
-        dbg_print!("kmer {:x} not observed for {} !!", idx, p);
-        Ok(mark)
+        bail!("kmer {:x} not observed for {} !!", idx, p);
     }
     fn is_on_contig(&self, pos: Position) -> bool {
         self.plim.has_in_range(pos)
@@ -134,7 +133,10 @@ mod tests {
         let kc = KmerConst::new(32, 4, 0);
         let mut pscp = PastScope::new(&kc)?;
         let p = ExtPosEtc::from_basepos::<u64>(3);
-        let mut test = XmerLoc { idx: 0x2a, p: ExtPosEtc::from_basepos::<u64>(3) };
+        let mut test = XmerLoc {
+            idx: 0x2a,
+            p: ExtPosEtc::from_basepos::<u64>(3),
+        };
         test.p.set_ori(true);
         let mark = pscp.rebuild(&mut ks, p, test.p.as_u64() as usize)?;
 

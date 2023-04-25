@@ -7,9 +7,8 @@ use crate::rdbg::STAT_DB;
 use crate::xmer_location::XmerLoc;
 use ahash::AHashMap;
 use anyhow::{ensure, Result};
-use bitvec::{bitvec, order::Lsb0, slice::BitSlice, vec::BitVec};
+use bitvec::{order::Lsb0, slice::BitSlice, vec::BitVec};
 use serde::{Deserialize, Serialize};
-use std::iter::Iterator;
 
 #[derive(Serialize, Deserialize)]
 pub struct Contig {
@@ -117,7 +116,7 @@ impl KmerStore {
 
         let start = BasePos::from(range.lower()).as_usize() << 1;
         dbg_print!("bits {}, {}..{}", self.b2.len(), start, end);
-        Ok(&self.b2[(start..end)])
+        Ok(&self.b2[start..end])
     }
 
     /*pub(crate) fn b2_for_pos(&self, pos: Position) -> Result<TwoBit> {

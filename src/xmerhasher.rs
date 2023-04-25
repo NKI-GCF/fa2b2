@@ -135,16 +135,14 @@ impl XmerHasher {
         );
         if self.thread_nr == 0 || self.rx_inter_thread.recv().is_ok() {
             dbg_print!("Now sending for thread {}", self.thread_nr);
-            match self.tx_to_main.send((kmp, max_extended)) {
-                Err(e) => return Err(anyhow!("Sending to main failed: {e}")),
-                Ok(()) => {}
+            if let Err(e) = self.tx_to_main.send((kmp, max_extended)) {
+                return Err(anyhow!("Sending to main failed: {e}"));
             }
         }
         if self.thread_nr + 1 != self.no_threads {
             // message the next thread it can start sending.
-            match self.tx_inter_thread.send(XmerLoc::default()) {
-                Err(e) => return Err(anyhow!("Sending to inter thread failed: {e}")),
-                Ok(()) => {}
+            if let Err(e) = self.tx_inter_thread.send(XmerLoc::default()) {
+                return Err(anyhow!("Sending to inter thread failed: {e}"));
             }
         }
         Ok(())

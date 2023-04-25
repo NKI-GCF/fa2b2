@@ -37,7 +37,6 @@ impl XmerHasher {
     ) -> XmerHasher {
         let bitlen = kmerlen * 2;
         let shift = bitlen - 1 - usize::try_from(no_threads.trailing_zeros()).unwrap();
-        dbg_print!("thread {}", xmer_channels.0);
 
         XmerHasher {
             thread_nr: xmer_channels.0,
@@ -66,7 +65,7 @@ impl XmerHasher {
                 }
             }) {
                 Ok(mark) => {
-                    dbg_print!("{{{}}} received mark {mark}.", self.thread_nr);
+                    //dbg_print!("{{{}}} received mark {mark}.", self.thread_nr);
                     dbg_assert!(
                         self.is_for_this_thread(&mark),
                         "Thread {} received {mark} ({:#x}) from main or inter thread, but it seems for thread {}",
@@ -81,7 +80,6 @@ impl XmerHasher {
                     break;
                 }
                 Err(TryRecvError::Empty) => {
-                    dbg_print!("{{{}}} Thread empty", self.thread_nr);
                     if let Some(err) = self
                         .to_next
                         .pop_front()
@@ -89,7 +87,7 @@ impl XmerHasher {
                     {
                         self.to_next.push_front(err.into_inner());
                     } else if let Ok(mark) = self.rx_from_main.recv() {
-                        dbg_print!("{{{}}} block-received mark {mark}.", self.thread_nr);
+                        //dbg_print!("{{{}}} block-received mark {mark}.", self.thread_nr);
                         dbg_assert!(
                             self.is_for_this_thread(&mark),
                             "Thread {} received {mark} ({:#x}) from main thread (after block), but it seems for thread {}",
@@ -178,7 +176,7 @@ impl XmerHasher {
     }
     /// Try to store the mark in kmp (key map or kmer position) returns true while
     /// we need to extend to keep trying. The actual mark that is extended may change
-    /// in the process.
+    /// in the process (dup state only).
     fn try_store_mark(&mut self, mark: &mut XmerLoc, kmp: &mut Vec<ExtPosEtc>) -> bool {
         let kmp_mask = kmp.len() - 1;
         let old_stored_p = kmp[mark.idx & kmp_mask];

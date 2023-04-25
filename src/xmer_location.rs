@@ -3,8 +3,9 @@
 use crate::new_types::extended_position::ExtPosEtc;
 use crate::rdbg::STAT_DB;
 use std::{cmp, fmt};
+use fmt::Debug;
 
-#[derive(new, Copy, Clone, PartialEq, Eq)]
+#[derive(new, Copy, Clone, PartialEq, Eq, Debug)]
 pub struct XmerLoc {
     pub idx: usize,
     pub p: ExtPosEtc,
@@ -88,7 +89,7 @@ impl Ord for XmerLoc {
 
 impl fmt::Display for XmerLoc {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{:x}] {}", self.idx, self.p)
+        write!(f, "0x{:x}@{}", self.idx, self.p)
     }
 }
 

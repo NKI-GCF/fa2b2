@@ -51,11 +51,8 @@ pub struct IndexCmd {
 }
 
 fn receive_kmp_etc(ks: &mut KmerStore, kmp: Vec<ExtPosEtc>, max_extended: Vec<XmerLoc>, nr: usize) {
-    eprintln!("Received from thread {}.. len {}", nr, kmp.len());
-
     //XXX actually why not directly write to disk? do we need ks.kmp still?
     ks.kmp.extend(kmp);
-    eprintln!("Thread {} had {} max extended", nr, max_extended.len());
 }
 
 pub(crate) fn multi_thread<T>(

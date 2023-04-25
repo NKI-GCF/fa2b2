@@ -1,6 +1,6 @@
 // (c) Roel Kluin, 2023, GPL v3
 
-use crate::kmerconst::KmerConst;
+use crate::kmerconst::{KmerConst, XmerHash};
 use crate::kmerstore::KmerStore;
 use crate::new_types::{
     extended_position::ExtPosEtc,
@@ -35,36 +35,36 @@ impl<'a> PastScope<'a> {
     fn rebuild(&mut self, ks: &KmerStore, p: ExtPosEtc, idx: usize) -> Result<XmerLoc> {
         let pos = Position::from(p);
         ensure!(pos != Position::default());
+
         self.plim = ks.get_contig_start_end_for_pos(pos);
         let bound = self.kc.get_kmer_boundaries(pos, self.plim);
         dbg_print!("{}", bound);
-        let extension = Extension::from(p);
 
-        let mut p = ExtPosEtc::from((extension, bound.lower()));
-        let mut mark = XmerLoc {
-            p: ExtPosEtc::from(extension),
-            idx: Default::default(),
-        };
+        let extension = Extension::from(p);
+        let mut pos = ExtPosEtc::from((extension, bound.lower()));
+        let mut mark = XmerLoc::default();
+        mark.p = ExtPosEtc::from(extension);
         self.scp.reset();
 
         //fixme: make this a proper iterator
-        for b2 in ks.bit_slice(bound)?.windows(2) {
-            if let Some(median_xmer) = self.scp.updated_median_xmer(b2) {
+        for b2 in ks.bit_slice(bound)?.chunks(2) {
+            //dbg_print!("{b2}");
+            if let Some(mut median_xmer) = self.scp.updated_median_xmer(b2) {
+                median_xmer.idx = self.kc.hash_and_compress(median_xmer.idx, median_xmer.p.x());
                 dbg_print!("{}", median_xmer);
-                if p.same_pos_and_ext(median_xmer.p) {
-                    mark.p = p;
-                    return Ok(mark);
+                if pos.same_pos_and_ext(median_xmer.p) {
+                    return Ok(median_xmer);
                 }
                 if median_xmer.get_idx() == idx {
                     dbg_print!(
                         "idx {:x} observed but for {}, not {}",
                         idx,
                         median_xmer.p,
-                        p
+                        pos
                     );
                 }
             }
-            p.incr_pos();
+            pos.incr_pos();
         }
         dbg_print!("kmer {:x} not observed for {} !!", idx, p);
         Ok(mark)
@@ -120,6 +120,27 @@ mod tests {
     use std::io;
     const GENOME_SIZE: u64 = 250;
     const READLEN: u16 = 6;
+
+    #[test]
+    fn test_reconstruct_minimal() -> Result<()> {
+        // indexing
+        let kc = KmerConst::new(32, 4, 0);
+        let mut ks = KmerStore::new(kc.bitlen, 10_000, 0x2a)?;
+        let record = b">test\nAAAAAA";
+        multi_thread(&mut ks, kc, Reader::new(io::BufReader::new(&record[..])), 4)?;
+
+        // Testing whether for every stored xmer, if we go back to the sequence at that site,
+        // We again retrieve that same xmer.
+        let kc = KmerConst::new(32, 4, 0);
+        let mut pscp = PastScope::new(&kc)?;
+        let p = ExtPosEtc::from_basepos::<u64>(3);
+        let mut test = XmerLoc { idx: 0x2a, p: ExtPosEtc::from_basepos::<u64>(3) };
+        test.p.set_ori(true);
+        let mark = pscp.rebuild(&mut ks, p, test.p.as_u64() as usize)?;
+
+        dbg_assert_eq!(mark, test);
+        Ok(())
+    }
 
     #[test]
     fn test_reconstruct_10() -> Result<()> {

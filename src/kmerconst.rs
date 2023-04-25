@@ -74,7 +74,7 @@ pub trait XmerHash {
         // in compress_xmer() bits are flipped if the highest bit was set.
         let flip = self.xmer_hash(hash, x);
         if flip < flip.revcmp(self.get_kmerlen()) {
-            // XXX: why is this not the inverse ??
+            // XXX: works but :confused: why not inverse ??
 
             //then flipped, yes: mark.idx here !!
             let overbit = self.get_overbit();

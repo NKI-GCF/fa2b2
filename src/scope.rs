@@ -94,6 +94,7 @@ impl<'a> Scope<'a> {
                 // pass through the xmer_loc with hashing undone.
                 median_xmer.idx = self.kc.xmer_hash(median_xmer.idx, self.kc.seed);
                 median_xmer.p.clear_extension();
+                //eprintln!("{{{median_xmer}}}");
                 return Some(median_xmer);
             }
         }
